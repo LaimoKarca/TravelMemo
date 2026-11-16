@@ -1,0 +1,803 @@
+<script setup lang="ts">
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import type { Trip, Event, Place, CreateEventPayload, UpdateEventPayload } from '../types/travel'
+
+const props = withDefaults(
+  defineProps<{
+    visible: boolean
+    trip: Trip
+    event?: Event | null
+    places?: Place[]
+    loading?: boolean
+    errorMessage?: string
+    hasConflict?: boolean
+  }>(),
+  {
+    event: null,
+    places: () => [],
+    loading: false,
+    errorMessage: '',
+    hasConflict: false
+  }
+)
+
+const emit = defineEmits<{
+  (e: 'submit', payload: CreateEventPayload | UpdateEventPayload): void
+  (e: 'refresh'): void
+  (e: 'cancel'): void
+}>()
+
+const dialogRef = ref<HTMLElement | null>(null)
+const launcherRef = ref<HTMLElement | null>(null)
+
+// Place selection mode: 'existing' | 'new'
+const placeMode = ref<'existing' | 'new'>('new')
+const selectedPlaceId = ref<string | null>(null)
+
+const placeName = ref('')
+const city = ref('')
+const address = ref('')
+const category = ref('景點')
+const eventDate = ref('')
+const eventTime = ref('')
+const notes = ref('')
+
+const clientValidationError = ref('')
+
+const isEdit = computed(() => !!props.event)
+const dialogTitle = computed(() => (isEdit.value ? '編輯旅行足跡' : '記錄旅行足跡'))
+
+const commonCategories = ['景點', '美食', '住宿', '交通', '購物', '文化', '咖啡', '休閒']
+
+const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function onSelectExistingPlace(event: globalThis.Event) {
+  const target = event.target as HTMLSelectElement
+  const chosenId = target.value
+  if (!chosenId) {
+    selectedPlaceId.value = null
+    return
+  }
+  const found = props.places.find((p) => p.id === chosenId)
+  if (found) {
+    selectedPlaceId.value = found.id
+    placeName.value = found.name
+    city.value = found.city || ''
+    address.value = found.address || ''
+  }
+}
+
+function switchToNewPlace() {
+  placeMode.value = 'new'
+  selectedPlaceId.value = null
+}
+
+function resetFormFromProps() {
+  clientValidationError.value = ''
+  if (props.event) {
+    selectedPlaceId.value = props.event.place_id || null
+    placeMode.value = props.event.place_id ? 'existing' : 'new'
+    placeName.value = props.event.place_name
+    city.value = props.event.city || ''
+    address.value = props.event.address || ''
+    category.value = props.event.category || '景點'
+    eventDate.value = props.event.date
+    eventTime.value = props.event.time || ''
+    notes.value = props.event.notes || ''
+  } else {
+    selectedPlaceId.value = null
+    placeMode.value = 'new'
+    placeName.value = ''
+    city.value = ''
+    address.value = ''
+    category.value = '景點'
+    eventDate.value = props.trip.start_date
+    eventTime.value = ''
+    notes.value = ''
+  }
+}
+
+function handleKeyDown(event: KeyboardEvent) {
+  if (!props.visible || !dialogRef.value) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('cancel')
+    return
+  }
+
+  if (event.key === 'Tab') {
+    const focusables = Array.from(
+      dialogRef.value.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    )
+    if (focusables.length === 0) {
+      event.preventDefault()
+      return
+    }
+
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    const current = document.activeElement
+
+    if (event.shiftKey) {
+      if (current === first || !dialogRef.value.contains(current)) {
+        event.preventDefault()
+        last.focus()
+      }
+    } else {
+      if (current === last || !dialogRef.value.contains(current)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+  }
+}
+
+watch(
+  () => props.visible,
+  (val, oldVal) => {
+    if (val) {
+      launcherRef.value = document.activeElement as HTMLElement | null
+      if (!props.hasConflict) {
+        resetFormFromProps()
+      }
+      nextTick(() => {
+        const firstInput = dialogRef.value?.querySelector<HTMLElement>('#event-place-name')
+        const firstFocusable = dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
+        ;(firstInput || firstFocusable)?.focus()
+      })
+    } else if (oldVal) {
+      nextTick(() => {
+        launcherRef.value?.focus()
+      })
+    }
+  },
+  { immediate: true }
+)
+
+watch(
+  () => props.event,
+  () => {
+    resetFormFromProps()
+  }
+)
+
+function handleSubmit() {
+  clientValidationError.value = ''
+
+  const trimmedPlaceName = placeName.value.trim()
+  if (!trimmedPlaceName) {
+    clientValidationError.value = '請填寫地點名稱（1 至 200 字元）。'
+    return
+  }
+  if (trimmedPlaceName.length > 200) {
+    clientValidationError.value = '地點名稱不可超過 200 字元。'
+    return
+  }
+
+  const trimmedCity = city.value.trim()
+  if (trimmedCity.length > 200) {
+    clientValidationError.value = '城市名稱不可超過 200 字元。'
+    return
+  }
+
+  const trimmedAddress = address.value.trim()
+  if (trimmedAddress.length > 1000) {
+    clientValidationError.value = '地址不可超過 1,000 字元。'
+    return
+  }
+
+  const trimmedCategory = category.value.trim()
+  if (!trimmedCategory) {
+    clientValidationError.value = '請填寫或選擇回憶分類（1 至 200 字元）。'
+    return
+  }
+  if (trimmedCategory.length > 200) {
+    clientValidationError.value = '類別名稱不可超過 200 字元。'
+    return
+  }
+
+  if (!eventDate.value) {
+    clientValidationError.value = '請選擇造訪日期。'
+    return
+  }
+
+  if (eventDate.value < props.trip.start_date || eventDate.value > props.trip.end_date) {
+    clientValidationError.value = `造訪日期必須在旅程區間內（${props.trip.start_date} 至 ${props.trip.end_date}）。`
+    return
+  }
+
+  if (notes.value.length > 20000) {
+    clientValidationError.value = '隨筆筆記不可超過 20,000 字元。'
+    return
+  }
+
+  const normalizedTime = eventTime.value ? eventTime.value : null
+  const placeIdToSubmit = placeMode.value === 'existing' && selectedPlaceId.value ? selectedPlaceId.value : null
+
+  if (isEdit.value && props.event) {
+    const payload: UpdateEventPayload = {
+      place_id: placeIdToSubmit,
+      place_name: trimmedPlaceName,
+      city: trimmedCity,
+      address: trimmedAddress,
+      category: trimmedCategory,
+      date: eventDate.value,
+      time: normalizedTime,
+      notes: notes.value,
+      version: props.event.version
+    }
+    emit('submit', payload)
+  } else {
+    const payload: CreateEventPayload = {
+      place_id: placeIdToSubmit,
+      place_name: trimmedPlaceName,
+      city: trimmedCity,
+      address: trimmedAddress,
+      category: trimmedCategory,
+      date: eventDate.value,
+      time: normalizedTime,
+      notes: notes.value
+    }
+    emit('submit', payload)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+  if (props.visible) {
+    launcherRef.value?.focus()
+  }
+})
+</script>
+
+<template>
+  <div
+    v-if="visible"
+    class="dialog-backdrop"
+    role="presentation"
+    @click.self="emit('cancel')"
+  >
+    <div
+      ref="dialogRef"
+      class="dialog-card"
+      role="dialog"
+      aria-modal="true"
+      :aria-labelledby="'event-dialog-title'"
+      tabindex="-1"
+    >
+      <header class="dialog-header">
+        <h3 id="event-dialog-title" class="dialog-title">{{ dialogTitle }}</h3>
+        <button
+          type="button"
+          class="close-button"
+          aria-label="關閉視窗"
+          @click="emit('cancel')"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </header>
+
+      <!-- Conflict Notice (409) -->
+      <div v-if="hasConflict" class="conflict-banner" role="alert">
+        <div class="conflict-content">
+          <p class="conflict-text">
+            <strong>紀錄更新提示：</strong>
+            此段旅途紀錄已在其他地方更新。您當前編輯的內容已完整保留，可點擊「重新載入」取得最新紀錄，或核對後再次儲存。
+          </p>
+          <button
+            type="button"
+            class="btn btn-secondary conflict-refresh-btn"
+            @click="emit('refresh')"
+          >
+            重新載入最新紀錄
+          </button>
+        </div>
+      </div>
+
+      <!-- General or Client Error Notice -->
+      <div v-if="clientValidationError || errorMessage" class="error-banner" role="alert">
+        {{ clientValidationError || errorMessage }}
+      </div>
+
+      <form class="dialog-form" @submit.prevent="handleSubmit">
+        <!-- Place selection & reuse section -->
+        <fieldset class="form-fieldset">
+          <legend class="fieldset-legend">地點資料</legend>
+
+          <!-- Toggle buttons for Existing vs New Place if places are available -->
+          <div v-if="places && places.length > 0" class="place-mode-switch">
+            <button
+              type="button"
+              class="mode-chip"
+              :class="{ 'is-active': placeMode === 'existing' }"
+              @click="placeMode = 'existing'"
+            >
+              選擇已有地點 ({{ places.length }})
+            </button>
+            <button
+              type="button"
+              class="mode-chip"
+              :class="{ 'is-active': placeMode === 'new' }"
+              @click="switchToNewPlace"
+            >
+              記錄新地點
+            </button>
+          </div>
+
+          <!-- Existing place dropdown -->
+          <div v-if="placeMode === 'existing' && places && places.length > 0" class="form-group">
+            <label for="existing-place-select" class="form-label">
+              選擇旅途中的既有地點
+            </label>
+            <select
+              id="existing-place-select"
+              class="form-input form-select"
+              :value="selectedPlaceId || ''"
+              :disabled="loading"
+              @change="onSelectExistingPlace"
+            >
+              <option value="">-- 請選擇既有地點 --</option>
+              <option v-for="p in places" :key="p.id" :value="p.id">
+                {{ p.name }} {{ p.city ? `(${p.city})` : '' }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="event-place-name" class="form-label">
+              地點名稱 <span class="required-star">*</span>
+            </label>
+            <input
+              id="event-place-name"
+              v-model="placeName"
+              type="text"
+              class="form-input"
+              placeholder="例如：清水寺、築地場外市場、台東鐵花村"
+              maxlength="200"
+              required
+              :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="event-city" class="form-label">
+                城市 / 地區
+              </label>
+              <input
+                id="event-city"
+                v-model="city"
+                type="text"
+                class="form-input"
+                placeholder="例如：京都市、台東市"
+                maxlength="200"
+                :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+              />
+            </div>
+
+            <div class="form-group flex-2">
+              <label for="event-address" class="form-label">
+                詳細地址
+              </label>
+              <input
+                id="event-address"
+                v-model="address"
+                type="text"
+                class="form-input"
+                placeholder="例如：東山區清水1丁目294"
+                maxlength="1000"
+                :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+              />
+            </div>
+          </div>
+
+          <div v-if="placeMode === 'existing' && selectedPlaceId" class="place-bound-hint">
+            <span>使用既有地點資料。如欲建立獨立新地點，請點擊</span>
+            <button type="button" class="inline-link-btn" @click="switchToNewPlace">
+              改為自訂新地點
+            </button>
+          </div>
+        </fieldset>
+
+        <!-- Category & Timing section -->
+        <fieldset class="form-fieldset">
+          <legend class="fieldset-legend">回憶分類與停留時間</legend>
+
+          <div class="form-group">
+            <label class="form-label">
+              回憶分類 <span class="required-star">*</span>
+            </label>
+            <div class="category-chips">
+              <button
+                v-for="cat in commonCategories"
+                :key="cat"
+                type="button"
+                class="chip-btn"
+                :class="{ 'is-selected': category === cat }"
+                @click="category = cat"
+              >
+                {{ cat }}
+              </button>
+            </div>
+            <input
+              id="event-category"
+              v-model="category"
+              type="text"
+              class="form-input category-custom-input"
+              placeholder="或自行輸入類別名稱"
+              maxlength="200"
+              required
+              :disabled="loading"
+            />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group flex-1">
+              <label for="event-date" class="form-label">
+                造訪日期 <span class="required-star">*</span>
+              </label>
+              <input
+                id="event-date"
+                v-model="eventDate"
+                type="date"
+                class="form-input"
+                :min="trip.start_date"
+                :max="trip.end_date"
+                required
+                :disabled="loading"
+              />
+              <span class="field-hint">旅程期間：{{ trip.start_date }} ~ {{ trip.end_date }}</span>
+            </div>
+
+            <div class="form-group flex-1">
+              <div class="label-with-clear">
+                <label for="event-time" class="form-label">
+                  抵達時間（選填）
+                </label>
+                <button
+                  v-if="eventTime"
+                  type="button"
+                  class="clear-time-btn"
+                  @click="eventTime = ''"
+                >
+                  清除時間
+                </button>
+              </div>
+              <input
+                id="event-time"
+                v-model="eventTime"
+                type="time"
+                class="form-input"
+                :disabled="loading"
+              />
+              <span class="field-hint">{{ eventTime ? '已指定抵達時間' : '未指定時間（以足跡順序記錄）' }}</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <!-- Notes section -->
+        <div class="form-group">
+          <label for="event-notes" class="form-label">
+            旅途隨筆與心得備忘
+          </label>
+          <textarea
+            id="event-notes"
+            v-model="notes"
+            class="form-input form-textarea"
+            rows="3"
+            placeholder="記錄交通搭乘體驗、美味餐點、值得留存的瞬間或旅途感受..."
+            maxlength="20000"
+            :disabled="loading"
+          ></textarea>
+        </div>
+
+        <footer class="dialog-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="loading"
+            @click="emit('cancel')"
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary"
+            :disabled="loading"
+          >
+            <span v-if="loading" class="spinner-small" aria-hidden="true"></span>
+            <span>{{ loading ? '儲存中...' : (isEdit ? '儲存修改' : '記錄足跡') }}</span>
+          </button>
+        </footer>
+      </form>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(21, 62, 72, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  z-index: 1000;
+  overflow-y: auto;
+  backdrop-filter: blur(2px);
+}
+
+.dialog-card {
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  background-color: var(--color-paper);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 36px rgba(21, 62, 72, 0.2);
+  border: 1px solid var(--color-border);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.close-button {
+  background: transparent;
+  border: none;
+  color: var(--color-subtle);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+.close-button:hover {
+  background-color: rgba(21, 62, 72, 0.08);
+  color: var(--color-ink);
+}
+
+.conflict-banner {
+  background-color: #fff9e6;
+  border: 1px solid #fae8a8;
+  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem;
+  color: #705510;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.conflict-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.conflict-refresh-btn {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0.35rem 0.875rem;
+  font-size: 0.875rem;
+  background-color: #ffffff;
+  border-color: #d1b54c;
+}
+
+.error-banner {
+  background-color: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error-text);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.fieldset-legend {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-teal);
+  padding: 0 0.5rem;
+}
+
+.place-mode-switch {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.mode-chip {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  background-color: transparent;
+  color: var(--color-subtle);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mode-chip.is-active {
+  background-color: var(--color-teal);
+  color: #ffffff;
+  border-color: var(--color-teal);
+  font-weight: 500;
+}
+
+.place-bound-hint {
+  font-size: 0.8125rem;
+  color: var(--color-subtle);
+  background-color: #f7fbfc;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.inline-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-teal);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  padding: 0;
+}
+
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.375rem;
+}
+
+.chip-btn {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.8125rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: #f7fbfc;
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn.is-selected {
+  background-color: var(--color-yellow);
+  border-color: #d1b54c;
+  color: #4a3805;
+  font-weight: 600;
+}
+
+.category-custom-input {
+  min-height: 38px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.form-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.label-with-clear {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.clear-time-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-subtle);
+  font-size: 0.75rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.clear-time-btn:hover {
+  color: var(--color-ink);
+}
+
+.required-star {
+  color: #ba2f2f;
+}
+
+.field-hint {
+  font-size: 0.75rem;
+  color: var(--color-subtle);
+}
+
+.form-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+.form-select {
+  cursor: pointer;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 600px) {
+  .form-row {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+</style>

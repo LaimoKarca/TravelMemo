@@ -1,0 +1,23 @@
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+frontend/node_modules/
+frontend/dist/
+data/
+backups/
+*.log
+.playwright-cli/
+tmp/
+docs/reference/
+# Local environment receipts and worker reports may contain workstation details.
+docs/implementation/environment-update.md
+frontend/IMPLEMENTATION.md
+frontend/PHASE2.md
+tests/phase2-backend-report.md
+*.tsbuildinfo

@@ -1,0 +1,24 @@
+name: travelmemo-dev
+services:
+  neo4j:
+    image: neo4j:2026.10.2
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Set NEO4J_PASSWORD in .env}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    ports:
+      - '127.0.0.1:7687:7687'
+      - '127.0.0.1:7474:7474'
+    volumes:
+      - neo4j-data:/data
+    mem_limit: 1536m
+    restart: unless-stopped
+  mailpit:
+    image: axllent/mailpit:v1.27.10
+    ports:
+      - '127.0.0.1:1025:1025'
+      - '127.0.0.1:8025:8025'
+    mem_limit: 128m
+volumes:
+  neo4j-data:
