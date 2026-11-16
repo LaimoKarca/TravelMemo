@@ -42,6 +42,20 @@
 
 可用 `--limit-queries 20 --output data/evaluation-smoke` 先檢查流程；正式報告不可把此子集當成全資料結果。
 
+## 明確相鄰線索的獨立診斷
+
+原始 relational_after 查詢沒有明說「緊接著」，會觸發產品的澄清規則。
+為了另測方向性排序，可以建立獨立的107筆診斷：只把原查詢的 after 改為 immediately after，
+先驗證原標記確實對應既有 NEXT，事件、目標標記與其他欄位維持不變。
+這些查詢**不是原始 benchmark**，結果不得混入上面的320筆原始查詢成績。
+
+```powershell
+.\.venv\Scripts\python.exe main.py evaluate --explicit-adjacency --output data/evaluation-adjacency
+```
+
+四種方法都接收相同的新查詢文字；標記仍不送進排序或方向解析。
+輸出 manifest 會記錄 query_variant、診斷查詢 SHA-256 與相鄰標記驗證數。
+
 ## Neo4j ANN 對照
 
 另開**空的、獨立的** Neo4j 2026.10.2 資料庫，不能使用朋友或自己的應用資料庫。

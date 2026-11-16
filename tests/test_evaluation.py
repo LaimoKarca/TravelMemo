@@ -1,6 +1,6 @@
 import pytest
 
-from experiments.benchmark import event_records
+from experiments.benchmark import event_records, explicit_adjacency_queries
 from experiments.cache import PassageCache
 from experiments.metrics import summarize
 
@@ -70,3 +70,19 @@ def test_passage_cache_reuses_public_vectors_but_not_queries(tmp_path):
     reloaded.encode_query("a")
     reloaded.encode_query("a")
     assert encoder.calls == 3
+
+
+def test_adjacency_diagnostic_is_explicit_and_preserves_labels():
+    rows = [
+        {
+            "query_type": "relational_after",
+            "query_text": "Which cafe did I visit after Tower?",
+            "target_event_id": "b",
+        },
+        {"query_type": "semantic", "query_text": "matcha cafe", "target_event_id": "b"},
+    ]
+    result = explicit_adjacency_queries(rows)
+    assert len(result) == 1
+    assert result[0]["query_text"] == "Which cafe did I visit immediately after Tower?"
+    assert result[0]["target_event_id"] == "b"
+    assert rows[0]["query_text"] == "Which cafe did I visit after Tower?"

@@ -78,6 +78,7 @@ class Neo4jStore:
             settings.neo4j_uri,
             auth=(settings.neo4j_user, settings.neo4j_password),
             connection_timeout=5,
+            notifications_min_severity="OFF",
         )
 
     def initialize(self):

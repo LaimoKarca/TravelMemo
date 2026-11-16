@@ -39,6 +39,12 @@ def test_conversation_persistence_usage_and_owner_isolation():
                     "place_name": "Test cafe",
                     "version": 1,
                     "state": "current",
+                    "relation": {
+                        "anchor_id": "test-anchor",
+                        "direction": "next",
+                        "anchor_date": "2026-10-31",
+                        "target_date": "2026-11-01",
+                    },
                 }
             ],
             "2026-11-16T00:00:01Z",
@@ -50,6 +56,7 @@ def test_conversation_persistence_usage_and_owner_isolation():
         messages = reopened.get_messages(owner, cid)
         assert len(messages) == 1
         assert messages[0]["citations"][0]["event_id"] == "test-event"
+        assert messages[0]["citations"][0]["relation"]["anchor_id"] == "test-anchor"
         usage = reopened.get_usage(owner, "2026-11-16")
         assert usage == {"requests": 1, "input_tokens": 10, "output_tokens": 20}
         assert not reopened.reserve_slot(owner, "2026-11-16", max_daily=1)[0]

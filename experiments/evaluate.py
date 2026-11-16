@@ -12,18 +12,36 @@ from pathlib import Path
 
 import numpy as np
 
-from experiments.benchmark import event_records, prepare
+from experiments.benchmark import event_records, explicit_adjacency_queries, prepare
 from experiments.cache import PassageCache
 from experiments.metrics import summarize
 
 
-def evaluate(root="data/benchmark", output="data/evaluation", limit=0, ann=False):
+def evaluate(
+    root="data/benchmark", output="data/evaluation", limit=0, ann=False, explicit_adjacency=False
+):
     from backend.config import Settings
     from backend.embedding import EmbeddingModel
     from backend.retrieval import SearchService
     from backend.travel_store import MemoryTravelRepository
 
     source_events, queries, manifest = prepare(root)
+    if explicit_adjacency:
+        queries = explicit_adjacency_queries(queries)
+        event_map = {e["event_id"]: e for e in source_events}
+        if any(
+            event_map.get(q["cue_previous_event_id"], {}).get("next_event_id")
+            != q["target_event_id"]
+            for q in queries
+        ):
+            raise ValueError("Cannot use non-adjacent labels for the adjacency diagnostic")
+        manifest["query_variant"] = (
+            "relational_after replaced by immediately after; separate diagnostic"
+        )
+        manifest["diagnostic_queries_sha256"] = hashlib.sha256(
+            json.dumps(queries, sort_keys=True).encode()
+        ).hexdigest()
+        manifest["adjacent_labels_validated"] = len(queries)
     events = event_records(source_events)
     if limit:
         queries = queries[:limit]
@@ -209,7 +227,9 @@ def evaluate_ann(settings, events, queries, exact_rankings, model):
         raise ValueError(
             "--ann requires EVAL_NEO4J_URI and EVAL_NEO4J_PASSWORD for an empty isolated database"
         )
-    with GraphDatabase.driver(uri, auth=("neo4j", password)) as driver:
+    with GraphDatabase.driver(
+        uri, auth=("neo4j", password), notifications_min_severity="OFF"
+    ) as driver:
         count = driver.execute_query("MATCH (n) RETURN count(n) AS n").records[0]["n"]
         if count:
             raise ValueError(

@@ -17,6 +17,11 @@ def main():
     parser.add_argument(
         "--ann", action="store_true", help="Evaluate in a separate EVAL_NEO4J_URI database"
     )
+    parser.add_argument(
+        "--explicit-adjacency",
+        action="store_true",
+        help="Separate immediately-after query diagnostic",
+    )
     args = parser.parse_args()
     if args.command == "serve":
         import uvicorn
@@ -84,7 +89,16 @@ def main():
     elif args.command == "evaluate":
         from experiments.evaluate import evaluate
 
-        evaluate(args.benchmark_root, args.output, limit=args.limit_queries, ann=args.ann)
+        output = args.output
+        if args.explicit_adjacency and output == "data/evaluation":
+            output = "data/evaluation-adjacency"
+        evaluate(
+            args.benchmark_root,
+            output,
+            limit=args.limit_queries,
+            ann=args.ann,
+            explicit_adjacency=args.explicit_adjacency,
+        )
     else:
         from backend.config import get_settings
 

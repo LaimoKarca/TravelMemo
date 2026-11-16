@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import json
+import re
 from pathlib import Path
 from urllib.request import urlopen
 
@@ -12,6 +13,21 @@ FILES = {
     "events": "data/prepared/stage_04_retrieval/common/tokyo_event_documents.csv",
     "queries": "data/prepared/stage_03_queries/tokyo_recall_queries_main.csv",
 }
+
+
+def explicit_adjacency_queries(queries: list[dict]) -> list[dict]:
+    """Separate diagnostic variant; original benchmark queries remain untouched."""
+    result = []
+    for query in queries:
+        if query["query_type"] != "relational_after":
+            continue
+        text, count = re.subn(
+            r"\bafter\b", "immediately after", query["query_text"], count=1, flags=re.IGNORECASE
+        )
+        if count != 1:
+            raise ValueError("Adjacency diagnostic expects an explicit English after cue")
+        result.append({**query, "query_text": text})
+    return result
 
 
 def prepare(root: str | Path) -> tuple[list[dict], list[dict], dict]:
