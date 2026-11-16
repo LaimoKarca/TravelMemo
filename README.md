@@ -1,98 +1,86 @@
 # TravelMemo
 
-旅遊回憶管理系統，使用 Python 3.12 / FastAPI、Vue 3 / TypeScript 與 Neo4j。
+**把旅途中的每次到訪，整理成能回顧、能找回的個人回憶。**
 
-目前包含階段一登入與階段二旅程管理：私人旅程、到訪紀錄、時間軸、地點重用及同日順序調整。
-回憶檢索及 AI 對話依序於後續階段實作。
+TravelMemo 是可自行部署的旅遊回憶管理 Web App。你可以依旅程保存地點、日期與心得，
+透過時間軸重看走過的行程，並保留每次到訪之間的順序關係。
 
-## 研究基礎與 benchmark
+專案的長期目標，是讓使用者即使只記得「那天去完某個景點後的下一站」，
+也能透過檢索與有來源依據的對話找回紀錄。**目前已完成登入與旅程管理，檢索及 AI 對話仍在開發規劃中。**
 
-本專案的研究與實驗基礎為
-[fuzzy-travel-recall-benchmark](https://github.com/LaimoKarca/fuzzy-travel-recall-benchmark)：
-研究如何從不完整線索找回個人到訪事件，比較 BM25、E5 向量檢索與圖結構輔助排序。
+[功能介紹](#目前功能) · [開發進度](#開發進度) · [使用與部署文件](#使用與部署) · [研究基礎](#研究基礎)
 
-TravelMemo 將這個研究方向延伸為可操作的 Web App，保留每次到訪的事件身分與 NEXT 順序關係。
-benchmark 專案負責實驗與可重現比較；此專案目前提供私人旅程管理，後續階段再實作檢索與對話，
-並另行評估新系統的效果。既有 benchmark 分數不代表此 Web App 已達到相同表現。
+## 目前功能
 
-## Windows 本機啟動
+| 功能 | 說明 |
+| --- | --- |
+| 私人旅程手記 | 建立與編輯旅程名稱、日期範圍、時區與描述 |
+| 到訪紀錄 | 保存日期、選填時間、地點、城市、類別、地址與心得 |
+| 旅程時間軸 | 依日期瀏覽行程，調整同日事件順序，依城市及類別篩選 |
+| 重複到訪與地點重用 | 同一地點可被多次造訪，每次都保留獨立紀錄 |
+| 行程順序關係 | 用 Neo4j 的 NEXT 關係保存「紀錄中的下一站」 |
+| 信箱驗證碼登入 | 以允許名單與郵件驗證碼控制登入，各帳號資料私有 |
+| 編輯衝突提示 | 不同分頁同時修改時提示衝突，避免覆蓋新資料 |
 
-需求：Python 3.12、Node.js 22.12 以上、已啟動的 Docker Desktop（Linux containers）。
+時間不詳可以留空；系統不會補造精確時間。NEXT 表示下一筆已記錄的到訪，
+不代表途中沒有其他未記錄的活動。
 
-```powershell
-git clone https://github.com/LaimoKarca/TravelMemo.git
-cd TravelMemo
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt
-.\.venv\Scripts\python.exe -m pip install --no-deps -e .
-Copy-Item .env.example .env  # 僅首次，勿覆蓋既有 .env
-```
+## 如何使用
 
-編輯 `.env`：將 `SESSION_SECRET` 與 `NEO4J_PASSWORD` 換成不同的隨機值，
-`ALLOWED_EMAILS` 設為允許登入的信箱，以逗號分隔。新 clone 的範例秘密不會自動替換，請自行產生；
-可分別執行 `python -c "import secrets; print(secrets.token_urlsafe(48))"` 取得兩個不同的隨機值。
-請勿提交 `.env` 或把其中秘密貼到對話與日誌。
+1. 使用允許名單內的信箱取得驗證碼並登入。
+2. 建立一趟旅程，填入日期範圍與描述。
+3. 逐筆加入到訪地點與心得，必要時重用既有地點。
+4. 從時間軸回顧旅程，補充內容或調整同日紀錄順序。
 
-```powershell
-.\.venv\Scripts\python.exe main.py check-config
-docker compose --env-file .env -f deploy/compose.dev.yml up -d
-.\.venv\Scripts\python.exe main.py init-db
-powershell -File deploy/start-dev.ps1 -CaptureMail
-```
+目前部署網站：[travel.tan-ji.org](https://travel.tan-ji.org)。
+登入須由站台擁有者加入信箱允許名單，尚未開放公開註冊。
 
-另開終端啟動前端：
+## 開發進度
 
-```powershell
-cd frontend
-npm.cmd ci
-npm.cmd run dev
-```
+採分階段開發，各階段交付與驗收後再推進。
 
-開啟 http://localhost:5173 。上述 `-CaptureMail` 啟動方式使用 Mailpit 攔收信件，**不會寄到真實信箱**；
-在 http://localhost:8025 查看驗證碼，再回登入頁輸入。僅允許 `.env` 名單內的信箱登入。
-API 文件：http://localhost:8000/api/docs 。
+| 階段 | 範圍 | 狀態 |
+| --- | --- | --- |
+| 一 | 專案基礎、信箱驗證碼與工作階段 | 已完成 |
+| 二 | 旅程與事件管理、時間軸、NEXT 關係 | 已完成 |
+| 三 | BM25、E5 向量混合檢索與方向性圖遍歷 | 待開發 |
+| 四 | AI 對話、多輪追問、來源引用與用量限制 | 待開發 |
+| 五 | 核心評估、正式部署、備份與還原 | 已完成目前版本部署；其餘待完成 |
 
-登入後可新增旅程手記、填入日期範圍與時區，再加入每次到訪紀錄。時間不詳可留空；
-同日紀錄可往上或往下移動，也能依城市及類別篩選。重複到訪可明確選用既有地點，
-仍保留不同事件。修改或刪除遇到其他分頁已更新時，會提示衝突，避免覆蓋新資料。
+完整範圍與驗收條件見 [SPEC](docs/SPEC.md)。
 
-若要實際寄送驗證碼，依 [Gmail SMTP 教學](docs/GMAIL_SMTP.md)啟用兩步驟驗證、建立應用程式密碼，
-填入 `.env`，改以 `.\.venv\Scripts\python.exe main.py serve` 啟動。
-若要部署自己的公開網站，依 [Cloudflare Tunnel 教學](docs/CLOUDFLARE_TUNNEL.md)設定網域、connector 與 Docker 路由。
-模型已更新為 `gpt-6-luna`；OpenAI 對話尚待階段四實作。目前第二階段版本已部署至
-[travel.tan-ji.org](https://travel.tan-ji.org)，由 Cloudflare Tunnel 提供 HTTPS 入口。
+## 技術架構
 
-## 檢查
+- **後端：** Python 3.12、FastAPI。
+- **前端：** Vue 3、TypeScript、Vite。
+- **資料庫：** Neo4j，保存使用者、旅程、到訪事件與順序關係。
+- **部署：** Docker Compose、Nginx、Cloudflare Tunnel。
 
-```powershell
-.\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m ruff check backend tests main.py
-cd frontend
-npm.cmd run build
-```
+後續檢索規劃使用 Neo4j Vector Index、multilingual E5 與 BM25；
+AI 對話規劃使用 OpenAI Responses API。這些功能尚未加入目前版本。
 
-本機 Neo4j / SMTP 整合測試：啟動上述容器後，在根目錄設定
-`$env:TRAVELMEMO_INTEGRATION='1'` 再執行 pytest；只支援本機開發設定。
+## 使用與部署
 
-## 文件
+設定指令與操作細節集中於 `docs/`，依需求選擇入口：
 
-- [SPEC 與階段](docs/SPEC.md)
-- [Gmail SMTP：Google 設定、應用程式密碼與寄信驗證](docs/GMAIL_SMTP.md)
-- [Cloudflare Tunnel：從建立到公開網站的逐步教學](docs/CLOUDFLARE_TUNNEL.md)
-- [設定、SMTP、啟停與排錯](docs/OPERATIONS.md)
-- [Docker 與 Cloudflare 部署](docs/DEPLOYMENT.md)
-- [階段一驗收紀錄](docs/implementation/phase-1.md)
-- [階段二契約](docs/implementation/phase-2-contract.md)
-- [階段二驗收紀錄](docs/implementation/phase-2.md)
-- [前後端契約](docs/implementation/phase-1-contract.md)
+| 我想要… | 文件 |
+| --- | --- |
+| 在電腦上啟動專案、進行開發 | [本機開發與啟動](docs/GETTING_STARTED.md) |
+| 用 Gmail 寄送登入驗證碼 | [Google 帳戶與 Gmail SMTP 設定](docs/GMAIL_SMTP.md) |
+| 部署自己的公開網站 | [Cloudflare Tunnel 與 Docker 逐步教學](docs/CLOUDFLARE_TUNNEL.md) |
+| 調整帳號、設定或排查錯誤 | [操作與排錯](docs/OPERATIONS.md) |
+| 查閱部署更新、契約與驗收紀錄 | [文件索引](docs/README.md) |
 
-入口為 `main.py`。後端位於 `backend/`，前端位於 `frontend/`，部署設定位於 `deploy/`。
-原始參考文獻保留於 `docs/reference/`。模型下載、索引、評估等命令將於所屬階段加入，
-目前 `--help` 僅列出實際可執行命令。
+## 研究基礎
 
-## 開源與私人資料
+本專案延伸自 [fuzzy-travel-recall-benchmark](https://github.com/LaimoKarca/fuzzy-travel-recall-benchmark)，
+研究如何從不完整線索找回個人到訪事件，並比較 BM25、E5 向量檢索與圖結構輔助排序。
 
-本專案以 [MIT License](LICENSE) 發佈；第三方依賴依各自授權使用。
-`.env`、秘密備份、`docs/reference/`、資料集、模型權重、本機收件內容、測試截圖與產物不隨原始碼公開。
-參考文獻目錄僅供專案擁有者在本機使用，GitHub clone 不會包含其中檔案。
-公開設定範例為 `.env.example`，請填入自己的服務帳密。
+benchmark 專案提供實驗與可重現比較；TravelMemo 將此研究方向延伸成可使用的旅遊回憶管理系統。
+後續檢索實作會另行評估，既有 benchmark 分數不代表目前 Web App 的檢索表現。
+
+## 授權與私人資料
+
+本專案以 [MIT License](LICENSE) 發佈，第三方依賴依各自授權使用。
+`.env`、秘密備份、`docs/reference/`、資料集、模型權重與本機測試產物不隨原始碼公開。
+自行部署時請使用自己的服務帳密；公開設定範例見 [.env.example](.env.example)。
