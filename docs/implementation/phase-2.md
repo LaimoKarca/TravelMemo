@@ -43,8 +43,8 @@ Lead 另修正回傳內部 owner 欄位造成的回應驗證問題（由 Worker 
 
 Gmail 與 Tunnel 的私人設定於本機管理，不隨開源程式發佈。本機 .env 保存真實 SMTP 設定；
 目前 API 以 deploy/start-dev.ps1 -CaptureMail 啟動，程序範圍設定導向 Mailpit，未更改 .env。
-Gmail 登入尚未成功，需要使用者核對應用程式密碼。OpenAI model access HTTP200，未呼叫生成。
-Tan-Ji travelmemo-tunnel 已成功註冊四條 Cloudflare 連線；應用尚未部署或公開路由。
+第二階段交付時 Gmail 登入尚未成功；後續已設定應用程式密碼並通過認證。OpenAI model access HTTP200，未呼叫生成。
+後續已將目前版本部署至 Tan-Ji；實際部署及驗收狀態見 docs/DEPLOYMENT.md。
 
 第三階段檢索與第四階段對話尚未實作。本次沒有新增假搜尋按鈕或圖片辨識。
 尚未啟動正式備份還原流程；開發卷持久保存，勿執行 compose down -v。

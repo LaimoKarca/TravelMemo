@@ -44,8 +44,8 @@ API 文件：http://localhost:8000/api/docs 。
 仍保留不同事件。修改或刪除遇到其他分頁已更新時，會提示衝突，避免覆蓋新資料。
 
 若要使用 `.env` 的真實 Gmail 設定，改以 `python main.py serve` 啟動，需先完成 SMTP 認證設定。
-模型已更新為 `gpt-6-luna`；OpenAI 對話尚待階段四實作。Tan-Ji 的 Tunnel connector 已上線，
-應用與公開網址路由尚待部署階段接上。
+模型已更新為 `gpt-6-luna`；OpenAI 對話尚待階段四實作。目前第二階段版本已部署至
+[travel.tan-ji.org](https://travel.tan-ji.org)，由 Cloudflare Tunnel 提供 HTTPS 入口。
 
 ## 檢查
 

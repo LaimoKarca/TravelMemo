@@ -27,7 +27,7 @@
 
 目前此工作區 `.env` 已依使用者要求切換為 Gmail SMTP。若要保留此設定又在開發時攔信，
 可執行 `powershell -File deploy/start-dev.ps1 -CaptureMail`；此指令僅覆寫啟動程序中的 SMTP
-環境變數，停止該程序後不影響 `.env`。Gmail 帳密驗證目前尚未通過，需核對應用程式密碼。
+環境變數，停止該程序後不影響 `.env`。使用者設定應用程式密碼後，已通過本機及正式容器的 Gmail SMTP 認證。
 
 OpenAI 預設模型已依後續指示改為 `gpt-6-luna`，API Key 保留在 `.env`。
 對話及影像處理仍依 SPEC 階段開發，模型支援影像不代表系統已提供圖片功能。

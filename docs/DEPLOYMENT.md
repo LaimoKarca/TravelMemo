@@ -55,8 +55,21 @@ Windows Docker Desktop 需在主機重新開機後啟動；完整主機重啟演
 
 核對 `docker compose ps`、API ready、外部 HTTPS、Secure Cookie、允許名單寄碼、資料隔離。
 自動化測試應避免寄送未經要求的郵件；SMTP AUTH 可先單獨驗證，登入寄碼由使用者觸發。
+公開檢查使用 `python deploy/check-public.py`，其 User-Agent 明確標示專案；Cloudflare 可能攔截
+預設 Python urllib User-Agent 並回1010，這與來源網站故障不同。
 如需回退程式，使用前一個 release 目錄及原 RELEASE_ID 執行 compose up，沿用原資料卷。
 資料庫格式升級不得只換 image 回退，須先完成備份及對應還原程序。
 
 **不要執行 `docker compose down -v`，也不要清理其他專案的容器、網路或資料卷。**
 目前只有新建獨立資料庫，完整資料庫備份與還原演練另依 SPEC 階段五完成。
+
+## 首次公開部署驗收（2026-11-16）
+
+- Tan-Ji 原生 Docker 建置成功，web/API/Neo4j 健康檢查通過。
+- Connector 實際位於172.30.80.2；外部 HTTPS 首頁與 ready/live 都回200。
+- 未登入的 me/trips 回401、開發文件回404、錯誤 Origin 寄碼要求回403。
+- 實際訪客 IP 傳至 API，偽造 X-Forwarded-For 未改變 API 看到的訪客來源。
+- Tan-Ji API 容器通過 Gmail SMTP AUTH，未寄出測試信；實際收碼由使用者首次登入確認。
+- Chrome 可正常顯示登入頁；Cloudflare 的邊緣腳本與網站標頭相容。
+- 後端22項測試通過、2項容器測試預設略過；私人旅程及資料庫整合沿用第二階段有效證據。
+- 尚未進行主機重新開機或資料庫還原演練；不宣稱完成整個 SPEC 階段五。
