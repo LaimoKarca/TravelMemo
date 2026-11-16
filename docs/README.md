@@ -26,5 +26,7 @@
 | [階段一驗收](implementation/phase-1.md) | 基礎與登入的交付及驗證紀錄 |
 | [階段二契約](implementation/phase-2-contract.md) | 旅程、事件與順序管理契約 |
 | [階段二驗收](implementation/phase-2.md) | 旅程管理的交付及驗證紀錄 |
+| [v1 功能契約](implementation/release-contract.md) | 檢索、對話、引用與索引的一致介面 |
+| [v1 驗收紀錄](implementation/v1-validation.md) | 測試、評估、正式部署、還原與執行限制 |
 
 `reference/` 為專案擁有者本機保留的參考資料，未包含於公開儲存庫。

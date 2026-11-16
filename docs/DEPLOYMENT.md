@@ -3,6 +3,7 @@
 第一次自行部署請先看 [Cloudflare Tunnel 逐步教學](CLOUDFLARE_TUNNEL.md)，
 包含網域替換、建立 connector 與公開路由；寄件設定見 [Gmail SMTP 教學](GMAIL_SMTP.md)。
 下文說明正式網路、版本更新與回退。歷史驗收保留於 implementation 文件。
+目前 v1 正式部署與驗收見 [v1 驗收紀錄](implementation/v1-validation.md)。
 
 正式部署與本機開發使用不同資料卷及私人設定。評估另用隔離資料庫，
 不把 benchmark 或開發旅程搬到正式資料庫。
@@ -60,7 +61,20 @@ docker network connect --ip 172.30.80.2 travelmemo-net travelmemo-tunnel
 
 若 connector 已連到該網路，不要重複執行；先 inspect 其網路位址。
 API 及資料庫使用健康檢查控制啟動順序。容器設定 restart=unless-stopped。
-Windows Docker Desktop 需在主機重新開機後啟動；完整主機重啟演練尚待專案部署驗收階段。
+Windows Docker Desktop 需先啟動，容器的 restart 原則才會生效。
+可至 **Settings → General → Start Docker Desktop when you sign in to your computer**
+開啟登入後自動啟動；此設定需要登入 Windows，不能單憑容器的 restart 原則保證未登入時也能恢復。
+設定位置見 [Docker 官方文件](https://docs.docker.com/desktop/settings-and-maintenance/settings/)。
+
+主機重開後，登入 Windows 並確認 Docker Engine 已啟動，再核對：
+
+```powershell
+docker ps --format '{{.Names}} {{.Status}}'
+python deploy/check-public.py https://travel.tan-ji.org
+```
+
+若容器曾被人工停止，從目前 release 目錄設定正確的 RELEASE_ID，再執行上方 Compose up 指令。
+完整主機重開機會影響同機其他服務，請由主機擁有者安排維護時段。
 
 ## 驗證與回退
 

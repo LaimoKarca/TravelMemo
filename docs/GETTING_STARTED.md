@@ -58,10 +58,22 @@ API 文件：http://localhost:8000/api/docs 。
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m ruff check backend tests main.py
 cd frontend
+npm.cmd test
 npm.cmd run build
 ```
 
-本機 Neo4j / SMTP 整合測試：啟動上述容器後，在根目錄設定
-`$env:TRAVELMEMO_INTEGRATION='1'` 再執行 pytest；只支援本機開發設定。
+Neo4j / SMTP 整合測試請使用專用的本機測試資料庫與 Mailpit，避免對自己的旅程資料執行測試編碼。
+在根目錄執行下列設定，再啟動整合測試；請勿指向正式環境。
+
+```powershell
+$env:TRAVELMEMO_INTEGRATION = '1'
+$env:SMTP_HOST = '127.0.0.1'
+$env:SMTP_PORT = '1025'
+$env:SMTP_TLS = 'none'
+$env:SMTP_AUTH = 'false'
+.\.venv\Scripts\python.exe -m pytest tests/test_integration.py tests/test_phase2_database.py tests/test_retrieval_real_neo4j.py tests/test_release_database.py -q
+```
+
+`NEO4J_URI`、`NEO4J_USER`、`NEO4J_PASSWORD` 應指向該測試資料庫。一般 `pytest` 預設略過這四項整合測試。
 
 更多設定與排錯見 [操作說明](OPERATIONS.md)；回到 [文件索引](README.md)或[專案介紹](../README.md)。
