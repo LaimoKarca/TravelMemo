@@ -1,5 +1,9 @@
 # Docker 與 Cloudflare 部署（目前第二階段版本）
 
+第一次自行部署請先看 [Cloudflare Tunnel 逐步教學](CLOUDFLARE_TUNNEL.md)，
+包含網域替換、建立 connector 與公開路由；寄件設定見 [Gmail SMTP 教學](GMAIL_SMTP.md)。
+下文保留目前既有部署的網路、版本更新及驗收紀錄。
+
 此部署提供目前的登入與私人旅程管理。檢索、AI 對話、完整評估及正式備份還原演練仍依 SPEC 開發。
 不會把開發環境的旅程或測試資料搬到正式資料庫。
 

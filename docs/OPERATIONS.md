@@ -18,6 +18,9 @@
 
 ## SMTP
 
+使用 Gmail 時，請依 [Gmail SMTP 逐步教學](GMAIL_SMTP.md)設定 Google 兩步驟驗證、
+應用程式密碼與 `.env`，並驗證實際收件。公開網站設定見 [Cloudflare Tunnel 教學](CLOUDFLARE_TUNNEL.md)。
+
 本機使用 Mailpit，`SMTP_HOST=localhost`、`SMTP_PORT=1025`、`SMTP_TLS=none`，
 帳密留空，信件只留在本機開發收件箱。寄件者可用預設 example.com 測試地址。
 
