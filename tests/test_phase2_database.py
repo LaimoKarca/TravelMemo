@@ -12,7 +12,7 @@ from backend.store import Neo4jStore
 @pytest.mark.skipif(os.getenv("TRAVELMEMO_INTEGRATION") != "1", reason="Local Neo4j opt-in")
 def test_real_graph_edges_isolation_and_restart():
     settings = Settings()
-    assert settings.neo4j_uri == "bolt://localhost:7687"
+    assert settings.neo4j_uri in {"bolt://localhost:7687", "bolt://127.0.0.1:7687"}
     assert settings.app_env == "development"
     email = f"graph-{uuid4().hex}@example.com"
     settings.allowed_emails = email

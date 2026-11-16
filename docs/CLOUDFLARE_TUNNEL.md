@@ -2,7 +2,7 @@
 
 本教學以 Windows、PowerShell、Docker Desktop 的 Linux containers 為例，
 將 TravelMemo 發佈到 `https://travel.example.com`。請將範例網域換成自己的網域。
-目前可部署登入與旅程管理；回憶檢索、AI 對話及完整備份還原演練仍待後續階段。
+功能操作見 [回憶搜尋與 AI 對話](RECALL.md)，資料保護見 [備份與還原](BACKUP_RESTORE.md)。
 
 ## 1. 準備主機與網域
 
@@ -95,15 +95,14 @@ SMTP_FROM="TravelMemo <your-gmail-account@gmail.com>"
 若有 Python，可分別執行 `python -c "import secrets; print(secrets.token_urlsafe(48))"`
 產生兩個不同的隨機值。已建立資料庫後，修改 `.env` 不會自動更改既有 Neo4j 密碼。
 
-**目前正式部署檔仍有既有網站網址，僅修改 `.env` 不足以換網域。首次部署自己的網站時，請同步修改：**
+首次部署自己的網站時，設定以下網址；正式 Compose 會從 `.env` 取得 PUBLIC_URL：
 
 | 檔案 | 必須設定的值 |
 | --- | --- |
 | 私人 `.env` | PUBLIC_URL=https://travel.example.com |
-| deploy/compose.prod.yml | api.environment.PUBLIC_URL 改為 https://travel.example.com |
-| deploy/nginx.prod.conf | server_name 改為 travel.example.com; |
+| Cloudflare route | hostname 設為 travel.example.com |
 
-三處與下一節的公開 hostname 須一致。修改 Nginx 設定後需要重新建置 Web 映像。
+PUBLIC_URL 與公開 hostname 須一致。Nginx 使用預設站台，不需為換網域另改 server_name。
 正式 Compose 目前只傳入本階段需要的設定，不會把整份 `.env` 都送進 API 容器。
 
 ## 5. 建置並連接 Docker 網路
@@ -122,6 +121,8 @@ docker compose --env-file $configFile -f deploy/compose.prod.yml config --quiet
 docker compose --env-file $configFile -f deploy/compose.prod.yml build
 docker compose --env-file $configFile -f deploy/compose.prod.yml up -d --wait --wait-timeout 240
 docker compose --env-file $configFile -f deploy/compose.prod.yml ps
+docker exec travelmemo-api-1 python main.py download-model
+docker exec travelmemo-api-1 python main.py rebuild-index
 docker network connect --ip 172.30.80.2 travelmemo-net travelmemo-tunnel
 ```
 
@@ -174,7 +175,7 @@ python deploy/check-public.py https://travel.example.com
 
 這個檢查不寄信、不建立旅程，不能取代上面的登入與資料操作驗證。
 容器設定了 `unless-stopped`，但 Windows 重開機後仍需確保 Docker Desktop 已啟動；
-請實際測試主機重啟後恢復。完整備份還原演練留待階段五，目前仍須自行保護正式資料。
+請實際測試主機重啟後恢復，並依 [備份與還原](BACKUP_RESTORE.md)定期保護資料。
 **不要執行 `docker compose down -v`，這會移除包含旅程資料的資料卷。**
 
 更新、回退及目前部署限制參見 [部署說明](DEPLOYMENT.md)。
@@ -189,7 +190,7 @@ python deploy/check-public.py https://travel.example.com
 | 登入寫入請求403 | 網址、Compose PUBLIC_URL 及瀏覽器 Origin 是否一致；刷新頁面取得目前 CSRF token |
 | Python檢查被1010擋住，但瀏覽器正常 | 使用隨附 check-public.py，其 User-Agent 會標明專案；不要直接以預設 urllib 結果判定網站故障 |
 | 改SMTP設定仍沒變 | 依 Gmail 教學重建API容器，僅 restart 不會套用新 env file |
-| 更換公開網址 | 同步修改三處網址與 Cloudflare route，重建部署，再驗證登入 |
+| 更換公開網址 | 同步修改 .env 的 PUBLIC_URL 與 Cloudflare route，重建API容器，再驗證登入 |
 
 Cloudflare 的1010可與瀏覽器完整性檢查有關，參見 [官方排錯](https://developers.cloudflare.com/support/troubleshooting/http-status-codes/cloudflare-1xxx-errors/error-1010/)。
 不要把含 token、完整環境變數或帳密的日誌貼到公開 issue。

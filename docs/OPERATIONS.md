@@ -1,4 +1,4 @@
-# 階段一操作說明
+# 操作與排錯
 
 ## 設定與帳號
 
@@ -14,7 +14,7 @@
 
 工作階段預設七天。Cookie 為 HttpOnly、SameSite=Lax；登出需要 `/auth/me`
 回傳的 CSRF token，前端僅在記憶體中保存。API 不信任任意 Forwarded header。
-正式代理下的真實 IP 信任範圍將於部署階段依實際網路設定，第一階段不公開到網路。
+正式代理只信任專案內的 Web IP，來源 IP 由 Cloudflare 經 Nginx 傳遞；設定見部署文件。
 
 ## SMTP
 
@@ -33,7 +33,7 @@
 環境變數，停止該程序後不影響 `.env`。使用者設定應用程式密碼後，已通過本機及正式容器的 Gmail SMTP 認證。
 
 OpenAI 預設模型已依後續指示改為 `gpt-6-luna`，API Key 保留在 `.env`。
-對話及影像處理仍依 SPEC 階段開發，模型支援影像不代表系統已提供圖片功能。
+對話與引用操作見 [回憶搜尋與 AI 對話](RECALL.md)。本版保存文字紀錄，不提供圖片辨識。
 
 `APP_ENV=production` 要求 HTTPS `PUBLIC_URL`、`COOKIE_SECURE=true`、非空允許名單、
 已設定 SMTP 及加密 SMTP。不要將開發 Mailpit 或 Neo4j Browser 暴露到網路。
@@ -61,4 +61,5 @@ Neo4j 密碼透過 `.env` 初始化；既有資料卷不會因改 `.env` 而重�
 - 登出 403：重新整理取得目前工作階段的 CSRF token。
 - Ready 503：回應只列出資料庫可用性與 SMTP 是否有設定，不保證真實信箱投遞。
 
-正式部署需由使用者填入信箱、SMTP、網域與 Tunnel token；OpenAI Key 於階段四才需要。
+正式部署請填入自己的信箱、SMTP、網域與 Tunnel token；AI 對話另需 OpenAI Key。
+備份、隔離演練及版本回退見 [備份與還原](BACKUP_RESTORE.md)。

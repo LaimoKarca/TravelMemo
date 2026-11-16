@@ -23,11 +23,25 @@ class CodeInput(EmailInput):
     code: str = Field(pattern=r"^\d{6}$")
 
 
-def create_app(settings=None, store=None, sender=None, clock=time.time, travel_repository=None):
+def create_app(
+    settings=None,
+    store=None,
+    sender=None,
+    clock=time.time,
+    travel_repository=None,
+    search_service=None,
+    conversation_store=None,
+    llm=None,
+    embedder=None,
+):
     settings = settings or get_settings()
     owned = store is None
     store = store if store is not None else Neo4jStore(settings)
     auth = AuthService(settings, store, sender or smtp_sender(settings), clock)
+    from backend.conversation import ConversationService, create_conversation_router
+    from backend.conversation_store import MemoryConversationStore, Neo4jConversationStore
+    from backend.retrieval import SearchService
+    from backend.search import create_search_router
     from backend.travel import create_travel_router
     from backend.travel_store import MemoryTravelRepository, Neo4jTravelRepository
 
@@ -37,6 +51,17 @@ def create_app(settings=None, store=None, sender=None, clock=time.time, travel_r
             if isinstance(store, Neo4jStore)
             else MemoryTravelRepository()
         )
+
+    search_service = search_service or SearchService(settings, travel_repository, embedder=embedder)
+    if conversation_store is None:
+        conversation_store = (
+            Neo4jConversationStore(store.driver, store.database)
+            if isinstance(store, Neo4jStore)
+            else MemoryConversationStore()
+        )
+    conversations = ConversationService(
+        settings, search_service, conversation_store, clock=clock, llm=llm
+    )
 
     async def cleanup():
         while True:
@@ -48,16 +73,21 @@ def create_app(settings=None, store=None, sender=None, clock=time.time, travel_r
 
     @asynccontextmanager
     async def lifespan(app):
-        task = None
+        tasks = []
         if owned:
             await asyncio.to_thread(store.initialize)
             await asyncio.to_thread(travel_repository.initialize)
-            task = asyncio.create_task(cleanup())
+            tasks.append(asyncio.create_task(cleanup()))
+        await asyncio.to_thread(search_service.initialize)
+        await asyncio.to_thread(conversation_store.initialize)
+        if owned:
+            tasks.append(asyncio.create_task(search_service.run_worker()))
         try:
             yield
         finally:
-            if task:
+            for task in tasks:
                 task.cancel()
+            for task in tasks:
                 try:
                     await task
                 except asyncio.CancelledError:
@@ -67,12 +97,15 @@ def create_app(settings=None, store=None, sender=None, clock=time.time, travel_r
 
     app = FastAPI(
         title="TravelMemo",
-        version="0.2.0",
+        version="1.0.0",
         lifespan=lifespan,
         docs_url="/api/docs" if settings.app_env == "development" else None,
         openapi_url="/openapi.json" if settings.app_env == "development" else None,
         redoc_url=None,
     )
+    app.state.search = search_service
+    app.state.conversations = conversations
+    app.state.travel = travel_repository
 
     @app.middleware("http")
     async def origin_check(request: Request, call_next):
@@ -180,4 +213,6 @@ def create_app(settings=None, store=None, sender=None, clock=time.time, travel_r
         return response
 
     app.include_router(create_travel_router(auth, travel_repository))
+    app.include_router(create_search_router(auth, search_service))
+    app.include_router(create_conversation_router(auth, conversations))
     return app

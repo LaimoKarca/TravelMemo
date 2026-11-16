@@ -1,11 +1,11 @@
-# Docker 與 Cloudflare 部署（目前第二階段版本）
+# Docker 與 Cloudflare 部署
 
 第一次自行部署請先看 [Cloudflare Tunnel 逐步教學](CLOUDFLARE_TUNNEL.md)，
 包含網域替換、建立 connector 與公開路由；寄件設定見 [Gmail SMTP 教學](GMAIL_SMTP.md)。
-下文保留目前既有部署的網路、版本更新及驗收紀錄。
+下文說明正式網路、版本更新與回退。歷史驗收保留於 implementation 文件。
 
-此部署提供目前的登入與私人旅程管理。檢索、AI 對話、完整評估及正式備份還原演練仍依 SPEC 開發。
-不會把開發環境的旅程或測試資料搬到正式資料庫。
+正式部署與本機開發使用不同資料卷及私人設定。評估另用隔離資料庫，
+不把 benchmark 或開發旅程搬到正式資料庫。
 
 ## 入口與網路
 
@@ -30,19 +30,26 @@ API 停用正式環境的 OpenAPI 與 Swagger，Cookie 強制 Secure。
 在專案外的私人 `.env` 保存 ALLOWED_EMAILS、SESSION_SECRET、NEO4J_PASSWORD、SMTP 設定。
 正式 SESSION_SECRET 與資料庫密碼獨立產生，不沿用開發資料庫。
 SMTP 使用 Gmail 應用程式密碼；不將正式設定或 token 放進 Git/Docker image。
-此階段尚未啟用 OpenAI 對話，API 容器不載入未使用的 OpenAI Key 或 Tunnel token。
+OPENAI_API_KEY 由正式 `.env` 傳給 API，未設定則 AI 顯示不可用，旅程管理與搜尋仍可使用。
+Tunnel token 只給獨立 connector，不傳給 API。PUBLIC_URL 從 `.env` 讀取，Nginx 不綁死既有網域。
+
+API 記憶體上限2048MiB、Neo4j1536MiB、Web128MiB，加上 connector128MiB，總上限約3.75GiB。
+E5 僅載入一份、CPU最多兩個編碼執行緒、批次最多8筆。模型保存於 model-data 持久卷。
 
 ## 安裝與更新
 
 建議目錄：`D:\Services\TravelMemo`。私人 `.env` 放在根目錄，固定版本的 GitHub source
 archive 解壓縮到 `releases\<commit>`，其下保留 repo 目錄。
-從 release 的 repo 根目錄執行（填實際私人設定絕對路徑）：
+從 release 的 repo 根目錄執行（填實際私人設定絕對路徑）。
+既有站台升級前先依 [備份與還原](BACKUP_RESTORE.md)建立並驗證備份，記下原 RELEASE_ID。
 
 ```powershell
 $env:RELEASE_ID = '<commit-short-id>'
 docker compose --env-file 'D:\Services\TravelMemo\.env' -f deploy/compose.prod.yml config --quiet
 docker compose --env-file 'D:\Services\TravelMemo\.env' -f deploy/compose.prod.yml build
 docker compose --env-file 'D:\Services\TravelMemo\.env' -f deploy/compose.prod.yml up -d --wait --wait-timeout 240
+docker exec travelmemo-api-1 python main.py download-model
+docker exec travelmemo-api-1 python main.py rebuild-index
 ```
 
 首次建立網路後，把既有專用 connector 接上：
@@ -65,7 +72,7 @@ Windows Docker Desktop 需在主機重新開機後啟動；完整主機重啟演
 資料庫格式升級不得只換 image 回退，須先完成備份及對應還原程序。
 
 **不要執行 `docker compose down -v`，也不要清理其他專案的容器、網路或資料卷。**
-目前只有新建獨立資料庫，完整資料庫備份與還原演練另依 SPEC 階段五完成。
+完整操作見 [備份與還原](BACKUP_RESTORE.md)，檢索與 AI 維護見 [回憶搜尋與 AI 對話](RECALL.md)。
 
 ## 首次公開部署驗收（2026-11-16）
 

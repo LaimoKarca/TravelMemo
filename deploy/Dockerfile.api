@@ -5,7 +5,9 @@ COPY requirements.lock.txt ./
 RUN pip install -r requirements.lock.txt
 COPY pyproject.toml main.py README.md LICENSE ./
 COPY backend ./backend
-RUN pip install --no-deps . && useradd --uid 10001 --create-home app
+COPY experiments ./experiments
+RUN pip install --no-deps . && useradd --uid 10001 --create-home app \
+    && mkdir -p /app/data/models && chown -R app:app /app/data
 USER app
 EXPOSE 8000
 CMD ["python", "main.py", "serve", "--host", "0.0.0.0", "--port", "8000"]

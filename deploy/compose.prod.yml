@@ -26,13 +26,13 @@ services:
       options: {max-size: 10m, max-file: '3'}
 
   api:
-    image: travelmemo-api:${RELEASE_ID:-phase2}
+    image: travelmemo-api:${RELEASE_ID:-v1}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.api
     environment:
       APP_ENV: production
-      PUBLIC_URL: https://travel.tan-ji.org
+      PUBLIC_URL: ${PUBLIC_URL:?Set PUBLIC_URL to your HTTPS website URL}
       COOKIE_SECURE: 'true'
       ALLOWED_EMAILS: ${ALLOWED_EMAILS:?Set ALLOWED_EMAILS}
       SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
@@ -49,6 +49,28 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:?Set SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_TIMEOUT: ${OPENAI_TIMEOUT:-45}
+      OPENAI_MAX_OUTPUT_TOKENS: ${OPENAI_MAX_OUTPUT_TOKENS:-2000}
+      AI_DAILY_LIMIT: ${AI_DAILY_LIMIT:-50}
+      AI_USER_CONCURRENCY: ${AI_USER_CONCURRENCY:-1}
+      AI_GLOBAL_CONCURRENCY: ${AI_GLOBAL_CONCURRENCY:-2}
+      CONVERSATION_HISTORY_LIMIT: ${CONVERSATION_HISTORY_LIMIT:-12}
+      CONVERSATION_EVIDENCE_LIMIT: ${CONVERSATION_EVIDENCE_LIMIT:-8}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      EMBEDDING_REVISION: ${EMBEDDING_REVISION:-614241f622f53c4eeff9890bdc4f31cfecc418b3}
+      EMBEDDING_MODEL_DIR: /app/data/models/multilingual-e5-small
+      EMBEDDING_POLL_SECONDS: ${EMBEDDING_POLL_SECONDS:-3}
+      EMBEDDING_RETRY_SECONDS: ${EMBEDDING_RETRY_SECONDS:-60}
+      RETRIEVAL_TOP_K: ${RETRIEVAL_TOP_K:-50}
+      RRF_K: ${RRF_K:-60}
+      RELATION_WEIGHT: ${RELATION_WEIGHT:-0.5}
+      TOKENIZERS_PARALLELISM: 'false'
+      OMP_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+    volumes:
+      - model-data:/app/data
     networks:
       private:
         ipv4_address: 172.30.80.20
@@ -60,13 +82,14 @@ services:
       timeout: 5s
       retries: 6
       start_period: 30s
-    mem_limit: 1536m
+    mem_limit: 2048m
     cpus: 1
     restart: unless-stopped
+    stop_grace_period: 60s
     logging: *logs
 
   web:
-    image: travelmemo-web:${RELEASE_ID:-phase2}
+    image: travelmemo-web:${RELEASE_ID:-v1}
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
@@ -92,3 +115,4 @@ networks:
       config: [{subnet: 172.30.80.0/24}]
 volumes:
   neo4j-data:
+  model-data:

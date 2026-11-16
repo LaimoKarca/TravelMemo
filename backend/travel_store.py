@@ -206,6 +206,17 @@ class MemoryTravelRepository:
                 return format_place(place)
             return None
 
+    def get_event(self, owner_id: str, event_id: str) -> dict | None:
+        with self.lock:
+            event = self.events.get(event_id)
+            if not event or event.get("owner_id") != owner_id:
+                return None
+            res = format_event(event)
+            trip = self.trips.get(event["trip_id"])
+            if trip:
+                res["trip_name"] = trip.get("name", "")
+            return res
+
     def _resolve_place_on_create(self, owner_id: str, data: dict) -> dict:
         place_id = data.get("place_id")
         if place_id:
@@ -275,6 +286,8 @@ class MemoryTravelRepository:
                 "notes": data.get("notes", ""),
                 "position": insert_idx,
                 "version": 1,
+                "embedding_status": "pending",
+                "embedded_version": 0,
             }
 
             trip_events.insert(insert_idx, new_event)
@@ -333,6 +346,7 @@ class MemoryTravelRepository:
             event["time"] = data.get("time")
             event["notes"] = data.get("notes", "")
             event["version"] += 1
+            event["embedding_status"] = "pending"
 
             trip_events = [
                 e
@@ -650,6 +664,21 @@ class Neo4jTravelRepository:
             ).single()
             return dict(res) if res else None
 
+    def get_event(self, owner_id: str, event_id: str) -> dict | None:
+        with self.driver.session(database=self.database) as session:
+            res = session.run(
+                """
+                MATCH (t:Trip {owner_id: $owner_id})-[:HAS_EVENT]->(e:Event {id: $event_id, owner_id: $owner_id})
+                RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
+                       e.city AS city, e.address AS address, e.category AS category, e.date AS date,
+                       e.time AS time, e.notes AS notes, e.position AS position, e.version AS version,
+                       t.name AS trip_name
+                """,
+                owner_id=owner_id,
+                event_id=event_id,
+            ).single()
+            return dict(res) if res else None
+
     def create_event(self, owner_id: str, trip_id: str, data: dict) -> dict:
         with (
             self.driver.session(database=self.database) as session,
@@ -763,7 +792,9 @@ class Neo4jTravelRepository:
                         time: $time,
                         notes: $notes,
                         position: $position,
-                        version: 1
+                        version: 1,
+                        embedding_status: 'pending',
+                        embedded_version: 0
                     })
                     CREATE (t)-[:HAS_EVENT]->(e)
                     CREATE (e)-[:AT]->(p)
@@ -958,7 +989,8 @@ class Neo4jTravelRepository:
                         e.time = $time,
                         e.notes = $notes,
                         e.position = $position,
-                        e.version = e.version + 1
+                        e.version = e.version + 1,
+                        e.embedding_status = 'pending'
                     WITH e, p, c
                     OPTIONAL MATCH (e)-[r1:AT]->(:Place)
                     DELETE r1

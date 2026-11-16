@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     email_hourly_limit: int = Field(default=5, ge=1)
     ip_hourly_limit: int = Field(default=20, ge=1)
     verify_ip_hourly_limit: int = Field(default=100, ge=1)
-    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_uri: str = "bolt://127.0.0.1:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = Field(default="", repr=False)
     neo4j_database: str = "neo4j"
@@ -36,6 +36,23 @@ class Settings(BaseSettings):
     smtp_timeout: float = 10
     openai_api_key: str = Field(default="", repr=False)
     openai_model: str = "gpt-6-luna"
+    openai_timeout: float = Field(default=45, ge=1, le=180)
+    openai_max_output_tokens: int = Field(default=2000, ge=128, le=10000)
+    ai_daily_limit: int = Field(default=50, ge=1, le=10000)
+    ai_user_concurrency: int = Field(default=1, ge=1, le=10)
+    ai_global_concurrency: int = Field(default=2, ge=1, le=10)
+    conversation_history_limit: int = Field(default=12, ge=2, le=50)
+    conversation_evidence_limit: int = Field(default=8, ge=1, le=20)
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    embedding_revision: str = Field(
+        default="614241f622f53c4eeff9890bdc4f31cfecc418b3", pattern=r"^[0-9a-f]{40}$"
+    )
+    embedding_model_dir: str = "data/models/multilingual-e5-small"
+    embedding_poll_seconds: float = Field(default=3, ge=0.1, le=300)
+    embedding_retry_seconds: float = Field(default=60, ge=1, le=3600)
+    retrieval_top_k: int = Field(default=50, ge=1, le=200)
+    rrf_k: int = Field(default=60, ge=1, le=1000)
+    relation_weight: float = Field(default=0.5, ge=0, le=1)
     cloudflare_tunnel_id: str = ""
     cloudflare_tunnel_token: str = Field(default="", repr=False)
 

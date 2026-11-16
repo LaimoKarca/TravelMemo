@@ -11,6 +11,9 @@
 | [Cloudflare Tunnel](CLOUDFLARE_TUNNEL.md) | 網域、connector、Docker 網路與公開路由的完整步驟 |
 | [操作與排錯](OPERATIONS.md) | 允許名單、設定、啟停、登入與 SMTP 常見錯誤 |
 | [部署與更新](DEPLOYMENT.md) | 目前部署架構、版本更新、回退與驗收紀錄 |
+| [回憶搜尋與 AI 對話](RECALL.md) | 搜尋線索、來源、模型與索引維護、多輪追問及用量 |
+| [備份與還原](BACKUP_RESTORE.md) | 離線備份、SHA-256、隔離演練、正式還原與版本回退 |
+| [檢索評估](EVALUATION.md) | 固定輸入、四方法比較、精確向量與 ANN、結果解讀 |
 
 ## 規格與工程紀錄
 

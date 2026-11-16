@@ -20,8 +20,9 @@ from backend.store import Neo4jStore
 def test_real_database_smtp_restart_and_atomic_use():
     settings = Settings()
     assert settings.app_env == "development"
-    assert settings.neo4j_uri == "bolt://localhost:7687"
-    assert settings.smtp_host == "localhost" and settings.smtp_port == 1025
+    assert settings.neo4j_uri in {"bolt://localhost:7687", "bolt://127.0.0.1:7687"}
+    assert settings.smtp_host in {"localhost", "127.0.0.1"} and settings.smtp_port == 1025
+    assert settings.smtp_tls == "none" and not settings.smtp_auth
     email = f"test-{uuid4().hex}@example.com"
     settings.allowed_emails = email
     store = Neo4jStore(settings)
@@ -29,9 +30,9 @@ def test_real_database_smtp_restart_and_atomic_use():
     auth = AuthService(settings, store, smtp_sender(settings))
     try:
         auth.request_code(email, "integration")
-        messages = httpx.get("http://localhost:8025/api/v1/messages").json()["messages"]
+        messages = httpx.get("http://127.0.0.1:8025/api/v1/messages").json()["messages"]
         message = next(m for m in messages if any(t["Address"] == email for t in m["To"]))
-        content = httpx.get(f"http://localhost:8025/api/v1/message/{message['ID']}").json()
+        content = httpx.get(f"http://127.0.0.1:8025/api/v1/message/{message['ID']}").json()
         code = re.search(r"\b\d{6}\b", content["Text"]).group()
 
         def consume():

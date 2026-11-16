@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import type { User } from '../types/auth'
 import type {
   Trip,
@@ -10,6 +10,8 @@ import type {
   CreateEventPayload,
   UpdateEventPayload
 } from '../types/travel'
+import type { SearchItem, SearchEvent } from '../types/search'
+import type { Citation } from '../types/conversation'
 import {
   listTrips,
   createTrip,
@@ -27,6 +29,9 @@ import StatusAlert from './StatusAlert.vue'
 import TripDialog from './TripDialog.vue'
 import EventDialog from './EventDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import RecallSearch from './RecallSearch.vue'
+import ConversationView from './ConversationView.vue'
+import SourceDetailModal from './SourceDetailModal.vue'
 
 const props = defineProps<{
   user: User
@@ -36,6 +41,81 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'logout'): void
 }>()
+
+// Workspace active tab navigation
+type WorkspaceTab = 'trips' | 'search' | 'chat'
+const activeTab = ref<WorkspaceTab>('trips')
+
+interface WorkspaceTabItem {
+  id: WorkspaceTab
+  label: string
+  tabId: string
+  panelId: string
+}
+
+const TABS: WorkspaceTabItem[] = [
+  { id: 'trips', label: '旅行手記', tabId: 'workspace-tab-trips', panelId: 'workspace-panel-trips' },
+  { id: 'search', label: '回憶搜尋', tabId: 'workspace-tab-search', panelId: 'workspace-panel-search' },
+  { id: 'chat', label: 'AI 對話', tabId: 'workspace-tab-chat', panelId: 'workspace-panel-chat' }
+]
+
+const tabButtonRefs = ref<(HTMLButtonElement | null)[]>([])
+function setTabRef(el: any, index: number) {
+  tabButtonRefs.value[index] = el as HTMLButtonElement | null
+}
+
+function switchTab(tab: WorkspaceTab) {
+  activeTab.value = tab
+}
+
+async function handleTabKeydown(e: KeyboardEvent, currentIndex: number) {
+  let targetIndex = -1
+  if (e.key === 'ArrowRight') {
+    targetIndex = (currentIndex + 1) % TABS.length
+  } else if (e.key === 'ArrowLeft') {
+    targetIndex = (currentIndex - 1 + TABS.length) % TABS.length
+  } else if (e.key === 'Home') {
+    targetIndex = 0
+  } else if (e.key === 'End') {
+    targetIndex = TABS.length - 1
+  }
+
+  if (targetIndex !== -1) {
+    e.preventDefault()
+    switchTab(TABS[targetIndex].id)
+    await nextTick()
+    tabButtonRefs.value[targetIndex]?.focus()
+  }
+}
+
+// Source detail modal & timeline jump highlight
+const showSourceModal = ref(false)
+const sourceModalEventId = ref<string | null>(null)
+const sourceModalInitialEvent = ref<SearchEvent | null>(null)
+const highlightedEventId = ref<string | null>(null)
+
+function handleViewSearchSource(item: SearchItem) {
+  sourceModalInitialEvent.value = item.event
+  sourceModalEventId.value = item.event.id
+  showSourceModal.value = true
+}
+
+function handleViewCitation(cite: Citation) {
+  sourceModalInitialEvent.value = null
+  sourceModalEventId.value = cite.event_id
+  showSourceModal.value = true
+}
+
+async function handleJumpToTrip(payload: { tripId: string; eventId: string }) {
+  activeTab.value = 'trips'
+  await selectTrip(payload.tripId)
+  highlightedEventId.value = payload.eventId
+  await nextTick()
+  const el = document.getElementById(`event-${payload.eventId}`)
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+}
 
 // Loading states
 const loadingTrips = ref(false)
@@ -533,11 +613,52 @@ function resetFilters() {
       </div>
     </header>
 
+    <!-- Workspace Navigation Tabs -->
+    <nav class="workspace-nav" role="tablist" aria-label="工作區功能切換">
+      <button
+        v-for="(t, index) in TABS"
+        :id="t.tabId"
+        :key="t.id"
+        :ref="(el) => setTabRef(el, index)"
+        type="button"
+        class="nav-tab-btn"
+        :class="{ 'is-active': activeTab === t.id }"
+        :aria-selected="activeTab === t.id"
+        :aria-controls="t.panelId"
+        role="tab"
+        :tabindex="activeTab === t.id ? 0 : -1"
+        @click="switchTab(t.id)"
+        @keydown="handleTabKeydown($event, index)"
+      >
+        <svg v-if="t.id === 'trips'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+        <svg v-else-if="t.id === 'search'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <svg v-else-if="t.id === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        <span>{{ t.label }}</span>
+      </button>
+    </nav>
+
     <!-- Global Alert Area -->
     <StatusAlert :message="alertMessage" :type="alertType" />
 
-    <!-- VIEW 1: Trip List View -->
-    <section v-if="!activeTripId" class="trip-list-section" aria-label="旅程列表">
+    <!-- TAB 1: Trips Workspace View -->
+    <div
+      v-if="activeTab === 'trips'"
+      id="workspace-panel-trips"
+      role="tabpanel"
+      aria-labelledby="workspace-tab-trips"
+      class="trips-tab-container"
+      tabindex="0"
+    >
+      <!-- VIEW 1: Trip List View -->
+      <section v-if="!activeTripId" class="trip-list-section" aria-label="旅程列表">
       <div class="section-header">
         <div>
           <h2 class="section-title">我的旅行手記</h2>
@@ -825,8 +946,10 @@ function resetFilters() {
           <div class="day-events-stream">
             <article
               v-for="evt in day.events"
+              :id="'event-' + evt.id"
               :key="evt.id"
               class="event-card"
+              :class="{ 'is-highlighted': highlightedEventId === evt.id }"
             >
               <!-- Timeline node connector -->
               <div class="node-connector" aria-hidden="true">
@@ -918,6 +1041,38 @@ function resetFilters() {
         </div>
       </div>
     </section>
+    </div>
+
+    <!-- TAB 2: Recall Search View -->
+    <div
+      v-else-if="activeTab === 'search'"
+      id="workspace-panel-search"
+      role="tabpanel"
+      aria-labelledby="workspace-tab-search"
+      class="tabpanel-container"
+      tabindex="0"
+    >
+      <RecallSearch
+        :trips="trips"
+        @view-source="handleViewSearchSource"
+        @jump-trip="handleJumpToTrip"
+      />
+    </div>
+
+    <!-- TAB 3: AI Conversation View -->
+    <div
+      v-else-if="activeTab === 'chat'"
+      id="workspace-panel-chat"
+      role="tabpanel"
+      aria-labelledby="workspace-tab-chat"
+      class="tabpanel-container"
+      tabindex="0"
+    >
+      <ConversationView
+        @view-citation="handleViewCitation"
+        @jump-trip="handleJumpToTrip"
+      />
+    </div>
 
     <!-- Modals -->
     <TripDialog
@@ -953,6 +1108,14 @@ function resetFilters() {
       @confirm="confirmAction && confirmAction()"
       @cancel="confirmDialogVisible = false"
     />
+
+    <SourceDetailModal
+      :visible="showSourceModal"
+      :event-id="sourceModalEventId"
+      :initial-event="sourceModalInitialEvent"
+      @close="showSourceModal = false"
+      @jump="handleJumpToTrip"
+    />
   </div>
 </template>
 
@@ -962,6 +1125,69 @@ function resetFilters() {
   flex-direction: column;
   gap: 1.5rem;
   width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* Workspace navigation */
+.workspace-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: 0.5rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.nav-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 1.125rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-subtle);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.nav-tab-btn:hover {
+  color: var(--color-ink);
+  background-color: rgba(23, 107, 104, 0.06);
+}
+
+.nav-tab-btn.is-active {
+  color: var(--color-teal);
+  background-color: rgba(23, 107, 104, 0.1);
+  border-color: rgba(23, 107, 104, 0.25);
+}
+
+.nav-tab-btn:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+.tabpanel-container {
+  width: 100%;
+  min-width: 0;
+}
+
+.tabpanel-container:focus,
+.trips-tab-container:focus {
+  outline: none;
+}
+
+.trips-tab-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
 /* Top bar */
@@ -1393,6 +1619,13 @@ function resetFilters() {
   flex-direction: column;
   gap: 0.75rem;
   box-shadow: 0 2px 6px rgba(21, 62, 72, 0.04);
+  transition: all 0.3s ease;
+}
+
+.event-card.is-highlighted .event-card-body {
+  border-color: var(--color-teal);
+  box-shadow: 0 0 0 3px rgba(23, 107, 104, 0.3), 0 6px 16px rgba(21, 62, 72, 0.12);
+  background-color: #f7fdfd;
 }
 
 .event-card-header {
@@ -1602,6 +1835,54 @@ function resetFilters() {
 }
 
 @media (max-width: 768px) {
+  .workspace-nav {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding-bottom: 0.5rem;
+    width: 100%;
+    min-width: 0;
+    overflow-x: visible;
+  }
+
+  .nav-tab-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0.35rem 0.25rem;
+    gap: 0.35rem;
+    justify-content: center;
+    font-size: 0.8125rem;
+  }
+
+  .nav-tab-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .nav-tab-btn span {
+    white-space: nowrap;
+    font-weight: 600;
+  }
+
+  .workspace-topbar {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .trip-cards-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .event-card {
+    min-width: 0;
+  }
+
+  .event-card-body {
+    min-width: 0;
+  }
+
   .day-events-stream {
     padding-left: 0;
   }

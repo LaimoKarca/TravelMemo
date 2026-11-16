@@ -5,7 +5,7 @@
 ## 產品與環境
 
 多人私人旅遊回憶 Web App。Python 3.12/FastAPI、Vue 3/TypeScript/Vite、Neo4j Community
-（圖與內建 Vector Index）。LaiMO 本機開發，先建立 .venv；未來 Tan-Ji 以獨立 Docker Compose
+（圖與內建 Vector Index）。LaiMO 本機開發，先建立 .venv；Tan-Ji 以獨立 Docker Compose
 專案與 Cloudflare Tunnel 部署。設定從 .env 載入，秘密與個人資料不提交。
 
 以允許名單內信箱與 SMTP 六位數驗證碼登入，無密碼、無公開註冊與管理員頁面。
@@ -26,7 +26,7 @@ Trip 含名稱、日期範圍、時區與描述。Event 含日期、選填時間
 API `/api/v1`：auth/request-code、verify-code、logout、me；trips 與 events CRUD、
 trips/{id}/event-order；search；conversations 與 messages；usage/me；health/live、ready。
 前後端使用同網域。搜尋回傳事件、名次、理由及關係證據；對話回傳回答、引用與
-answered/no_evidence/clarification 狀態。
+answered/insufficient_evidence/needs_clarification/unavailable 狀態。
 
 ## 檢索與生成
 

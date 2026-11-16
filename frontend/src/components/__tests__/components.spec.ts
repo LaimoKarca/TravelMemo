@@ -11,6 +11,11 @@ import * as authApi from '../../api/auth'
 import * as travelApi from '../../api/travel'
 
 describe('Frontend Vue Components', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    document.body.innerHTML = ''
+  })
+
   it('BrandHeader displays TravelMemo Georgia wordmark and subtitle', () => {
     const wrapper = mount(BrandHeader)
     expect(wrapper.find('.brand-name').text()).toBe('TravelMemo')
@@ -112,5 +117,83 @@ describe('Frontend Vue Components', () => {
     expect(logoutSpy).toHaveBeenCalled()
     // Should be back to email LoginForm
     expect(wrapper.findComponent(LoginForm).exists()).toBe(true)
+  })
+
+  it('shared auth request returns UI to login when 401 is encountered', async () => {
+    vi.spyOn(authApi, 'getMe').mockResolvedValue({
+      user: { id: 'u-1', email: 'session-traveler@travelmemo.local' },
+      csrf_token: 'test-token'
+    })
+    vi.spyOn(travelApi, 'listTrips').mockResolvedValue({ items: [] })
+    vi.spyOn(travelApi, 'listPlaces').mockResolvedValue({ items: [] })
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    expect(wrapper.findComponent(TripWorkspace).exists()).toBe(true)
+
+    // Simulate an unexpected 401 from any shared request
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ detail: '登入狀態已過期' })
+    } as Response)
+
+    try {
+      await authApi.request('/trips', { method: 'GET' })
+    } catch {
+      // expected 401 ApiError
+    }
+    await flushPromises()
+
+    // UI should return to login step with alert
+    expect(wrapper.findComponent(LoginForm).exists()).toBe(true)
+    expect(wrapper.text()).toContain('您的登入狀態已過期，請重新登入。')
+  })
+
+  it('wrong OTP on verify-code keeps user on OTP form and allows retry without new code', async () => {
+    vi.spyOn(authApi, 'getMe').mockResolvedValue(null)
+    vi.spyOn(authApi, 'requestCode').mockResolvedValue({ message: '驗證碼已寄出', retry_after: 60 })
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    // 1. Submit email to transition to OTP step
+    const loginForm = wrapper.findComponent(LoginForm)
+    expect(loginForm.exists()).toBe(true)
+    await loginForm.vm.$emit('submit', 'retry-tester@travelmemo.local')
+    await flushPromises()
+
+    // Now on OtpForm
+    const otpForm = wrapper.findComponent(OtpForm)
+    expect(otpForm.exists()).toBe(true)
+
+    // 2. Submit wrong OTP code (401 error)
+    const verifySpy = vi.spyOn(authApi, 'verifyCode')
+      .mockRejectedValueOnce(new authApi.ApiError(401, '驗證碼錯誤或已過期，請重新輸入或索取驗證碼。'))
+
+    await otpForm.vm.$emit('verify', '000000')
+    await flushPromises()
+
+    // MUST remain on OtpForm to allow retry; MUST NOT reset to LoginForm
+    expect(wrapper.findComponent(OtpForm).exists()).toBe(true)
+    expect(wrapper.findComponent(LoginForm).exists()).toBe(false)
+    expect(wrapper.text()).toContain('驗證碼錯誤或已過期，請重新輸入或索取驗證碼。')
+
+    // 3. User immediately retries with correct code without re-requesting code
+    verifySpy.mockResolvedValueOnce({
+      user: { id: 'u-valid', email: 'retry-tester@travelmemo.local' },
+      csrf_token: 'valid-csrf-token'
+    })
+    vi.spyOn(travelApi, 'listTrips').mockResolvedValue({ items: [] })
+    vi.spyOn(travelApi, 'listPlaces').mockResolvedValue({ items: [] })
+
+    await otpForm.vm.$emit('verify', '123456')
+    await flushPromises()
+
+    // Successfully logged in to TripWorkspace
+    expect(wrapper.findComponent(TripWorkspace).exists()).toBe(true)
+    expect(wrapper.text()).toContain('retry-tester@travelmemo.local')
   })
 })

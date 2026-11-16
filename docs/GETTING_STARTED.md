@@ -26,6 +26,7 @@ Copy-Item .env.example .env  # 僅首次，勿覆蓋既有 .env
 .\.venv\Scripts\python.exe main.py check-config
 docker compose --env-file .env -f deploy/compose.dev.yml up -d
 .\.venv\Scripts\python.exe main.py init-db
+.\.venv\Scripts\python.exe main.py download-model
 powershell -File deploy/start-dev.ps1 -CaptureMail
 ```
 
@@ -48,7 +49,8 @@ API 文件：http://localhost:8000/api/docs 。
 若要實際寄送驗證碼，依 [Gmail SMTP 教學](GMAIL_SMTP.md)啟用兩步驟驗證、建立應用程式密碼，
 填入 `.env`，改以 `.\.venv\Scripts\python.exe main.py serve` 啟動。
 若要部署自己的公開網站，依 [Cloudflare Tunnel 教學](CLOUDFLARE_TUNNEL.md)設定網域、connector 與 Docker 路由。
-OpenAI 對話尚待階段四實作，現階段本機啟動不需要 OpenAI Key。
+要使用 AI 對話，在私人 `.env` 填入 OPENAI_API_KEY；未設定時仍可管理旅程與搜尋。
+完整操作、模型下載與索引排錯見 [回憶搜尋與 AI 對話](RECALL.md)。
 
 ## 2. 開發檢查
 

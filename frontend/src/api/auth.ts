@@ -10,6 +10,7 @@ const BASE_URL = '/api/v1'
 
 // Keep CSRF token in memory only. Never persist to localStorage or sessionStorage.
 let memoryCsrfToken: string | null = null
+let onUnauthorizedHandler: (() => void) | null = null
 
 export function getCsrfToken(): string | null {
   return memoryCsrfToken
@@ -17,6 +18,10 @@ export function getCsrfToken(): string | null {
 
 export function setCsrfToken(token: string | null): void {
   memoryCsrfToken = token
+}
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorizedHandler = handler
 }
 
 export class ApiError extends Error {
@@ -31,7 +36,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
@@ -68,15 +73,33 @@ async function request<T>(
   }
 
   if (!response.ok) {
+    const isAuthEndpoint =
+      path.startsWith('/auth/verify-code') ||
+      path.startsWith('/auth/request-code') ||
+      path === '/auth/me'
+
+    if (response.status === 401 && !isAuthEndpoint) {
+      setCsrfToken(null)
+      if (onUnauthorizedHandler) {
+        onUnauthorizedHandler()
+      }
+    }
+
     let errorMsg = '發生未預期的伺服器錯誤，請稍後再試。'
     if (data && typeof data.detail === 'string') {
       errorMsg = data.detail
     } else if (response.status === 401) {
       errorMsg = '驗證碼錯誤或已過期，請重新輸入或索取驗證碼。'
+    } else if (response.status === 404) {
+      errorMsg = '找不到指定的旅程或行程資料。'
+    } else if (response.status === 409) {
+      errorMsg = '資料已被其他操作更新（版本衝突），請重新整理以取得最新版本。'
+    } else if (response.status === 422) {
+      errorMsg = '資料驗證失敗，請檢查欄位格式與時間範圍。'
     } else if (response.status === 429) {
-      errorMsg = '請求過於頻繁，請稍候再試。'
+      errorMsg = '請求過於頻繁或已達用量上限，請稍候再試。'
     } else if (response.status === 503) {
-      errorMsg = '郵件服務暫時不可用，請稍候再試。'
+      errorMsg = '郵件或伺服器服務暫時不可用，請稍候再試。'
     }
 
     throw new ApiError(response.status, errorMsg)

@@ -11,6 +11,7 @@ import {
   verifyCode,
   getMe,
   logout as apiLogout,
+  setUnauthorizedHandler,
   ApiError
 } from './api/auth'
 import type { User } from './types/auth'
@@ -44,6 +45,15 @@ function clearAlert() {
 
 // Check session on page load
 onMounted(async () => {
+  setUnauthorizedHandler(() => {
+    // Only reset session if user was actually signed in (welcome step)
+    if (currentStep.value === 'welcome' && user.value) {
+      user.value = null
+      currentStep.value = 'email'
+      setAlert('您的登入狀態已過期，請重新登入。', 'info')
+    }
+  })
+
   try {
     const session = await getMe()
     if (session && session.user) {
@@ -151,23 +161,18 @@ async function handleLogout() {
       <section class="notebook-content" :class="{ 'is-workspace-content': currentStep === 'welcome' }">
         <BrandHeader v-if="currentStep !== 'welcome'" />
 
-        <StatusAlert v-if="currentStep !== 'welcome'" :message="alertMessage" :type="alertType" />
+        <StatusAlert v-if="currentStep !== 'welcome' && alertMessage" :message="alertMessage" :type="alertType" />
 
-        <!-- Initial Session Checking View -->
         <div v-if="currentStep === 'loading_session'" class="loading-state" role="status" aria-live="polite">
           <div class="page-spinner" aria-hidden="true"></div>
           <p class="loading-text">正在確認登入狀態...</p>
         </div>
-
-        <!-- Step 1: Email Form -->
         <LoginForm
           v-else-if="currentStep === 'email'"
           :initial-email="email"
           :loading="requestingCode"
           @submit="handleRequestCode"
         />
-
-        <!-- Step 2: OTP Form -->
         <OtpForm
           ref="otpForm"
           v-else-if="currentStep === 'otp'"
@@ -179,8 +184,6 @@ async function handleLogout() {
           @resend="handleResendCode"
           @back="handleBackToEmail"
         />
-
-        <!-- Step 3: Signed-in Travel Workspace View -->
         <TripWorkspace
           v-else-if="currentStep === 'welcome' && user"
           :user="user"
@@ -218,6 +221,8 @@ async function handleLogout() {
   border: 1px solid var(--color-border);
   overflow: hidden;
   min-height: 540px;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .notebook-container.is-workspace-container {
@@ -231,6 +236,9 @@ async function handleLogout() {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .notebook-content.is-workspace-content {
@@ -263,21 +271,30 @@ async function handleLogout() {
 
 /* Responsive: Single column on phone / smaller screens */
 @media (max-width: 768px) {
-  .app-layout {
-    padding: 1rem 0.5rem;
+  .app-layout,
+  .app-layout.is-workspace-layout {
+    padding: 0.75rem 0.5rem;
+    align-items: stretch;
   }
 
-  .notebook-container {
-    grid-template-columns: 1fr;
+  .notebook-container,
+  .notebook-container.is-workspace-container {
+    grid-template-columns: minmax(0, 1fr);
     border-radius: var(--radius-md);
+    min-height: auto;
+    width: 100%;
+    min-width: 0;
   }
 
   .desktop-motif {
     display: none;
   }
 
-  .notebook-content {
-    padding: 1.75rem 1.25rem;
+  .notebook-content,
+  .notebook-content.is-workspace-content {
+    padding: 1rem 0.75rem;
+    width: 100%;
+    min-width: 0;
   }
 }
 
