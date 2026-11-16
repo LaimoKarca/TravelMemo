@@ -242,11 +242,17 @@ def test_directional_reranking_and_clarification():
     })
 
     # 1. Forward directional query with ambiguous "之後":
-    # "在築地市場之後的拉麵" -> 1-hop NEXT is e2 ("銀座拉麵")
+    # Broad "之後" returns clarification and relation=None (no NEXT traversal until clarified)
     res_after = service.search("user-1", "在築地市場之後的拉麵")
     assert res_after["clarification"] == "您是指該地點緊接著的下一個行程，還是之後的其他行程？"
     assert len(res_after["items"]) > 0
-    top_item = res_after["items"][0]
+    assert all(item["relation"] is None for item in res_after["items"])
+
+    # 2. Explicit adjacent query with "下一站" -> NO clarification, traverses NEXT
+    res_next = service.search("user-1", "築地市場下一站")
+    assert res_next["clarification"] is None
+    assert len(res_next["items"]) > 0
+    top_item = res_next["items"][0]
     assert top_item["event"]["id"] == e2["id"]
     assert top_item["relation"] is not None
     assert top_item["relation"]["anchor_id"] == e1["id"]
@@ -254,11 +260,6 @@ def test_directional_reranking_and_clarification():
     assert top_item["relation"]["anchor_date"] == "2026-05-01"
     assert top_item["relation"]["target_date"] == "2026-05-01"
     assert any("關係候選" in r for r in top_item["reasons"])
-
-    # 2. Explicit adjacent query with "下一站" -> NO clarification
-    res_next = service.search("user-1", "築地市場下一站")
-    assert res_next["clarification"] is None
-    assert res_next["items"][0]["event"]["id"] == e2["id"]
 
     # 3. Backward directional query with "之前":
     # "在東京鐵塔之前的拉麵" -> reverse 1-hop is e2 ("銀座拉麵")
@@ -425,9 +426,15 @@ def test_search_method_ablations():
     assert res_rrf["clarification"] is None
 
     # 4. method="next": default full graph + clarification
-    res_next = service.search("user-1", "在銀座拉麵之後的景點", method="next")
-    assert res_next["clarification"] is not None
-    assert any(item.get("relation") is not None for item in res_next["items"])
+    # Ambiguous wording returns clarification and relation=None
+    res_next_ambiguous = service.search("user-1", "在銀座拉麵之後的景點", method="next")
+    assert res_next_ambiguous["clarification"] is not None
+    assert all(item.get("relation") is None for item in res_next_ambiguous["items"])
+
+    # Explicit next stop wording traverses graph
+    res_next_explicit = service.search("user-1", "銀座拉麵下一站", method="next")
+    assert res_next_explicit["clarification"] is None
+    assert any(item.get("relation") is not None for item in res_next_explicit["items"])
 
 
 def test_stale_failure_isolation():
@@ -821,23 +828,26 @@ def test_directional_english_and_chinese_category_enforcement():
         "notes": "Snacks and drinks",
     })
 
-    # 1. English query: "Which Ramen Restaurant did I visit after Matsuya?"
-    # Anchor: Matsuya -> 1-hop next: Ichiran
-    # Target category: Ramen Restaurant (matches Ichiran)
-    res_en = service.search("user-1", "Which Ramen Restaurant did I visit after Matsuya?")
+    # 1. English broad "after": returns clarification and relation=None (no NEXT traversal)
+    res_en_broad = service.search("user-1", "Which Ramen Restaurant did I visit after Matsuya?")
+    assert res_en_broad["clarification"] == "Do you mean the immediately adjacent stop, or later events after this place?"
+    assert all(item["relation"] is None for item in res_en_broad["items"])
+
+    # Explicit "immediately after": traverses NEXT and enforces category
+    res_en = service.search("user-1", "Which Ramen Restaurant did I visit immediately after Matsuya?")
     assert len(res_en["items"]) > 0
     top_item = res_en["items"][0]
     assert top_item["event"]["id"] == ev2["id"]
     assert top_item["relation"] is not None
     assert top_item["relation"]["anchor_id"] == ev1["id"]
     assert any("Relation candidate: 1-hop stop after [Matsuya]" in r for r in top_item["reasons"])
-    assert res_en["clarification"] == "Do you mean the immediately adjacent stop, or later events after this place?"
+    assert res_en["clarification"] is None
 
     # 2. Query asking for a category that does NOT match the 1-hop stop:
-    # "Which Convenience Store did I visit after Matsuya?"
+    # "Which Convenience Store did I visit immediately after Matsuya?"
     # The 1-hop stop after Matsuya is Ichiran (Ramen Restaurant), NOT Convenience Store.
     # Therefore Ichiran must NOT be admitted as a relation candidate for this query!
-    res_mismatch = service.search("user-1", "Which Convenience Store did I visit after Matsuya?")
+    res_mismatch = service.search("user-1", "Which Convenience Store did I visit immediately after Matsuya?")
     top_rel = [it for it in res_mismatch["items"] if it.get("relation") is not None]
     assert len(top_rel) == 0
 
@@ -862,13 +872,20 @@ def test_directional_english_and_chinese_category_enforcement():
         "date": "2026-06-01",
         "notes": "天然豚骨湯頭",
     })
-    res_zh = service.search("user-zh", "在松屋之後去吃哪間拉麵店？")
+
+    # Ambiguous Chinese "之後": returns clarification and relation=None
+    res_zh_broad = service.search("user-zh", "在松屋之後去吃哪間拉麵店？")
+    assert res_zh_broad["clarification"] == "您是指該地點緊接著的下一個行程，還是之後的其他行程？"
+    assert all(item["relation"] is None for item in res_zh_broad["items"])
+
+    # Explicit Chinese "下一站": traverses NEXT and enforces category
+    res_zh = service.search("user-zh", "松屋下一站去吃哪間拉麵店？")
     assert len(res_zh["items"]) > 0
     top_zh = res_zh["items"][0]
     assert top_zh["event"]["id"] == ev_zh2["id"]
     assert top_zh["relation"] is not None
     assert top_zh["relation"]["anchor_id"] == ev_zh1["id"]
-    assert res_zh["clarification"] == "您是指該地點緊接著的下一個行程，還是之後的其他行程？"
+    assert res_zh["clarification"] is None
 
 
 def test_anchor_filtering_isolation_and_multi_trip_duplicates():
@@ -922,8 +939,13 @@ def test_anchor_filtering_isolation_and_multi_trip_duplicates():
         "notes": "Tokyo ramen",
     })
 
-    # 1. Unfiltered query: both Matsuyas are valid anchors; candidates include both Ichiran and Ippudo
-    res_unfiltered = service.search("user-1", "Which Ramen Restaurant did I visit after Matsuya?")
+    # 0. Ambiguous broad after returns clarification and relation=None
+    res_ambiguous = service.search("user-1", "Which Ramen Restaurant did I visit after Matsuya?")
+    assert res_ambiguous["clarification"] is not None
+    assert all(it.get("relation") is None for it in res_ambiguous["items"])
+
+    # 1. Unfiltered explicit query: both Matsuyas are valid anchors; candidates include both Ichiran and Ippudo
+    res_unfiltered = service.search("user-1", "Which Ramen Restaurant did I visit immediately after Matsuya?")
     cand_ids = {it["event"]["id"] for it in res_unfiltered["items"] if it.get("relation")}
     assert t1_ev2["id"] in cand_ids
     assert t2_ev2["id"] in cand_ids
@@ -931,7 +953,7 @@ def test_anchor_filtering_isolation_and_multi_trip_duplicates():
     # 2. Filtered by trip_id=trip1["id"]: anchor search must ONLY search within trip1
     res_trip1 = service.search(
         "user-1",
-        "Which Ramen Restaurant did I visit after Matsuya?",
+        "Which Ramen Restaurant did I visit immediately after Matsuya?",
         filters={"trip_id": trip1["id"]},
     )
     cand_ids_t1 = {it["event"]["id"] for it in res_trip1["items"] if it.get("relation")}
@@ -943,7 +965,7 @@ def test_anchor_filtering_isolation_and_multi_trip_duplicates():
     # Because anchor retrieval is NOT restricted by target city/date, Matsuya is successfully found as anchor!
     res_filtered_city = service.search(
         "user-1",
-        "Which Ramen Restaurant did I visit after Matsuya?",
+        "Which Ramen Restaurant did I visit immediately after Matsuya?",
         filters={"trip_id": trip1["id"], "city": "Tokyo", "date_from": "2026-05-02"},
     )
     assert len(res_filtered_city["items"]) > 0
@@ -1002,16 +1024,21 @@ def test_two_visits_same_place_explicit_anchor_id():
         "notes": "Late night bookstore visit",
     })
 
-    # 1. Without anchor_id: query-only anchor search retrieves both visits
+    # 0. Ambiguous broad after without anchor_id returns clarification and relation=None
+    res_ambiguous = service.search("user-1", "Where did I go after Matsuya?")
+    assert res_ambiguous["clarification"] is not None
+    assert all(it.get("relation") is None for it in res_ambiguous["items"])
+
+    # 1. Explicit wording without anchor_id: query-only anchor search retrieves both visits
     # Graph expansion mixes NEXT context from both Matsuya visits
-    res_no_anchor = service.search("user-1", "Where did I go after Matsuya?")
+    res_no_anchor = service.search("user-1", "Where did I go immediately after Matsuya?")
     rel_cand_ids = {it["event"]["id"] for it in res_no_anchor["items"] if it.get("relation")}
     assert ev2_coffee["id"] in rel_cand_ids
     assert ev5_books["id"] in rel_cand_ids
 
     # 2. With explicit anchor_id for Day 3 visit (ev4_matsuya):
     # Only Day 3 Matsuya is used as anchor; NEXT context is strictly ev5_books (Tsutaya Books)
-    res_day3 = service.search("user-1", "Where did I go after Matsuya?", anchor_id=ev4_matsuya["id"])
+    res_day3 = service.search("user-1", "Where did I go immediately after Matsuya?", anchor_id=ev4_matsuya["id"])
     top_day3 = res_day3["items"][0]
     assert top_day3["event"]["id"] == ev5_books["id"]
     assert top_day3["relation"] is not None
@@ -1022,7 +1049,7 @@ def test_two_visits_same_place_explicit_anchor_id():
 
     # 3. With explicit anchor_id for Day 1 visit (ev1_matsuya):
     # Only Day 1 Matsuya is used as anchor; NEXT context is strictly ev2_coffee (Blue Bottle Coffee)
-    res_day1 = service.search("user-1", "Where did I go after Matsuya?", anchor_id=ev1_matsuya["id"])
+    res_day1 = service.search("user-1", "Where did I go immediately after Matsuya?", anchor_id=ev1_matsuya["id"])
     top_day1 = res_day1["items"][0]
     assert top_day1["event"]["id"] == ev2_coffee["id"]
     assert top_day1["relation"] is not None
@@ -1043,7 +1070,7 @@ def test_two_visits_same_place_explicit_anchor_id():
     # it must reject the mismatched anchor_id
     res_mismatched_trip = service.search(
         "user-1",
-        "Where did I go after Matsuya?",
+        "Where did I go immediately after Matsuya?",
         filters={"trip_id": "different-trip-id"},
         anchor_id=ev4_matsuya["id"],
     )

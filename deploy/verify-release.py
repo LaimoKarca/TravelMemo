@@ -90,6 +90,12 @@ def main():
         search = SearchService(settings, travel)
         search.initialize()
         status = search.index_status(owner)
+        import time
+
+        deadline = time.monotonic() + 60
+        while status["pending"] and not status["failed"] and time.monotonic() < deadline:
+            time.sleep(1)
+            status = search.index_status(owner)
         assert status == {"pending": 0, "ready": 2, "failed": 0}, status
         detail = travel.get_trip_detail(owner, fixture["trip_id"])
         assert [e["id"] for e in detail["events"]] == fixture["event_ids"]

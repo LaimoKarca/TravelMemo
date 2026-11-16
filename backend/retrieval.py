@@ -51,8 +51,18 @@ _ENGLISH_AFTER_BEFORE_PREFIX_RE = re.compile(
 )
 
 _FORWARD_KEYWORDS = {
-    "之後", "後來", "接著", "緊接著", "然後", "下一站", "下一個",
-    "after", "immediately after", "next", "next stop", "next place",
+    "之後",
+    "後來",
+    "接著",
+    "緊接著",
+    "然後",
+    "下一站",
+    "下一個",
+    "after",
+    "immediately after",
+    "next",
+    "next stop",
+    "next place",
 }
 _AMBIGUOUS_KEYWORDS = {"之後", "後來", "after", "before"}
 
@@ -71,7 +81,9 @@ def parse_directional_query(query: str) -> dict[str, Any] | None:
         target = m.group("target").strip()
         if target.lower() in ("place", "spot", "attraction", "site"):
             target = ""
-    elif (m := _ENGLISH_WHAT_WHERE_RE.match(q)) is not None or (m := _ENGLISH_STOP_RE.match(q)) is not None:
+    elif (m := _ENGLISH_WHAT_WHERE_RE.match(q)) is not None or (
+        m := _ENGLISH_STOP_RE.match(q)
+    ) is not None:
         anchor = m.group("anchor").strip().rstrip("?")
         dir_word = m.group("dir").strip().lower()
         target = ""
@@ -80,8 +92,12 @@ def parse_directional_query(query: str) -> dict[str, Any] | None:
         dir_word = m.group("dir").strip().lower()
         raw_target = (m.group("target") or "").strip().rstrip("?")
         # Clean target: "which Cafe did I visit" -> "Cafe"
-        raw_target = re.sub(r"^(?:which|what)\s+(?:place\s+|spot\s+)?", "", raw_target, flags=re.IGNORECASE)
-        target = re.sub(r"\s+did\s+I\s+(?:visit|go).*$", "", raw_target, flags=re.IGNORECASE).strip()
+        raw_target = re.sub(
+            r"^(?:which|what)\s+(?:place\s+|spot\s+)?", "", raw_target, flags=re.IGNORECASE
+        )
+        target = re.sub(
+            r"\s+did\s+I\s+(?:visit|go).*$", "", raw_target, flags=re.IGNORECASE
+        ).strip()
         if target.lower() in ("place", "spot", "attraction", "site"):
             target = ""
     elif (m := _CHINESE_DIRECTIONAL_RE.search(q)) is not None:
@@ -184,15 +200,17 @@ class SearchService:
 
             updates = []
             for ev, emb, meta in zip(pending, embeddings, metadata_list):
-                updates.append({
-                    "id": ev["id"],
-                    "owner_id": ev["owner_id"],
-                    "version": ev["version"],
-                    "embedding": emb,
-                    "revision": getattr(self.embedder, "revision", "default"),
-                    "token_count": meta.get("token_count", 0),
-                    "truncated": meta.get("truncated", False),
-                })
+                updates.append(
+                    {
+                        "id": ev["id"],
+                        "owner_id": ev["owner_id"],
+                        "version": ev["version"],
+                        "embedding": emb,
+                        "revision": getattr(self.embedder, "revision", "default"),
+                        "token_count": meta.get("token_count", 0),
+                        "truncated": meta.get("truncated", False),
+                    }
+                )
             self.store.update_embeddings(updates)
             logger.info("Indexed %d pending events into vector store.", len(updates))
             return len(pending)
@@ -283,7 +301,9 @@ class SearchService:
         # 2. Dense vector baseline (e5 only)
         if method == "e5":
             query_vector = self.embedder.encode_query(query)
-            vector_items = self.store.query_vector(owner_id, query_vector, filters=filters, limit=limit)
+            vector_items = self.store.query_vector(
+                owner_id, query_vector, filters=filters, limit=limit
+            )
             final_items = [
                 {
                     "event": format_event(ev),
@@ -306,10 +326,14 @@ class SearchService:
             vector_status = "degraded"
             try:
                 query_vector = self.embedder.encode_query(query)
-                vector_items = self.store.query_vector(owner_id, query_vector, filters=filters, limit=self.top_k)
+                vector_items = self.store.query_vector(
+                    owner_id, query_vector, filters=filters, limit=self.top_k
+                )
                 vector_status = "ready"
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Vector search unavailable in RRF mode (%s); falling back to BM25.", exc)
+                logger.warning(
+                    "Vector search unavailable in RRF mode (%s); falling back to BM25.", exc
+                )
                 vector_status = "degraded"
 
             hybrid_ranked = compute_rrf(bm25_items, vector_items, k=self.rrf_k)
@@ -335,7 +359,9 @@ class SearchService:
 
         try:
             query_vector = self.embedder.encode_query(query)
-            vector_items = self.store.query_vector(owner_id, query_vector, filters=filters, limit=self.top_k)
+            vector_items = self.store.query_vector(
+                owner_id, query_vector, filters=filters, limit=self.top_k
+            )
             vector_status = "ready"
         except Exception as exc:  # noqa: BLE001
             logger.warning("Vector search unavailable (%s); falling back to BM25.", exc)
@@ -348,7 +374,10 @@ class SearchService:
         dir_info = parse_directional_query(query)
         if not dir_info and anchor_id:
             q_lower = query.casefold().strip()
-            if any(w in q_lower for w in ("next", "after", "下一站", "下一個", "接著", "緊接著", "然後")):
+            if any(
+                w in q_lower
+                for w in ("next", "after", "下一站", "下一個", "接著", "緊接著", "然後")
+            ):
                 dir_info = {
                     "anchor_query": "",
                     "direction": "next",
@@ -356,7 +385,10 @@ class SearchService:
                     "is_ambiguous_after": False,
                     "target_query": "",
                 }
-            elif any(w in q_lower for w in ("prev", "previous", "before", "上一站", "上一個", "之前", "先前")):
+            elif any(
+                w in q_lower
+                for w in ("prev", "previous", "before", "上一站", "上一個", "之前", "先前")
+            ):
                 dir_info = {
                     "anchor_query": "",
                     "direction": "prev",
@@ -372,13 +404,28 @@ class SearchService:
             anchor_query = dir_info["anchor_query"]
             direction = dir_info["direction"]
             target_query = dir_info["target_query"]
-            is_eng_query = any(w in dir_info.get("direction_word", "") for w in ("after", "before", "next", "prev"))
+            is_eng_query = any(
+                w in dir_info.get("direction_word", "") for w in ("after", "before", "next", "prev")
+            )
             if dir_info["is_ambiguous_after"]:
                 clarification = (
                     "Do you mean the immediately adjacent stop, or later events after this place?"
                     if is_eng_query
                     else "您是指該地點緊接著的下一個行程，還是之後的其他行程？"
                 )
+                return {
+                    "items": [
+                        {
+                            "event": format_event(ev),
+                            "score": round(score, 8),
+                            "reasons": reasons,
+                            "relation": None,
+                        }
+                        for ev, score, reasons in hybrid_ranked[:limit]
+                    ],
+                    "clarification": clarification,
+                    "vector_status": vector_status,
+                }
 
             # Match target category from actual owned category labels
             owned_categories = self.store.get_owned_categories(owner_id)
@@ -393,12 +440,16 @@ class SearchService:
 
             # If a specific target query/category was specified, also run hybrid retrieval on it
             if target_query:
-                target_bm25 = self.store.query_bm25(owner_id, target_query, filters=filters, limit=self.top_k)
+                target_bm25 = self.store.query_bm25(
+                    owner_id, target_query, filters=filters, limit=self.top_k
+                )
                 target_vec: list[tuple[dict[str, Any], float]] = []
                 if vector_status == "ready":
                     try:
                         t_vec = self.embedder.encode_query(target_query)
-                        target_vec = self.store.query_vector(owner_id, t_vec, filters=filters, limit=self.top_k)
+                        target_vec = self.store.query_vector(
+                            owner_id, t_vec, filters=filters, limit=self.top_k
+                        )
                     except Exception as exc:  # noqa: BLE001
                         logger.debug("Target vector query fallback: %s", exc)
                 target_fused = compute_rrf(target_bm25, target_vec, k=self.rrf_k)
@@ -420,13 +471,19 @@ class SearchService:
 
             # When anchor_id is absent, execute standard query-only anchor search
             if not anchors and not anchor_id:
-                anchor_filters = {"trip_id": filters["trip_id"]} if filters and filters.get("trip_id") else None
-                anchor_bm25 = self.store.query_bm25(owner_id, anchor_query, filters=anchor_filters, limit=5)
+                anchor_filters = (
+                    {"trip_id": filters["trip_id"]} if filters and filters.get("trip_id") else None
+                )
+                anchor_bm25 = self.store.query_bm25(
+                    owner_id, anchor_query, filters=anchor_filters, limit=5
+                )
                 anchor_vector: list[tuple[dict[str, Any], float]] = []
                 if vector_status == "ready":
                     try:
                         anchor_vec = self.embedder.encode_query(anchor_query)
-                        anchor_vector = self.store.query_vector(owner_id, anchor_vec, filters=anchor_filters, limit=5)
+                        anchor_vector = self.store.query_vector(
+                            owner_id, anchor_vec, filters=anchor_filters, limit=5
+                        )
                     except Exception as exc:  # noqa: BLE001
                         logger.debug("Anchor vector query fallback: %s", exc)
                 anchors_fused = compute_rrf(anchor_bm25, anchor_vector, k=self.rrf_k)[:5]
@@ -435,9 +492,14 @@ class SearchService:
             # Find 1-hop adjacent candidates from anchors (enforcing target_category if recognized)
             relation_candidates: dict[str, dict[str, Any]] = {}
             for rank_idx, anchor_ev in enumerate(anchors, start=1):
-                adj_list = self.store.get_adjacent_events(owner_id, anchor_ev["id"], direction=direction)
+                adj_list = self.store.get_adjacent_events(
+                    owner_id, anchor_ev["id"], direction=direction
+                )
                 for cand in adj_list:
-                    if target_category and cand.get("category", "").casefold() != target_category.casefold():
+                    if (
+                        target_category
+                        and cand.get("category", "").casefold() != target_category.casefold()
+                    ):
                         continue
                     cand_id = cand["id"]
                     if cand_id not in relation_candidates:
@@ -476,7 +538,9 @@ class SearchService:
                 for cand_id, rel_data in relation_candidates.items():
                     cand_ev = rel_data["event"]
                     anchor_ev = rel_data["anchor"]
-                    r_norm = (rel_data["r_score"] - min_r) / (max_r - min_r) if max_r > min_r else 1.0
+                    r_norm = (
+                        (rel_data["r_score"] - min_r) / (max_r - min_r) if max_r > min_r else 1.0
+                    )
 
                     if cand_id in scored_pool:
                         scored_pool[cand_id]["r_norm"] = r_norm
@@ -519,7 +583,9 @@ class SearchService:
                     else:
                         combined_score = h_weight * item_info["h_norm"]
 
-                    reranked_list.append((ev, combined_score, item_info["reasons"], item_info["relation"]))
+                    reranked_list.append(
+                        (ev, combined_score, item_info["reasons"], item_info["relation"])
+                    )
 
                 reranked_list.sort(key=lambda x: (-x[1], 0 if x[3] is not None else 1, x[0]["id"]))
                 final_items = [
