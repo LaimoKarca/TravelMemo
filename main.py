@@ -12,12 +12,17 @@ def main():
     if args.command == "serve":
         import uvicorn
 
+        from backend.config import get_settings
+
+        settings = get_settings()
+
         uvicorn.run(
             "backend.app:create_app",
             factory=True,
             host=args.host,
             port=args.port,
-            proxy_headers=False,
+            proxy_headers=bool(settings.trusted_proxy_ips.strip()),
+            forwarded_allow_ips=settings.trusted_proxy_ips,
         )
     elif args.command == "init-db":
         from backend.config import get_settings

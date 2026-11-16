@@ -63,6 +63,7 @@ npm.cmd run build
 
 - [SPEC 與階段](docs/SPEC.md)
 - [設定、SMTP、啟停與排錯](docs/OPERATIONS.md)
+- [Docker 與 Cloudflare 部署](docs/DEPLOYMENT.md)
 - [階段一驗收紀錄](docs/implementation/phase-1.md)
 - [階段二契約](docs/implementation/phase-2-contract.md)
 - [階段二驗收紀錄](docs/implementation/phase-2.md)

@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
@@ -14,6 +15,7 @@ class Settings(BaseSettings):
     session_secret: str = Field(min_length=32, repr=False)
     session_days: int = Field(default=7, ge=1, le=30)
     cookie_secure: bool = False
+    trusted_proxy_ips: str = ""
     otp_seconds: int = Field(default=600, ge=60)
     resend_seconds: int = Field(default=60, ge=1)
     otp_attempts: int = Field(default=5, ge=1, le=10)
@@ -50,6 +52,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_environment(self):
+        for value in self.trusted_proxy_ips.split(","):
+            if value.strip():
+                ip_address(value.strip())
         match = re.match(r"^gpt-(\d+)(?:[.-]|$)", self.openai_model)
         if not match or int(match.group(1)) < 5:
             raise ValueError("OPENAI_MODEL must be GPT-5 or newer")

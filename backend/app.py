@@ -70,6 +70,7 @@ def create_app(settings=None, store=None, sender=None, clock=time.time, travel_r
         version="0.2.0",
         lifespan=lifespan,
         docs_url="/api/docs" if settings.app_env == "development" else None,
+        openapi_url="/openapi.json" if settings.app_env == "development" else None,
         redoc_url=None,
     )
 
