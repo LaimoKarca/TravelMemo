@@ -238,6 +238,9 @@ class MemoryPhotoStore:
             if trip_id is not None:
                 new_binding["trip_id"] = trip_id
             bindings.append(new_binding)
+            rec["searchable"] = rec.get("status") == "ready" and any(
+                b.get("kind") in ("trip", "event") for b in bindings
+            )
 
             new_version = rec.get("version", 1) + 1
             rec["version"] = new_version
@@ -277,6 +280,9 @@ class MemoryPhotoStore:
                 return {"deleted": False, "photo": copy.deepcopy(rec)}
 
             rec["bindings"] = bindings
+            rec["searchable"] = rec.get("status") == "ready" and any(
+                b.get("kind") in ("trip", "event") for b in bindings
+            )
             if cascade_if_unbound and not bindings:
                 self.photos.pop(id, None)
                 owner_id = rec.get("owner_id")
@@ -373,6 +379,10 @@ class MemoryPhotoStore:
             if extra_fields:
                 for k, v in extra_fields.items():
                     rec[k] = copy.deepcopy(v)
+            # Bindings can change while vision is running; use their current state.
+            rec["searchable"] = status == "ready" and any(
+                b.get("kind") in ("trip", "event") for b in rec.get("bindings", [])
+            )
             if rec.get("embedding_status") in ("completed", "ready"):
                 rec["embedding_version"] = current_version
             rec["updated_at"] = (
@@ -893,7 +903,8 @@ class Neo4jPhotoStore:
                     MATCH (p:Photo {id: $id, version: $current_ver, owner_id: $owner})
                     SET p.bindings_json = $bindings_json,
                         p.version = $new_ver,
-                        p.updated_at = $updated_at
+                        p.updated_at = $updated_at,
+                        p.searchable = p.status = 'ready' AND $attached
                     FOREACH (_ IN CASE WHEN $adv_emb THEN [1] ELSE [] END |
                         SET p.embedding_version = $new_ver
                     )
@@ -904,6 +915,7 @@ class Neo4jPhotoStore:
                     new_ver=new_ver,
                     owner=owner,
                     bindings_json=json.dumps(bindings),
+                    attached=any(b.get("kind") in ("trip", "event") for b in bindings),
                     updated_at=now_iso,
                     adv_emb=adv_emb,
                 ).single()
@@ -995,7 +1007,8 @@ class Neo4jPhotoStore:
                     MATCH (p:Photo {id: $id, version: $current_ver, owner_id: $owner})
                     SET p.bindings_json = $bindings_json,
                         p.version = $new_ver,
-                        p.updated_at = $updated_at
+                        p.updated_at = $updated_at,
+                        p.searchable = p.status = 'ready' AND $attached
                     FOREACH (_ IN CASE WHEN $adv_emb THEN [1] ELSE [] END |
                         SET p.embedding_version = $new_ver
                     )
@@ -1006,6 +1019,7 @@ class Neo4jPhotoStore:
                     new_ver=new_ver,
                     owner=owner,
                     bindings_json=json.dumps(remaining),
+                    attached=any(b.get("kind") in ("trip", "event") for b in remaining),
                     updated_at=now_iso,
                     adv_emb=adv_emb,
                 ).single()
@@ -1088,6 +1102,10 @@ class Neo4jPhotoStore:
                     p.claimed_at = null,
                     p.updated_at = $updated_at,
                     p += $extra_fields
+                SET p.searchable = $status = 'ready' AND (
+                    EXISTS { MATCH (:Trip)-[:HAS_PHOTO]->(p) }
+                    OR EXISTS { MATCH (:Event)-[:HAS_PHOTO]->(p) }
+                )
                 FOREACH (_ IN CASE WHEN $has_ready_embedding THEN [1] ELSE [] END |
                     SET p.embedding_version = p.version
                 )

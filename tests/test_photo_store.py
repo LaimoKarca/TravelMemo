@@ -5,6 +5,26 @@ from unittest.mock import MagicMock
 from backend.photo_store import MemoryPhotoStore, Neo4jPhotoStore
 
 
+def test_album_binding_updates_search_eligibility_after_analysis_and_during_claim():
+    store = MemoryPhotoStore()
+    store.create('owner', {'id': 'photo', 'status': 'ready', 'searchable': False,
+                           'embedding_status': 'completed', 'embedding_version': 1})
+    store.bind('owner', 'photo', 'conversation', 'chat')
+    assert store.get('owner', 'photo')['searchable'] is False
+    store.bind('owner', 'photo', 'trip', 'trip')
+    assert store.get('owner', 'photo')['searchable'] is True
+    store.unbind('owner', 'photo', 'trip', 'trip')
+    assert store.get('owner', 'photo')['searchable'] is False
+
+    current = store.get('owner', 'photo')
+    updated = store.update('owner', 'photo', current['version'], {'status': 'pending'})
+    assert store.claim('owner', 'photo', updated['version'])
+    store.bind('owner', 'photo', 'event', 'event', trip_id='trip')
+    assert store.finish_analysis('owner', 'photo', updated['version'], {},
+                                 extra_fields={'searchable': False})
+    assert store.get('owner', 'photo')['searchable'] is True
+
+
 def test_memory_store_crud():
     store = MemoryPhotoStore()
     record = {
@@ -168,7 +188,7 @@ def test_memory_store_worker_claim_and_analysis_lifecycle():
     assert ready_rec["analysis"]["visible_text"] == ["Tokyo"]
     assert ready_rec["search_text"] == "Tokyo landscape"
     assert ready_rec["embedding_status"] == "ready"
-    assert ready_rec["searchable"] is True
+    assert ready_rec["searchable"] is False  # Unbound images are not journal evidence.
     assert ready_rec["analysis_version"] == 1
     assert ready_rec["claimed_version"] is None
     assert ready_rec["version"] == 1  # version NOT incremented by background finish
