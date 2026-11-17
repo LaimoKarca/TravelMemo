@@ -526,14 +526,13 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(21, 62, 72, 0.45);
+  background-color: rgba(9, 30, 66, 0.54);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1.5rem 1rem;
   z-index: 1000;
   overflow-y: auto;
-  backdrop-filter: blur(2px);
 }
 
 .dialog-card {

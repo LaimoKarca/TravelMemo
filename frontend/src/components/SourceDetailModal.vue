@@ -258,7 +258,7 @@ function handleJump() {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(21, 62, 72, 0.45);
+  background-color: rgba(9, 30, 66, 0.54);
   display: flex;
   align-items: center;
   justify-content: center;

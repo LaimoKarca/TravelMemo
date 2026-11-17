@@ -64,34 +64,35 @@ function handleSubmit() {
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
+  width: 100%;
 }
 
 .form-intro {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .form-title {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   color: var(--color-ink);
-  font-weight: 600;
-  margin-bottom: 0.5rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
 }
 
 .form-desc {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-subtle);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.375rem;
 }
 
 .field-label {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-ink);
 }
@@ -101,20 +102,20 @@ function handleSubmit() {
 }
 
 .field-hint {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--color-subtle);
 }
 
 .submit-btn {
   width: 100%;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #ffffff;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #FFFFFF;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

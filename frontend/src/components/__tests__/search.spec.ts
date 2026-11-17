@@ -96,7 +96,6 @@ describe('RecallSearch', () => {
     })
 
     // Vector status badge
-    expect(wrapper.text()).toContain('向量索引就緒')
 
     // Clarification notice
     expect(wrapper.text()).toContain('搜尋建議與釐清')

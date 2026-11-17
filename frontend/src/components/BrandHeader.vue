@@ -1,14 +1,20 @@
 <script setup lang="ts">
-// BrandHeader displays the TravelMemo Georgia wordmark and Chinese subtitle
+// BrandHeader displays the TravelMemo wordmark with route waypoint icon
 </script>
 
 <template>
   <header class="brand-header">
     <div class="brand-title-wrap">
+      <div class="brand-icon" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="5" r="3" />
+          <path d="M12 8v10" stroke-dasharray="2 2" />
+          <circle cx="12" cy="19" r="2" fill="currentColor" />
+        </svg>
+      </div>
       <h1 class="brand-name travelmemo-wordmark">TravelMemo</h1>
       <span class="brand-subtitle">旅程手記</span>
     </div>
-    <p class="brand-desc">記錄旅途點滴，以記憶為線索的旅行隨筆</p>
   </header>
 </template>
 
@@ -19,13 +25,26 @@
 
 .brand-title-wrap {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
 }
 
+.brand-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-cobalt);
+  color: #FFFFFF;
+}
+
 .brand-name {
-  font-size: 2.25rem;
+  font-family: var(--font-sans);
+  font-size: 1.875rem;
+  font-weight: 700;
   color: var(--color-ink);
   line-height: 1.1;
   letter-spacing: -0.03em;
@@ -33,18 +52,12 @@
 
 .brand-subtitle {
   font-family: var(--font-sans);
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--color-teal);
-  letter-spacing: 0.05em;
-  padding: 0.125rem 0.5rem;
-  background-color: rgba(23, 107, 104, 0.08);
-  border-radius: var(--radius-sm);
-}
-
-.brand-desc {
-  margin-top: 0.5rem;
   font-size: 0.9375rem;
-  color: var(--color-subtle);
+  font-weight: 600;
+  color: var(--color-cobalt);
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.5rem;
+  background-color: var(--color-cobalt-subtle);
+  border-radius: var(--radius-xs);
 }
 </style>

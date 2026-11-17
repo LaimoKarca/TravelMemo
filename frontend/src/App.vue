@@ -153,43 +153,51 @@ async function handleLogout() {
 
 <template>
   <main class="app-layout" :class="{ 'is-workspace-layout': currentStep === 'welcome' }">
-    <div class="notebook-container" :class="{ 'is-workspace-container': currentStep === 'welcome' }">
-      <!-- Left Column: Route-line motif & decorative waypoint illustration -->
-      <RouteMotif v-if="currentStep !== 'welcome'" class="desktop-motif" />
+    <!-- Signed-in Workspace: Fills viewport fluidly without card nesting -->
+    <template v-if="currentStep === 'welcome' && user">
+      <TripWorkspace
+        :user="user"
+        :logging-out="loggingOut"
+        @logout="handleLogout"
+      />
+    </template>
 
-      <!-- Right Column: Main Notebook Content -->
-      <section class="notebook-content" :class="{ 'is-workspace-content': currentStep === 'welcome' }">
-        <BrandHeader v-if="currentStep !== 'welcome'" />
+    <!-- Signed-out Auth: Full-bleed two-column layout with simple divider, no card/shadow -->
+    <div v-else class="auth-fullbleed">
+      <!-- Left: Route artwork with travel waypoint visual language -->
+      <RouteMotif class="auth-motif" />
 
-        <StatusAlert v-if="currentStep !== 'welcome' && alertMessage" :message="alertMessage" :type="alertType" />
+      <!-- Right: Auth form panel -->
+      <section class="auth-main">
+        <div class="auth-content">
+          <BrandHeader />
 
-        <div v-if="currentStep === 'loading_session'" class="loading-state" role="status" aria-live="polite">
-          <div class="page-spinner" aria-hidden="true"></div>
-          <p class="loading-text">正在確認登入狀態...</p>
+          <StatusAlert v-if="alertMessage" :message="alertMessage" :type="alertType" />
+
+          <div v-if="currentStep === 'loading_session'" class="loading-state" role="status" aria-live="polite">
+            <div class="page-spinner" aria-hidden="true"></div>
+            <p class="loading-text">正在確認登入狀態...</p>
+          </div>
+
+          <LoginForm
+            v-else-if="currentStep === 'email'"
+            :initial-email="email"
+            :loading="requestingCode"
+            @submit="handleRequestCode"
+          />
+
+          <OtpForm
+            ref="otpForm"
+            v-else-if="currentStep === 'otp'"
+            :email="email"
+            :retry-after="retryAfter"
+            :loading="verifyingCode"
+            :resending="resendingCode"
+            @verify="handleVerifyCode"
+            @resend="handleResendCode"
+            @back="handleBackToEmail"
+          />
         </div>
-        <LoginForm
-          v-else-if="currentStep === 'email'"
-          :initial-email="email"
-          :loading="requestingCode"
-          @submit="handleRequestCode"
-        />
-        <OtpForm
-          ref="otpForm"
-          v-else-if="currentStep === 'otp'"
-          :email="email"
-          :retry-after="retryAfter"
-          :loading="verifyingCode"
-          :resending="resendingCode"
-          @verify="handleVerifyCode"
-          @resend="handleResendCode"
-          @back="handleBackToEmail"
-        />
-        <TripWorkspace
-          v-else-if="currentStep === 'welcome' && user"
-          :user="user"
-          :logging-out="loggingOut"
-          @logout="handleLogout"
-        />
       </section>
     </div>
   </main>
@@ -198,52 +206,51 @@ async function handleLogout() {
 <style scoped>
 .app-layout {
   min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem 1rem;
-  background-color: var(--color-pale-blue);
+  width: 100%;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  box-sizing: border-box;
 }
 
 .app-layout.is-workspace-layout {
-  align-items: flex-start;
-  padding: 2rem 1.5rem;
+  height: 100vh;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
 }
 
-.notebook-container {
+/* Full-bleed two-column auth composition per brief */
+.auth-fullbleed {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(320px, 440px) 1fr;
+  min-height: 100vh;
   width: 100%;
-  max-width: 960px;
-  background-color: var(--color-paper);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-notebook);
-  border: 1px solid var(--color-border);
-  overflow: hidden;
-  min-height: 540px;
-  min-width: 0;
+  background-color: var(--color-white);
   box-sizing: border-box;
 }
 
-.notebook-container.is-workspace-container {
-  grid-template-columns: 1fr;
-  max-width: 1180px;
-  min-height: 650px;
+.auth-motif {
+  height: 100vh;
+  border-right: 1px solid var(--color-border);
+  box-sizing: border-box;
 }
 
-.notebook-content {
-  padding: 2.5rem 2.5rem;
+.auth-main {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-width: 0;
+  align-items: center;
+  padding: 3rem 2rem;
+  background-color: var(--color-canvas);
+  min-height: 100vh;
   width: 100%;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
-.notebook-content.is-workspace-content {
-  padding: 2rem 2.25rem;
-  justify-content: flex-start;
+.auth-content {
+  width: 100%;
+  max-width: 380px;
 }
 
 .loading-state {
@@ -251,50 +258,37 @@ async function handleLogout() {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 3rem 1rem;
+  padding: 2.5rem 1rem;
   gap: 1rem;
 }
 
 .page-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(23, 107, 104, 0.2);
-  border-top-color: var(--color-teal);
+  border: 3px solid rgba(36, 90, 232, 0.2);
+  border-top-color: var(--color-cobalt);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-subtle);
 }
 
-/* Responsive: Single column on phone / smaller screens */
 @media (max-width: 768px) {
-  .app-layout,
-  .app-layout.is-workspace-layout {
-    padding: 0.75rem 0.5rem;
-    align-items: stretch;
+  .auth-fullbleed {
+    grid-template-columns: 1fr;
   }
 
-  .notebook-container,
-  .notebook-container.is-workspace-container {
-    grid-template-columns: minmax(0, 1fr);
-    border-radius: var(--radius-md);
-    min-height: auto;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .desktop-motif {
+  .auth-motif {
     display: none;
   }
 
-  .notebook-content,
-  .notebook-content.is-workspace-content {
-    padding: 1rem 0.75rem;
-    width: 100%;
-    min-width: 0;
+  .auth-main {
+    min-height: 100vh;
+    padding: 2.5rem 1.25rem;
+    background-color: var(--color-white);
   }
 }
 

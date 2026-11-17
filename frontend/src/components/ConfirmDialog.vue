@@ -112,7 +112,7 @@ onBeforeUnmount(() => {
     >
       <header class="dialog-header">
         <div class="warning-icon" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
             <line x1="12" y1="9" x2="12" y2="13" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -153,21 +153,20 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(21, 62, 72, 0.45);
+  background-color: rgba(9, 30, 66, 0.54);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
   z-index: 1000;
-  backdrop-filter: blur(2px);
 }
 
 .dialog-card {
   width: 100%;
   max-width: 440px;
   background-color: var(--color-paper);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 12px 32px rgba(21, 62, 72, 0.2);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
   padding: 1.5rem;
   display: flex;
@@ -182,8 +181,8 @@ onBeforeUnmount(() => {
 }
 
 .warning-icon {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -195,15 +194,15 @@ onBeforeUnmount(() => {
 
 .dialog-title {
   font-size: 1.125rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-ink);
   line-height: 1.3;
 }
 
 .dialog-body {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-subtle);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
 .dialog-actions {
@@ -214,19 +213,19 @@ onBeforeUnmount(() => {
 }
 
 .btn-danger {
-  background-color: #ba2f2f;
-  color: #ffffff;
+  background-color: var(--color-error-text);
+  color: #FFFFFF;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: #9c2525;
+  background-color: #A01C00;
 }
 
 .spinner-small {
   width: 14px;
   height: 14px;
   border: 2px solid rgba(255, 255, 255, 0.4);
-  border-top-color: #ffffff;
+  border-top-color: #FFFFFF;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

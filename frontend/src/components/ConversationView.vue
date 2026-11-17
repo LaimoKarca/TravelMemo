@@ -189,7 +189,6 @@ async function handleConfirmDelete() {
 }
 
 async function handleSendMessage() {
-  // Capture target conversation ID and content before ANY await or scroll
   const targetId = activeConversationId.value
   const content = inputContent.value.trim()
   if (!content || !targetId || sendingMessage.value) return
@@ -212,7 +211,6 @@ async function handleSendMessage() {
   sendingMessage.value = true
   errorMessage.value = ''
 
-  // Scroll after capturing targetId and content
   scrollToBottom()
 
   try {
@@ -224,7 +222,7 @@ async function handleSendMessage() {
     }
     await fetchUsage()
   } catch (err: any) {
-    // Failed send (including 429): remove optimistic message and restore draft
+    // Failed send: remove optimistic message and restore draft
     const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
     if (tempIdx !== -1) {
       messages.value.splice(tempIdx, 1)
@@ -285,30 +283,31 @@ function handleCitationClick(citation: Citation) {
 
 <template>
   <section class="conversation-view-section" aria-label="AI 旅程對話">
-    <!-- Top Header: Title & Usage Banner -->
+    <!-- Top Header: Title & Disclosure for detailed token/model usage per brief -->
     <div class="conversation-top-row">
-      <div>
-        <h2 class="view-title">AI 旅程助理</h2>
-        <p class="view-subtitle">
-          依旅行手記回答問題並提供來源，資料不足時會提示您補充線索。
-        </p>
-      </div>
+      <h2 class="view-title">AI 旅程助理</h2>
 
-      <!-- Usage Indicator Banner -->
-      <div v-if="usage" class="usage-banner" role="region" aria-label="今日對話用量">
-        <div class="usage-row">
-          <span class="usage-label">今日請求：</span>
-          <span class="usage-value">{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+      <!-- Detailed token/model info via disclosure per brief -->
+      <details v-if="usage" class="usage-disclosure" role="region" aria-label="今日對話用量">
+        <summary class="usage-summary">
+          <span class="usage-pill-icon" aria-hidden="true">⚡</span>
+          <span>今日用量：{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+        </summary>
+        <div class="usage-details-popover">
+          <div class="usage-row">
+            <span class="usage-label">今日請求：</span>
+            <span class="usage-value">{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+          </div>
+          <div class="usage-row">
+            <span class="usage-label">消耗 Tokens：</span>
+            <span class="usage-value">{{ usage.input_tokens + usage.output_tokens }}</span>
+          </div>
+          <div class="usage-meta-tag">
+            <span>模型：{{ usage.model }}</span>
+            <span>({{ usage.date }} UTC)</span>
+          </div>
         </div>
-        <div class="usage-row">
-          <span class="usage-label">消耗 Tokens：</span>
-          <span class="usage-value">{{ usage.input_tokens + usage.output_tokens }}</span>
-        </div>
-        <div class="usage-meta-tag">
-          <span>模型：{{ usage.model }}</span>
-          <span>({{ usage.date }} UTC)</span>
-        </div>
-      </div>
+      </details>
     </div>
 
     <!-- Error Banner -->
@@ -316,9 +315,9 @@ function handleCitationClick(citation: Citation) {
       {{ errorMessage }}
     </div>
 
-    <!-- Main 2-column Conversation Workspace -->
+    <!-- 2-column Conversation Workspace -->
     <div class="chat-layout">
-      <!-- Left Column: Conversations Sidebar -->
+      <!-- Lightweight History Column -->
       <aside class="conversations-sidebar" aria-label="對話列表清單">
         <div class="sidebar-header">
           <h3 class="sidebar-title">歷史對話</h3>
@@ -327,7 +326,7 @@ function handleCitationClick(citation: Citation) {
               v-model="newConversationTitle"
               type="text"
               class="form-input conv-title-input"
-              placeholder="對話主題（選填）..."
+              placeholder="新對話主題..."
               maxlength="40"
               :disabled="loadingConversations"
             />
@@ -343,11 +342,11 @@ function handleCitationClick(citation: Citation) {
 
         <div v-if="loadingConversations" class="sidebar-loading" role="status" aria-live="polite">
           <div class="page-spinner-sm" aria-hidden="true"></div>
-          <span>載入對話...</span>
+          <span>載入中...</span>
         </div>
 
         <div v-else-if="conversations.length === 0" class="sidebar-empty">
-          <span>尚未建立對話。輸入主題並點擊「+ 新對話」開始。</span>
+          <span>尚未建立對話。輸入主題後點擊「+ 新對話」開始。</span>
         </div>
 
         <ul v-else class="conversations-list" role="listbox" aria-label="對話列表">
@@ -374,22 +373,23 @@ function handleCitationClick(citation: Citation) {
               :aria-label="`刪除對話 ${conv.title || '無標題對話'}`"
               @click.stop="promptDeleteConversation(conv)"
             >
-              ✕
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
             </button>
           </li>
         </ul>
       </aside>
 
-      <!-- Right Column: Active Chat Area -->
+      <!-- Active Chat Area -->
       <main class="chat-main" aria-label="對話內容">
-        <!-- If no active conversation -->
         <div v-if="!activeConversationId" class="no-active-chat">
-          <p>請從左側選擇或建立一個對話，開始向旅程助理提問。</p>
+          <p>請從左側選擇或建立一個對話。</p>
         </div>
 
-        <!-- Active Chat Container -->
         <div v-else class="chat-thread-container">
-          <!-- Messages Stream -->
+          <!-- Messages Stream: Natural messages per brief -->
           <div
             ref="messagesContainerRef"
             class="messages-stream"
@@ -429,12 +429,12 @@ function handleCitationClick(citation: Citation) {
                 </span>
               </header>
 
-              <!-- Clean Vue text interpolation with preserved whitespace -->
+              <!-- Clean text interpolation -->
               <div class="message-content">
                 {{ msg.content }}
               </div>
 
-              <!-- Citations List for Assistant -->
+              <!-- Citations List: Source chips per brief -->
               <div
                 v-if="msg.role === 'assistant' && msg.citations && msg.citations.length > 0"
                 class="citations-container"
@@ -475,7 +475,7 @@ function handleCitationClick(citation: Citation) {
               </div>
             </article>
 
-            <!-- Sending assistant spinner -->
+            <!-- Sending assistant indicator -->
             <div v-if="sendingMessage" class="message-card message-assistant sending-placeholder" role="status">
               <span class="message-role-label">手記助理</span>
               <div class="assistant-thinking-row">
@@ -531,7 +531,7 @@ function handleCitationClick(citation: Citation) {
 .conversation-view-section {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
   width: 100%;
 }
 
@@ -544,34 +544,64 @@ function handleCitationClick(citation: Citation) {
 }
 
 .view-title {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   font-weight: 700;
   color: var(--color-ink);
+  letter-spacing: -0.01em;
 }
 
 .view-subtitle {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
   color: var(--color-subtle);
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
-/* Usage banner */
-.usage-banner {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  background-color: #f7fbfc;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 0.625rem 1rem;
+/* Disclosure for token/model info per brief */
+.usage-disclosure {
+  position: relative;
   font-size: 0.8125rem;
-  flex-wrap: wrap;
+}
+
+.usage-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  color: var(--color-subtle);
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+}
+
+.usage-summary::-webkit-details-marker {
+  display: none;
+}
+
+.usage-pill-icon {
+  font-size: 0.875rem;
+}
+
+.usage-details-popover {
+  margin-top: 0.5rem;
+  padding: 0.625rem 0.875rem;
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.75rem;
 }
 
 .usage-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
 }
 
 .usage-label {
@@ -580,92 +610,92 @@ function handleCitationClick(citation: Citation) {
 
 .usage-value {
   font-weight: 700;
-  color: var(--color-teal);
+  color: var(--color-cobalt);
 }
 
 .usage-meta-tag {
   color: var(--color-subtle);
-  font-size: 0.75rem;
   display: flex;
   gap: 0.35rem;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
 .error-banner {
   background-color: var(--color-error-bg);
   border: 1px solid var(--color-error-border);
   color: var(--color-error-text);
-  padding: 0.875rem 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9375rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
 }
 
-/* Chat Layout */
+/* Chat Layout: Lightweight history column and natural messages */
 .chat-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  background-color: var(--color-paper);
+  grid-template-columns: 240px 1fr;
+  background-color: var(--color-white);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   min-height: 580px;
   max-height: 75vh;
   overflow: hidden;
-  box-shadow: 0 4px 14px rgba(21, 62, 72, 0.05);
+  box-shadow: var(--shadow-sm);
   width: 100%;
-  min-width: 0;
   box-sizing: border-box;
 }
 
-/* Sidebar */
+/* Lightweight Sidebar */
 .conversations-sidebar {
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  background-color: #fbfdfe;
+  background-color: #FAFBFC;
   min-width: 0;
 }
 
 .sidebar-header {
-  padding: 1rem;
+  padding: 0.875rem;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.625rem;
 }
 
 .sidebar-title {
-  font-size: 1.0625rem;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--color-ink);
 }
 
 .create-conv-form {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.35rem;
   width: 100%;
-  min-width: 0;
 }
 
 .conv-title-input {
-  min-height: 36px;
+  min-height: 34px;
   padding: 0.25rem 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   flex: 1 1 0;
   min-width: 0;
 }
 
 .btn-new-conv {
-  min-height: 36px;
-  padding: 0.25rem 0.65rem;
-  font-size: 0.8125rem;
+  min-height: 34px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .sidebar-loading,
 .sidebar-empty {
-  padding: 2rem 1rem;
+  padding: 1.5rem 0.875rem;
   text-align: center;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--color-subtle);
   display: flex;
   flex-direction: column;
@@ -677,43 +707,42 @@ function handleCitationClick(citation: Citation) {
   list-style: none;
   overflow-y: auto;
   flex: 1;
-  padding: 0.5rem 0;
 }
 
 .conversation-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.625rem 0.875rem;
   cursor: pointer;
-  border-bottom: 1px solid #f0f6f8;
+  border-bottom: 1px solid var(--color-border-light);
   transition: background-color 0.15s ease;
 }
 
 .conversation-item:hover {
-  background-color: #f0f7f8;
+  background-color: #F4F5F7;
 }
 
 .conversation-item.is-active {
-  background-color: #e5f1f4;
-  border-left: 3px solid var(--color-teal);
+  background-color: var(--color-cobalt-subtle);
+  border-left: 3px solid var(--color-cobalt);
 }
 
 .conversation-item:focus-visible {
-  outline: 2px solid var(--color-teal);
+  outline: 2px solid var(--color-cobalt);
   outline-offset: -2px;
 }
 
 .conv-item-content {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
   min-width: 0;
   flex: 1;
 }
 
 .conv-title {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--color-ink);
   white-space: nowrap;
@@ -722,7 +751,7 @@ function handleCitationClick(citation: Citation) {
 }
 
 .conv-date {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--color-subtle);
 }
 
@@ -730,9 +759,9 @@ function handleCitationClick(citation: Citation) {
   background: transparent;
   border: none;
   color: var(--color-subtle);
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -758,7 +787,7 @@ function handleCitationClick(citation: Citation) {
   justify-content: center;
   height: 100%;
   color: var(--color-subtle);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   padding: 2rem;
   text-align: center;
 }
@@ -769,7 +798,6 @@ function handleCitationClick(citation: Citation) {
   height: 100%;
   min-height: 580px;
   width: 100%;
-  min-width: 0;
 }
 
 .messages-stream {
@@ -779,9 +807,8 @@ function handleCitationClick(citation: Citation) {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  background-color: #fdfefe;
+  background-color: var(--color-canvas);
   width: 100%;
-  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -806,43 +833,50 @@ function handleCitationClick(citation: Citation) {
 }
 
 .empty-chat-title {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
   color: var(--color-ink);
 }
 
 .empty-chat-sub {
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-  max-width: 420px;
+  font-size: 0.8125rem;
+  margin-top: 0.35rem;
+  max-width: 400px;
   line-height: 1.5;
 }
 
-/* Message Cards */
+/* Natural Message Cards */
 .message-card {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  border-radius: var(--radius-md);
-  padding: 1rem 1.25rem;
-  max-width: 85%;
-  line-height: 1.6;
-  min-width: 0;
+  gap: 0.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  max-width: 82%;
+  line-height: 1.5;
   box-sizing: border-box;
 }
 
 .message-user {
   align-self: flex-end;
-  background-color: #e5f1f4;
-  border: 1px solid #cfe0e5;
-  color: var(--color-ink);
+  background-color: var(--color-cobalt);
+  color: #FFFFFF;
+}
+
+.message-user .message-role-label {
+  color: #FFFFFF;
+  opacity: 0.85;
+}
+
+.message-user .message-content {
+  color: #FFFFFF;
 }
 
 .message-assistant {
   align-self: flex-start;
-  background-color: #ffffff;
+  background-color: var(--color-white);
   border: 1px solid var(--color-border);
-  box-shadow: 0 2px 8px rgba(21, 62, 72, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .message-header {
@@ -854,215 +888,189 @@ function handleCitationClick(citation: Citation) {
 }
 
 .message-role-label {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 700;
-  color: var(--color-teal);
+  color: var(--color-cobalt);
   letter-spacing: 0.05em;
 }
 
 .message-status-pill {
-  font-size: 0.75rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-xs);
   font-weight: 600;
 }
 
 .status-answered {
-  background-color: #eaf6f0;
-  color: #115e45;
+  background-color: var(--color-mint);
+  color: var(--color-mint-text);
 }
 
 .status-insufficient {
-  background-color: #fff9e6;
-  color: #855d00;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .status-clarify {
-  background-color: #fff2c4;
-  color: #78350f;
+  background-color: var(--color-mango-subtle);
+  color: #172B4D;
 }
 
 .status-unavailable {
-  background-color: #faeaea;
-  color: #8e1f1f;
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 .message-content {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-ink);
   white-space: pre-wrap;
   word-break: break-word;
-  overflow-wrap: anywhere;
 }
 
-/* Citations */
+/* Citations Container: Source chips */
 .citations-container {
-  border-top: 1px dashed var(--color-border);
-  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  min-width: 0;
+  gap: 0.35rem;
 }
 
 .citations-heading {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--color-teal);
+  color: var(--color-subtle);
 }
 
 .citations-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  min-width: 0;
+  gap: 0.35rem;
 }
 
 .citation-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem 0.75rem;
-  flex-wrap: wrap;
-  background-color: #f7fbfc;
+  gap: 0.5rem;
+  background-color: #FAFBFC;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  padding: 0.45rem 0.75rem;
-  font-size: 0.8125rem;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+  border-radius: var(--radius-xs);
+  padding: 0.35rem 0.625rem;
+  font-size: 0.75rem;
 }
 
 .citation-card.is-deleted {
-  background-color: #fdf6f6;
-  border-color: #f3d4d4;
+  background-color: #FDF6F6;
+  border-color: #F3D4D4;
   opacity: 0.8;
 }
 
 .citation-main {
   display: flex;
   align-items: center;
-  gap: 0.35rem 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1;
 }
 
 .cite-place-name {
   font-weight: 600;
   color: var(--color-ink);
-  word-break: break-word;
-  overflow-wrap: anywhere;
 }
 
 .cite-date {
   color: var(--color-subtle);
-  font-size: 0.75rem;
-  white-space: nowrap;
+  font-size: 0.6875rem;
 }
 
 .citation-actions {
   display: flex;
   align-items: center;
-  gap: 0.35rem 0.5rem;
-  flex-wrap: wrap;
+  gap: 0.4rem;
   flex-shrink: 0;
 }
 
 .cite-state-pill {
-  font-size: 0.75rem;
-  padding: 0.1rem 0.4rem;
-  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-xs);
   font-weight: 600;
 }
 
 .cite-current {
-  background-color: #eaf6f0;
-  color: #115e45;
+  background-color: var(--color-mint);
+  color: var(--color-mint-text);
 }
 
 .cite-changed {
-  background-color: #fff9e6;
-  color: #855d00;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
 }
 
 .cite-deleted {
-  background-color: #faeaea;
-  color: #8e1f1f;
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 .btn-cite-inspect {
-  background: transparent;
-  border: 1px solid var(--color-teal);
-  color: var(--color-teal);
-  padding: 0.2rem 0.55rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.75rem;
+  background: var(--color-white);
+  border: 1px solid var(--color-cobalt);
+  color: var(--color-cobalt);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.6875rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
-  min-height: 28px;
+  min-height: 26px;
   white-space: nowrap;
 }
 
 .btn-cite-inspect:hover {
-  background-color: var(--color-teal);
-  color: #ffffff;
+  background-color: var(--color-cobalt);
+  color: #FFFFFF;
 }
 
 .cite-deleted-tip {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: var(--color-subtle);
 }
 
-/* Sending Placeholder */
-.sending-placeholder {
-  opacity: 0.85;
-}
-
+/* Sending indicator */
 .assistant-thinking-row {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
 }
 
 .thinking-text {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-subtle);
   font-style: italic;
 }
 
 /* Chat Input Bar */
 .chat-input-bar {
-  padding: 1rem 1.25rem;
+  padding: 0.875rem 1rem;
   border-top: 1px solid var(--color-border);
-  background-color: #ffffff;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
+  background-color: var(--color-white);
 }
 
 .chat-form {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.625rem;
   align-items: flex-end;
-  width: 100%;
-  min-width: 0;
 }
 
 .chat-textarea {
   resize: none;
   min-height: 44px;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   line-height: 1.4;
   padding: 0.5rem 0.75rem;
-  flex: 1 1 0;
-  min-width: 0;
-  width: 100%;
-  box-sizing: border-box;
+  flex: 1;
 }
 
 .send-btn {
@@ -1071,38 +1079,26 @@ function handleCitationClick(citation: Citation) {
   flex-shrink: 0;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-
 .page-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(23, 107, 104, 0.2);
-  border-top-color: var(--color-teal);
+  border: 3px solid rgba(36, 90, 232, 0.2);
+  border-top-color: var(--color-cobalt);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .page-spinner-sm {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(23, 107, 104, 0.3);
-  border-top-color: var(--color-teal);
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(36, 90, 232, 0.3);
+  border-top-color: var(--color-cobalt);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-subtle);
 }
 
@@ -1117,69 +1113,36 @@ function handleCitationClick(citation: Citation) {
   .chat-layout {
     grid-template-columns: minmax(0, 1fr);
     max-height: none;
-    width: 100%;
-    min-width: 0;
   }
 
   .conversations-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--color-border);
-    max-height: 220px;
-    width: 100%;
-    min-width: 0;
+    max-height: 200px;
   }
 
   .chat-thread-container {
-    min-height: 450px;
-    width: 100%;
-    min-width: 0;
+    min-height: 420px;
   }
 
   .messages-stream {
     padding: 1rem 0.75rem;
     gap: 1rem;
-    width: 100%;
-    min-width: 0;
   }
 
   .message-card {
     max-width: 100%;
-    padding: 0.75rem 0.875rem;
-    width: 100%;
-  }
-
-  .message-header {
-    flex-wrap: wrap;
-    gap: 0.35rem 0.5rem;
   }
 
   .citation-card {
-    padding: 0.5rem 0.625rem;
-    gap: 0.5rem;
-  }
-
-  .citation-main {
-    width: 100%;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
   }
 
   .citation-actions {
     width: 100%;
     justify-content: flex-end;
-  }
-
-  .chat-input-bar {
-    padding: 0.75rem 0.625rem;
-    width: 100%;
-    min-width: 0;
-  }
-
-  .chat-form {
-    gap: 0.5rem;
-  }
-
-  .send-btn {
-    padding: 0.5rem 0.75rem;
   }
 }
 </style>

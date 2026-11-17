@@ -22,6 +22,9 @@ const dateFrom = ref('')
 const dateTo = ref('')
 const searchLimit = ref<number>(10)
 
+// Extra filters collapsed initially per brief
+const showFilters = ref(false)
+
 const loading = ref(false)
 const errorMessage = ref('')
 const hasSearched = ref(false)
@@ -87,6 +90,10 @@ function handleResetFilters() {
   loading.value = false
 }
 
+function toggleFilters() {
+  showFilters.value = !showFilters.value
+}
+
 function getVectorStatusLabel(status: string): string {
   switch (status.toLowerCase()) {
     case 'ready':
@@ -104,53 +111,43 @@ function getVectorStatusLabel(status: string): string {
 
 <template>
   <section class="recall-search-section" aria-label="回憶搜尋">
+    <!-- Confident short page heading per brief, no decorative filler subtitle -->
     <div class="search-header">
-      <div>
-        <h2 class="search-title">旅途回憶檢索</h2>
-        <p class="search-subtitle">
-          運用語意與時間關係檢索您的旅程足跡、尋訪備忘與感動片刻。
-        </p>
-      </div>
+      <h2 class="search-title">回憶搜尋</h2>
 
-      <div v-if="searchResult && searchResult.vector_status" class="vector-status-badge">
+      <div v-if="searchResult && searchResult.vector_status !== 'ready'" class="vector-status-badge">
         <span class="status-indicator-dot" :class="searchResult.vector_status.toLowerCase()"></span>
         <span>{{ getVectorStatusLabel(searchResult.vector_status) }}</span>
       </div>
     </div>
 
-    <!-- Search Form -->
+    <!-- Search Bar & Controls -->
     <form class="search-form-card" @submit.prevent="handleSearch">
+      <!-- Main Search Input and Readily Available Trip Selector per brief -->
       <div class="main-query-row">
         <div class="query-input-wrap">
           <label for="search-query-input" class="sr-only">搜尋關鍵字</label>
-          <input
-            id="search-query-input"
-            v-model="query"
-            type="text"
-            class="form-input query-input"
-            placeholder="例如：清水寺、宇治抹茶、嵐山渡月橋、雨天美術館..."
-            :disabled="loading"
-            required
-          />
+          <div class="input-with-icon">
+            <svg class="search-lens-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              id="search-query-input"
+              v-model="query"
+              type="text"
+              class="form-input query-input"
+              placeholder="搜尋地點或行程紀錄..."
+              :disabled="loading"
+              required
+            />
+          </div>
         </div>
-        <button
-          type="submit"
-          class="btn btn-primary search-submit-btn"
-          :disabled="loading || !query.trim()"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <span>{{ loading ? '搜尋中...' : '搜尋回憶' }}</span>
-        </button>
-      </div>
 
-      <!-- Advanced Filter Options -->
-      <div class="filters-grid">
-        <div class="filter-col">
-          <label for="filter-trip" class="filter-label">指定手記：</label>
-          <select id="filter-trip" v-model="selectedTripId" class="form-input filter-input" :disabled="loading">
+        <!-- Readily available trip selector in main search bar -->
+        <div class="trip-selector-wrap">
+          <label for="filter-trip" class="sr-only">指定旅程</label>
+          <select id="filter-trip" v-model="selectedTripId" class="form-input filter-input trip-select" :disabled="loading">
             <option value="">全部旅程手記</option>
             <option v-for="t in trips" :key="t.id" :value="t.id">
               {{ t.name }}
@@ -158,70 +155,91 @@ function getVectorStatusLabel(status: string): string {
           </select>
         </div>
 
+        <!-- Clear filter toggle button -->
+        <button
+          type="button"
+          class="btn btn-secondary filter-toggle-btn"
+          :aria-expanded="showFilters"
+          @click="toggleFilters"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+          </svg>
+          <span>{{ showFilters ? '收起篩選' : '進階篩選' }}</span>
+        </button>
+
+        <button
+          type="submit"
+          class="btn btn-primary search-submit-btn"
+          :disabled="loading || !query.trim()"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <span>{{ loading ? '搜尋中...' : '搜尋' }}</span>
+        </button>
+      </div>
+
+      <!-- Collapsible Additional Filters Grid (v-show preserves DOM access for tests/a11y) -->
+      <div v-show="showFilters" class="filters-grid">
         <div class="filter-col">
-          <label for="filter-city" class="filter-label">城市地點：</label>
+          <label for="filter-city" class="filter-label">城市</label>
           <input
             id="filter-city"
             v-model="selectedCity"
             type="text"
             class="form-input filter-input"
-            placeholder="例如：京都市、台東縣"
+            placeholder="例如：京都市"
             :disabled="loading"
           />
         </div>
 
         <div class="filter-col">
-          <label for="filter-category" class="filter-label">足跡類別：</label>
+          <label for="filter-category" class="filter-label">類別</label>
           <input
             id="filter-category"
             v-model="selectedCategory"
             type="text"
             class="form-input filter-input"
-            placeholder="例如：景點、美食、文化"
+            placeholder="例如：景點"
             :disabled="loading"
           />
         </div>
 
-        <div class="filter-col">
-          <label for="filter-date-from" class="filter-label">起始日期：</label>
-          <input
-            id="filter-date-from"
-            v-model="dateFrom"
-            type="date"
-            class="form-input filter-input"
-            :disabled="loading"
-          />
+        <div class="dates-grouped-col">
+          <div class="filter-col date-subcol">
+            <label for="filter-date-from" class="filter-label">起始日期：</label>
+            <input
+              id="filter-date-from"
+              v-model="dateFrom"
+              type="date"
+              class="form-input filter-input"
+              :disabled="loading"
+            />
+          </div>
+
+          <div class="filter-col date-subcol">
+            <label for="filter-date-to" class="filter-label">結束日期：</label>
+            <input
+              id="filter-date-to"
+              v-model="dateTo"
+              type="date"
+              class="form-input filter-input"
+              :disabled="loading"
+            />
+          </div>
         </div>
 
-        <div class="filter-col">
-          <label for="filter-date-to" class="filter-label">結束日期：</label>
-          <input
-            id="filter-date-to"
-            v-model="dateTo"
-            type="date"
-            class="form-input filter-input"
-            :disabled="loading"
-          />
+        <div class="reset-wrap">
+          <button
+            type="button"
+            class="btn-link reset-btn"
+            @click="handleResetFilters"
+          >
+            重設篩選條件
+          </button>
         </div>
-
-        <div class="filter-col limit-col">
-          <label for="filter-limit" class="filter-label">筆數上限：</label>
-          <select id="filter-limit" v-model.number="searchLimit" class="form-input filter-input" :disabled="loading">
-            <option :value="10">10 筆</option>
-            <option :value="20">20 筆</option>
-            <option :value="50">50 筆</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-actions-row">
-        <button
-          type="button"
-          class="btn-link reset-btn"
-          @click="handleResetFilters"
-        >
-          重設篩選條件
-        </button>
       </div>
     </form>
 
@@ -232,10 +250,25 @@ function getVectorStatusLabel(status: string): string {
 
     <!-- Clarification Prompt from Search Service -->
     <div v-if="searchResult && searchResult.clarification" class="clarification-card" role="region" aria-label="搜尋澄清說明">
-      <div class="clarification-icon" aria-hidden="true">💡</div>
       <div class="clarification-content">
         <h4 class="clarification-title">搜尋建議與釐清</h4>
         <p class="clarification-text">{{ searchResult.clarification }}</p>
+      </div>
+    </div>
+
+    <!-- Results Context Toolbar: Limit moved to results context per brief -->
+    <div class="results-toolbar">
+      <span class="results-count">
+        {{ searchResult ? `找到 ${searchResult.items.length} 處相符足跡` : '搜尋結果' }}
+      </span>
+
+      <div class="toolbar-limit-group">
+        <label for="filter-limit" class="filter-label limit-label">顯示上限</label>
+        <select id="filter-limit" v-model.number="searchLimit" class="form-input filter-limit-select" :disabled="loading">
+          <option :value="10">10 筆</option>
+          <option :value="20">20 筆</option>
+          <option :value="50">50 筆</option>
+        </select>
       </div>
     </div>
 
@@ -247,16 +280,10 @@ function getVectorStatusLabel(status: string): string {
 
     <!-- Results Container -->
     <div v-else-if="searchResult" class="results-container">
-      <div class="results-meta-bar">
-        <span class="results-count">
-          找到 {{ searchResult.items.length }} 處相符足跡
-        </span>
-      </div>
-
       <!-- Empty Results -->
       <div v-if="searchResult.items.length === 0" class="empty-results">
         <div class="empty-icon" aria-hidden="true">
-          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
             <line x1="8" y1="11" x2="14" y2="11" />
@@ -264,58 +291,60 @@ function getVectorStatusLabel(status: string): string {
         </div>
         <h3 class="empty-title">查無相符的旅行記憶</h3>
         <p class="empty-desc">
-          未找到與「{{ query }}」相關的足跡。建議放寬日期或城市篩選，或換個相近的描述再試一次。
+          未找到與「{{ query }}」相關的足跡。建議調整搜尋條件或日期後再試。
         </p>
       </div>
 
-      <!-- Source Cards Grid -->
+      <!-- Flat Rows List with source actions and quiet algorithm tags per brief -->
       <div v-else class="source-cards-grid">
         <article
           v-for="(item, idx) in searchResult.items"
           :key="item.event.id + '-' + idx"
-          class="source-card"
+          class="source-card source-row"
         >
-          <div class="source-card-header">
-            <div class="source-badge-group">
-              <span class="source-date-pill">{{ item.event.date }}</span>
-              <span v-if="item.event.time" class="source-time-pill">{{ item.event.time }}</span>
-              <span v-if="item.event.category" class="source-cat-pill">{{ item.event.category }}</span>
-            </div>
-            <div class="score-badge" :title="`關聯度評分: ${item.score}`">
-              <span>評分：{{ typeof item.score === 'number' ? item.score.toFixed(2) : item.score }}</span>
-            </div>
-          </div>
-
-          <div class="source-card-body">
-            <h3 class="source-place-name">{{ item.event.place_name }}</h3>
-
-            <div v-if="item.event.trip_name || item.event.city || item.event.address" class="source-location-row">
-              <span v-if="item.event.trip_name" class="trip-tag">📖 {{ item.event.trip_name }}</span>
-              <span v-if="item.event.city || item.event.address" class="loc-text">
-                📍 {{ [item.event.city, item.event.address].filter(Boolean).join(' · ') }}
-              </span>
+          <div class="source-row-main">
+            <div class="source-card-header">
+              <div class="source-badge-group">
+                <span class="source-date-pill">{{ item.event.date }}</span>
+                <span v-if="item.event.time" class="source-time-pill">{{ item.event.time }}</span>
+                <span v-if="item.event.category" class="source-cat-pill">{{ item.event.category }}</span>
+                <span v-if="item.event.trip_name" class="trip-tag">{{ item.event.trip_name }}</span>
+              </div>
+              <div class="score-badge" :title="`關聯度評分: ${item.score}`">
+                <span>評分：{{ typeof item.score === 'number' ? item.score.toFixed(2) : item.score }}</span>
+              </div>
             </div>
 
-            <p v-if="item.event.notes" class="source-notes-excerpt">
-              {{ item.event.notes }}
-            </p>
+            <div class="source-card-body">
+              <h3 class="source-place-name">{{ item.event.place_name }}</h3>
 
-            <!-- Reasons list -->
-            <div v-if="item.reasons && item.reasons.length > 0" class="reasons-block">
-              <span class="reasons-title">命中原因：</span>
-              <ul class="reasons-list">
-                <li v-for="(reason, rIdx) in item.reasons" :key="rIdx" class="reason-item">
-                  {{ reason }}
-                </li>
-              </ul>
-            </div>
+              <div v-if="item.event.city || item.event.address" class="source-location-row">
+                <span class="loc-text">
+                  {{ [item.event.city, item.event.address].filter(Boolean).join(' · ') }}
+                </span>
+              </div>
 
-            <!-- Relation Context -->
-            <div v-if="item.relation" class="relation-block">
-              <span class="relation-label">時間關係脈絡：</span>
-              <span class="relation-text">
-                基準日期 {{ item.relation.anchor_date }} ➔ {{ item.relation.direction === 'next' ? '下一站' : '上一站' }} ➔ 目標日期 {{ item.relation.target_date }}
-              </span>
+              <p v-if="item.event.notes" class="source-notes-excerpt">
+                {{ item.event.notes }}
+              </p>
+
+              <!-- Reasons list: Quiet collapsed metadata -->
+              <details v-if="item.reasons && item.reasons.length > 0" class="reasons-block">
+                <summary class="reasons-title">命中原因</summary>
+                <ul class="reasons-list">
+                  <li v-for="(reason, rIdx) in item.reasons" :key="rIdx" class="reason-item">
+                    {{ reason }}
+                  </li>
+                </ul>
+              </details>
+
+              <!-- Relation Context -->
+              <div v-if="item.relation" class="relation-block">
+                <span class="relation-label">時間關係脈絡：</span>
+                <span class="relation-text">
+                  基準日期 {{ item.relation.anchor_date }} ➔ {{ item.relation.direction === 'next' ? '下一站' : '上一站' }} ➔ 目標日期 {{ item.relation.target_date }}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -345,127 +374,200 @@ function getVectorStatusLabel(status: string): string {
 .recall-search-section {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
   width: 100%;
 }
 
 .search-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
 }
 
 .search-title {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   font-weight: 700;
   color: var(--color-ink);
-}
-
-.search-subtitle {
-  font-size: 0.9375rem;
-  color: var(--color-subtle);
-  margin-top: 0.25rem;
+  letter-spacing: -0.01em;
 }
 
 .vector-status-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-teal);
-  background-color: rgba(23, 107, 104, 0.08);
-  padding: 0.35rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(23, 107, 104, 0.2);
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-subtle);
+  background-color: var(--color-white);
+  padding: 0.25rem 0.625rem;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
 }
 
 .status-indicator-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background-color: var(--color-teal);
+  background-color: #36B37E;
 }
 
 .status-indicator-dot.building {
-  background-color: var(--color-yellow);
+  background-color: var(--color-mango);
 }
 
 .status-indicator-dot.degraded {
-  background-color: #d97706;
+  background-color: #FF8B00;
 }
 
-/* Search Form */
+/* Search Form Card */
 .search-form-card {
-  background-color: var(--color-paper);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 1.25rem 1.5rem;
+  background-color: transparent;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  box-shadow: 0 2px 8px rgba(21, 62, 72, 0.04);
+  gap: 0.875rem;
 }
 
 .main-query-row {
   display: flex;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
   width: 100%;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .query-input-wrap {
-  flex: 1;
-  min-width: 240px;
+  flex: 2 1 240px;
+  min-width: 0;
+}
+
+.trip-selector-wrap {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-lens-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--color-subtle);
+  pointer-events: none;
 }
 
 .query-input {
-  font-size: 1.0625rem;
-  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  padding-left: 2.25rem;
+  min-height: 40px;
+}
+
+.trip-select {
+  min-height: 40px;
+  font-size: 0.8125rem;
+}
+
+.filter-toggle-btn {
+  white-space: nowrap;
+  min-height: 40px;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.75rem;
 }
 
 .search-submit-btn {
   white-space: nowrap;
+  min-height: 40px;
+  font-size: 0.8125rem;
+  padding: 0.35rem 1rem;
 }
 
+/* Collapsible Filters Grid: minmax(0, 1fr) for mobile responsiveness down to 390px */
 .filters-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed var(--color-border);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border-light);
+  align-items: end;
+}
+
+.dates-grouped-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  grid-column: span 2;
 }
 
 .filter-col {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.25rem;
+  min-width: 0;
 }
 
 .filter-label {
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: 0.75rem;
+  font-weight: 600;
   color: var(--color-subtle);
 }
 
 .filter-input {
-  min-height: 38px;
-  padding: 0.35rem 0.65rem;
-  font-size: 0.875rem;
+  min-height: 36px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
 }
 
-.form-actions-row {
+.reset-wrap {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
 }
 
 .reset-btn {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   padding: 0;
   min-height: auto;
+}
+
+/* Results Toolbar: Limit placed in results context per brief */
+.results-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25rem 0.25rem;
+  gap: 1rem;
+}
+
+.results-count {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.toolbar-limit-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.limit-label {
+  font-size: 0.75rem;
+  color: var(--color-subtle);
+  white-space: nowrap;
+}
+
+.filter-limit-select {
+  width: auto;
+  min-height: 32px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
 }
 
 /* Clarification Card */
@@ -473,27 +575,27 @@ function getVectorStatusLabel(status: string): string {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  background-color: #fff9e6;
-  border: 1px solid #fae19c;
-  border-radius: var(--radius-md);
-  padding: 1rem 1.25rem;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
 }
 
 .clarification-icon {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
 }
 
 .clarification-title {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 700;
-  color: #634a00;
+  color: var(--color-warning-text);
 }
 
 .clarification-text {
-  font-size: 0.875rem;
-  color: #4a3805;
-  margin-top: 0.25rem;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  color: var(--color-warning-text);
+  margin-top: 0.2rem;
+  line-height: 1.4;
 }
 
 /* Error Banner */
@@ -501,52 +603,44 @@ function getVectorStatusLabel(status: string): string {
   background-color: var(--color-error-bg);
   border: 1px solid var(--color-error-border);
   color: var(--color-error-text);
-  padding: 0.875rem 1rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9375rem;
-}
-
-/* Results */
-.results-meta-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-}
-
-.results-count {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
   font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-teal);
 }
 
+/* Flat Rows per brief */
 .source-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   width: 100%;
-  min-width: 0;
 }
 
 .source-card {
-  background-color: var(--color-paper);
+  background-color: var(--color-white);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 1.25rem;
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  box-shadow: 0 2px 6px rgba(21, 62, 72, 0.04);
-  transition: all 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
-  min-width: 0;
   box-sizing: border-box;
 }
 
 .source-card:hover {
-  border-color: var(--color-teal);
-  box-shadow: 0 4px 12px rgba(21, 62, 72, 0.08);
+  border-color: #B3D4FF;
+  box-shadow: var(--shadow-sm);
+}
+
+.source-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .source-card-header {
@@ -555,174 +649,135 @@ function getVectorStatusLabel(status: string): string {
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
-  width: 100%;
-  min-width: 0;
 }
 
 .source-badge-group {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
-  min-width: 0;
 }
 
 .source-date-pill {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--color-teal);
-  background-color: rgba(23, 107, 104, 0.08);
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-sm);
+  color: var(--color-mint-text);
+  background-color: var(--color-mint);
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-xs);
 }
 
 .source-time-pill {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-family: var(--font-mono);
   color: var(--color-subtle);
-  background-color: #f0f4f5;
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-sm);
+  background-color: #EBECF0;
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-xs);
 }
 
 .source-cat-pill {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: #172B4D;
+  background-color: var(--color-mango-subtle);
+  border: 1px solid rgba(244, 200, 75, 0.4);
+  padding: 0.12rem 0.4rem;
+  border-radius: var(--radius-xs);
+}
+
+.trip-tag {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #4a3805;
-  background-color: #fff2c4;
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-sm);
+  color: var(--color-cobalt);
 }
 
 .score-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.6875rem;
   color: var(--color-subtle);
-  background-color: #eaf1f3;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-sm);
+  background-color: #F4F5F7;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-xs);
 }
 
 .source-card-body {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  width: 100%;
-  min-width: 0;
+  gap: 0.4rem;
 }
 
 .source-place-name {
-  font-size: 1.1875rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
   color: var(--color-ink);
   line-height: 1.3;
-  word-break: break-word;
-  overflow-wrap: anywhere;
 }
 
 .source-location-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--color-subtle);
-  flex-wrap: wrap;
-  width: 100%;
-  min-width: 0;
-  word-break: break-word;
-}
-
-.trip-tag {
-  font-weight: 500;
-  color: var(--color-teal);
 }
 
 .source-notes-excerpt {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-subtle);
   line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  background-color: #f7fbfc;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border-left: 2px solid var(--color-teal);
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  padding: 0.25rem 0;
 }
 
 .reasons-block {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--color-ink);
-  background-color: #fdfaf3;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid #fae8c8;
+  padding-top: 0.25rem;
 }
 
 .reasons-title {
   font-weight: 600;
-  color: #78350f;
+  color: var(--color-subtle);
+  cursor: pointer;
 }
 
 .reasons-list {
   list-style-type: disc;
   padding-left: 1.25rem;
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
 }
 
 .reason-item {
-  color: #451a03;
+  color: var(--color-ink);
   line-height: 1.4;
 }
 
 .relation-block {
-  font-size: 0.8125rem;
-  background-color: #f0f7f7;
-  padding: 0.4rem 0.6rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid #d0e7e7;
-  color: var(--color-teal);
+  font-size: 0.75rem;
+  background-color: var(--color-cobalt-subtle);
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-xs);
+  color: var(--color-cobalt);
 }
 
 .relation-label {
   font-weight: 600;
 }
 
-.relation-text {
-  word-break: break-word;
-  overflow-wrap: anywhere;
-}
-
 .source-card-footer {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 0.5rem;
-  border-top: 1px dashed var(--color-border);
-  padding-top: 0.75rem;
+  flex-shrink: 0;
 }
 
 .btn-sm {
-  min-height: 36px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8125rem;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  min-height: 32px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
   white-space: nowrap;
-  border-width: 0;
 }
 
+/* Loading & Empty states */
 .loading-state,
 .empty-results {
   display: flex;
@@ -731,41 +786,41 @@ function getVectorStatusLabel(status: string): string {
   justify-content: center;
   padding: 3rem 1.5rem;
   text-align: center;
-  background-color: #fafdfd;
+  background-color: var(--color-white);
   border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  gap: 1rem;
+  border-radius: var(--radius-sm);
+  gap: 0.75rem;
 }
 
 .empty-icon {
-  color: var(--color-teal);
-  opacity: 0.7;
+  color: var(--color-cobalt);
+  opacity: 0.8;
 }
 
 .empty-title {
-  font-size: 1.125rem;
-  font-weight: 600;
+  font-size: 1.0625rem;
+  font-weight: 700;
   color: var(--color-ink);
 }
 
 .empty-desc {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--color-subtle);
-  max-width: 440px;
+  max-width: 400px;
   line-height: 1.5;
 }
 
 .page-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid rgba(23, 107, 104, 0.2);
-  border-top-color: var(--color-teal);
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(36, 90, 232, 0.2);
+  border-top-color: var(--color-cobalt);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   color: var(--color-subtle);
 }
 
@@ -777,51 +832,51 @@ function getVectorStatusLabel(status: string): string {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .search-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
   .search-form-card {
-    padding: 1rem 0.875rem;
+    padding: 0;
   }
 
-  .query-input-wrap {
-    min-width: 0;
+  .main-query-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .query-input-wrap,
+  .trip-selector-wrap { grid-column: 1 / -1; }
+
+  .query-input-wrap,
+  .trip-selector-wrap,
+  .filter-toggle-btn,
+  .search-submit-btn {
     width: 100%;
     flex: 1 1 100%;
   }
 
-  .search-submit-btn {
-    width: 100%;
-    min-height: 44px;
-    justify-content: center;
+  .dates-grouped-col {
+    grid-column: span 1;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .filters-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 0.75rem;
-  }
-
-  .source-cards-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
   }
 
   .source-card {
-    padding: 1rem 0.875rem;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .source-card-footer {
-    flex-wrap: wrap;
-    justify-content: stretch;
+    flex-direction: row;
+    justify-content: flex-end;
+    border-top: 1px solid var(--color-border-light);
+    padding-top: 0.5rem;
+    width: 100%;
   }
 
   .source-card-footer .btn {
-    flex: 1 1 120px;
-    justify-content: center;
-    min-height: 40px;
+    flex: 1;
   }
 }
 </style>
