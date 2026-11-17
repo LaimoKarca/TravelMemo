@@ -37,7 +37,7 @@
   width: 36px;
   height: 36px;
   border-radius: var(--radius-sm);
-  background-color: var(--color-cobalt);
+  background-color: var(--color-maple);
   color: #FFFFFF;
 }
 
@@ -54,10 +54,10 @@
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 600;
-  color: var(--color-cobalt);
+  color: var(--color-maple);
   letter-spacing: 0.05em;
   padding: 0.15rem 0.5rem;
-  background-color: var(--color-cobalt-subtle);
+  background-color: var(--color-maple-subtle);
   border-radius: var(--radius-xs);
 }
 </style>

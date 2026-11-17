@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(9, 30, 66, 0.54);
+  background-color: rgba(69, 58, 50, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;

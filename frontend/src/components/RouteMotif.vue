@@ -13,15 +13,15 @@
       <div class="route-map" aria-hidden="true">
         <svg class="route-svg" viewBox="0 0 280 380" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Subtle journey grid lines -->
-          <line x1="20" y1="70" x2="260" y2="70" stroke="#DFE1E6" stroke-dasharray="3 3" stroke-width="1" />
-          <line x1="20" y1="150" x2="260" y2="150" stroke="#DFE1E6" stroke-dasharray="3 3" stroke-width="1" />
-          <line x1="20" y1="230" x2="260" y2="230" stroke="#DFE1E6" stroke-dasharray="3 3" stroke-width="1" />
-          <line x1="20" y1="310" x2="260" y2="310" stroke="#DFE1E6" stroke-dasharray="3 3" stroke-width="1" />
+          <line x1="20" y1="70" x2="260" y2="70" stroke="var(--color-border)" stroke-dasharray="3 3" stroke-width="1" />
+          <line x1="20" y1="150" x2="260" y2="150" stroke="var(--color-border)" stroke-dasharray="3 3" stroke-width="1" />
+          <line x1="20" y1="230" x2="260" y2="230" stroke="var(--color-border)" stroke-dasharray="3 3" stroke-width="1" />
+          <line x1="20" y1="310" x2="260" y2="310" stroke="var(--color-border)" stroke-dasharray="3 3" stroke-width="1" />
 
           <!-- Dynamic route curve line -->
           <path
             d="M 50 65 C 130 80, 80 160, 210 150 C 255 145, 175 240, 85 240 C 35 240, 110 320, 215 315"
-            stroke="#245AE8"
+            stroke="var(--color-maple)"
             stroke-width="2.5"
             stroke-linecap="round"
             stroke-dasharray="6 6"
@@ -29,22 +29,22 @@
 
           <!-- Route Waypoints -->
           <!-- Waypoint 1 -->
-          <circle cx="50" cy="65" r="8" fill="#FFFFFF" stroke="#245AE8" stroke-width="2.5" />
-          <circle cx="50" cy="65" r="3.5" fill="#F4C84B" />
-          <text x="66" y="70" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">出發</text>
+          <circle cx="50" cy="65" r="8" fill="var(--color-paper)" stroke="var(--color-maple)" stroke-width="2.5" />
+          <circle cx="50" cy="65" r="3.5" fill="var(--color-amber)" />
+          <text x="66" y="70" fill="var(--color-ink)" font-size="12" font-weight="600" font-family="system-ui, sans-serif">出發</text>
 
           <!-- Waypoint 2 -->
-          <circle cx="210" cy="150" r="7" fill="#FFFFFF" stroke="#245AE8" stroke-width="2" />
-          <circle cx="210" cy="150" r="3" fill="#245AE8" />
+          <circle cx="210" cy="150" r="7" fill="var(--color-paper)" stroke="var(--color-maple)" stroke-width="2" />
+          <circle cx="210" cy="150" r="3" fill="var(--color-maple)" />
 
           <!-- Waypoint 3 -->
-          <circle cx="85" cy="240" r="7" fill="#FFFFFF" stroke="#245AE8" stroke-width="2" />
-          <circle cx="85" cy="240" r="3" fill="#245AE8" />
+          <circle cx="85" cy="240" r="7" fill="var(--color-paper)" stroke="var(--color-maple)" stroke-width="2" />
+          <circle cx="85" cy="240" r="3" fill="var(--color-maple)" />
 
           <!-- Waypoint 4 (Destination) -->
-          <circle cx="215" cy="315" r="9" fill="#F4C84B" stroke="#172B4D" stroke-width="2" />
-          <circle cx="215" cy="315" r="3" fill="#172B4D" />
-          <text x="156" y="344" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">下一站</text>
+          <circle cx="215" cy="315" r="9" fill="var(--color-amber)" stroke="var(--color-ink)" stroke-width="2" />
+          <circle cx="215" cy="315" r="3" fill="var(--color-ink)" />
+          <text x="156" y="344" fill="var(--color-ink)" font-size="12" font-weight="600" font-family="system-ui, sans-serif">下一站</text>
         </svg>
       </div>
 
@@ -78,8 +78,8 @@
   flex-direction: column;
   align-self: flex-start;
   padding: 0.35rem 0.75rem;
-  border-left: 3px solid var(--color-cobalt);
-  background-color: var(--color-white);
+  border-left: 3px solid var(--color-maple);
+  background-color: var(--color-paper);
   border-radius: var(--radius-xs);
   box-shadow: var(--shadow-sm);
 }
@@ -88,7 +88,7 @@
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 700;
-  color: var(--color-navy);
+  color: var(--color-ink);
   letter-spacing: 0.05em;
 }
 

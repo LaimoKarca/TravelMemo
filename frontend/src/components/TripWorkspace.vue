@@ -751,11 +751,11 @@ function resetFilters() {
                   <svg viewBox="0 0 360 88" fill="none" preserveAspectRatio="xMidYMid slice">
                     <path d="M0 22H360M0 66H360M45 0V88M135 0V88M225 0V88M315 0V88" stroke="currentColor" stroke-opacity=".07" />
                     <path d="M40 59C80 59 68 23 116 25S171 73 216 58 242 22 294 29" stroke="currentColor" stroke-width="2" stroke-dasharray="5 6" stroke-linecap="round" />
-                    <circle cx="40" cy="59" r="7" fill="white" stroke="currentColor" stroke-width="2" />
+                    <circle cx="40" cy="59" r="7" fill="var(--color-paper)" stroke="currentColor" stroke-width="2" />
                     <circle cx="40" cy="59" r="2.5" fill="currentColor" />
-                    <circle cx="216" cy="58" r="4" fill="white" stroke="currentColor" stroke-width="2" />
-                    <path d="M294 14c-8 0-13 6-13 13 0 10 13 21 13 21s13-11 13-21c0-7-5-13-13-13Z" fill="#F4C84B" stroke="currentColor" stroke-width="1.5" />
-                    <circle cx="294" cy="27" r="4" fill="white" stroke="currentColor" stroke-width="1.5" />
+                    <circle cx="216" cy="58" r="4" fill="var(--color-paper)" stroke="currentColor" stroke-width="2" />
+                    <path d="M294 14c-8 0-13 6-13 13 0 10 13 21 13 21s13-11 13-21c0-7-5-13-13-13Z" fill="var(--color-amber)" stroke="currentColor" stroke-width="1.5" />
+                    <circle cx="294" cy="27" r="4" fill="var(--color-paper)" stroke="currentColor" stroke-width="1.5" />
                   </svg>
                 </div>
                 <div class="trip-card-content">
@@ -768,9 +768,9 @@ function resetFilters() {
                     <!-- Restrained route mini-art providing travel identity per brief -->
                     <div class="trip-route-art" aria-hidden="true">
                       <svg width="40" height="16" viewBox="0 0 40 16" fill="none">
-                        <path d="M 4 8 C 14 2, 26 14, 36 8" stroke="#DFE1E6" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round"/>
-                        <circle cx="4" cy="8" r="3" fill="#245AE8"/>
-                        <circle cx="36" cy="8" r="3.5" fill="#F4C84B" stroke="#172B4D" stroke-width="1"/>
+                        <path d="M 4 8 C 14 2, 26 14, 36 8" stroke="var(--color-border)" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round"/>
+                        <circle cx="4" cy="8" r="3" fill="var(--color-maple)"/>
+                        <circle cx="36" cy="8" r="3.5" fill="var(--color-amber)" stroke="var(--color-ink)" stroke-width="1"/>
                       </svg>
                     </div>
                   </div>
@@ -1214,7 +1214,7 @@ function resetFilters() {
   width: 216px;
   min-width: 216px;
   height: 100vh;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -1236,7 +1236,7 @@ function resetFilters() {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-sm);
-  background-color: var(--color-cobalt);
+  background-color: var(--color-maple);
   color: #FFFFFF;
   display: flex;
   align-items: center;
@@ -1261,7 +1261,7 @@ function resetFilters() {
 .brand-subtitle {
   font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--color-cobalt);
+  color: var(--color-maple);
   letter-spacing: 0.05em;
 }
 
@@ -1294,18 +1294,18 @@ function resetFilters() {
 
 .nav-tab-btn:hover {
   color: var(--color-ink);
-  background-color: #F4F5F7;
+  background-color: var(--color-canvas);
 }
 
 .nav-tab-btn.is-active {
-  color: var(--color-cobalt);
-  background-color: var(--color-cobalt-subtle);
-  border-color: var(--color-cobalt-border);
+  color: var(--color-maple);
+  background-color: var(--color-maple-subtle);
+  border-color: var(--color-maple-border);
   font-weight: 600;
 }
 
 .nav-tab-btn:focus-visible {
-  outline: 2px solid var(--color-cobalt);
+  outline: 2px solid var(--color-maple);
   outline-offset: -2px;
 }
 
@@ -1332,8 +1332,8 @@ function resetFilters() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background-color: var(--color-cobalt-subtle);
-  color: var(--color-cobalt);
+  background-color: var(--color-maple-subtle);
+  color: var(--color-maple);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1417,7 +1417,7 @@ function resetFilters() {
 }
 
 .trip-card {
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 0;
@@ -1433,12 +1433,12 @@ function resetFilters() {
 }
 
 .trip-card:hover {
-  border-color: #B3D4FF;
+  border-color: var(--color-maple);
   box-shadow: var(--shadow-sm);
 }
 
 .trip-card:focus-visible {
-  outline: 2px solid var(--color-cobalt);
+  outline: 2px solid var(--color-maple);
   outline-offset: 2px;
 }
 
@@ -1451,12 +1451,12 @@ function resetFilters() {
 
 .trip-cover {
   height: 96px;
-  background: #e9effd;
-  color: var(--color-cobalt);
+  background: var(--color-maple-subtle);
+  color: var(--color-maple);
 }
 .trip-cover svg { width: 100%; height: 100%; }
-.trip-card:nth-child(3n + 2) .trip-cover { background: var(--color-mint); color: #27675a; }
-.trip-card:nth-child(3n) .trip-cover { background: #fff3ce; color: #8a641d; }
+.trip-card:nth-child(3n + 2) .trip-cover { background: var(--color-olive-pale); color: var(--color-olive); }
+.trip-card:nth-child(3n) .trip-cover { background: var(--color-amber-subtle); color: var(--color-amber-text); }
 
 .trip-badge-row {
   display: flex;
@@ -1538,7 +1538,7 @@ function resetFilters() {
 }
 
 .btn-icon:hover {
-  background-color: #F4F5F7;
+  background-color: var(--color-canvas);
   color: var(--color-ink);
 }
 
@@ -1615,7 +1615,7 @@ function resetFilters() {
 
 .banner-tz-pill {
   font-size: 0.6875rem;
-  background-color: #EBECF0;
+  background-color: var(--color-border-light);
   padding: 0.1rem 0.4rem;
   border-radius: var(--radius-xs);
   color: var(--color-ink);
@@ -1699,8 +1699,8 @@ function resetFilters() {
 }
 
 .day-marker {
-  background-color: var(--color-mango);
-  color: #172B4D;
+  background-color: var(--color-amber);
+  color: var(--color-ink);
   font-weight: 700;
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;
@@ -1747,9 +1747,9 @@ function resetFilters() {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background-color: var(--color-cobalt);
-  border: 2px solid #FFFFFF;
-  box-shadow: 0 0 0 1.5px var(--color-cobalt);
+  background-color: var(--color-maple);
+  border: 2px solid var(--color-paper);
+  box-shadow: 0 0 0 1.5px var(--color-maple);
   z-index: 2;
 }
 
@@ -1763,7 +1763,7 @@ function resetFilters() {
 
 .event-card-body {
   flex-grow: 1;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 1rem 1.25rem;
@@ -1775,9 +1775,9 @@ function resetFilters() {
 }
 
 .event-card.is-highlighted .event-card-body {
-  border-color: var(--color-cobalt);
-  box-shadow: 0 0 0 3px rgba(36, 90, 232, 0.25);
-  background-color: #F8FAFD;
+  border-color: var(--color-maple);
+  box-shadow: 0 0 0 3px rgba(169, 85, 53, 0.25);
+  background-color: var(--color-paper);
 }
 
 .event-card-header {
@@ -1798,8 +1798,8 @@ function resetFilters() {
 .event-time-badge {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-cobalt);
-  background-color: var(--color-cobalt-subtle);
+  color: var(--color-maple);
+  background-color: var(--color-maple-subtle);
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-xs);
   font-family: var(--font-mono);
@@ -1808,9 +1808,9 @@ function resetFilters() {
 .event-category-pill {
   font-size: 0.75rem;
   font-weight: 500;
-  color: #172B4D;
-  background-color: var(--color-mango-subtle);
-  border: 1px solid rgba(244, 200, 75, 0.4);
+  color: var(--color-olive-text);
+  background-color: var(--color-olive-pale);
+  border: 1px solid var(--color-border);
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-xs);
 }
@@ -1825,7 +1825,7 @@ function resetFilters() {
   padding: 0.2rem 0.5rem;
   font-size: 0.6875rem;
   font-weight: 500;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   color: var(--color-ink);
@@ -1834,9 +1834,9 @@ function resetFilters() {
 }
 
 .btn-reorder:hover:not(:disabled) {
-  background-color: var(--color-cobalt-subtle);
-  border-color: var(--color-cobalt);
-  color: var(--color-cobalt);
+  background-color: var(--color-maple-subtle);
+  border-color: var(--color-maple);
+  color: var(--color-maple);
 }
 
 .btn-reorder:disabled {
@@ -1865,10 +1865,10 @@ function resetFilters() {
   color: var(--color-subtle);
   line-height: 1.5;
   white-space: pre-line;
-  background-color: #FAFBFC;
+  background-color: var(--color-canvas);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-xs);
-  border-left: 3px solid var(--color-cobalt);
+  border-left: 3px solid var(--color-maple);
 }
 
 .next-destination-indicator {
@@ -1876,8 +1876,8 @@ function resetFilters() {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.75rem;
-  color: var(--color-cobalt);
-  background-color: var(--color-cobalt-subtle);
+  color: var(--color-maple);
+  background-color: var(--color-maple-subtle);
   padding: 0.25rem 0.5rem;
   border-radius: var(--radius-xs);
 }
@@ -1926,14 +1926,14 @@ function resetFilters() {
   justify-content: center;
   padding: 3rem 1.5rem;
   text-align: center;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
   gap: 0.875rem;
 }
 
 .empty-icon {
-  color: var(--color-cobalt);
+  color: var(--color-maple);
   opacity: 0.8;
 }
 
@@ -1953,8 +1953,8 @@ function resetFilters() {
 .page-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(36, 90, 232, 0.2);
-  border-top-color: var(--color-cobalt);
+  border: 3px solid rgba(169, 85, 53, 0.2);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1963,8 +1963,8 @@ function resetFilters() {
 .spinner-small {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(36, 90, 232, 0.3);
-  border-top-color: var(--color-cobalt);
+  border: 2px solid rgba(169, 85, 53, 0.3);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1996,7 +1996,7 @@ function resetFilters() {
     align-items: center;
     justify-content: space-between;
     padding: 0.75rem 1rem;
-    background-color: var(--color-white);
+    background-color: var(--color-paper);
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
   }
@@ -2046,7 +2046,7 @@ function resetFilters() {
     left: 0;
     right: 0;
     height: 56px;
-    background-color: var(--color-white);
+    background-color: var(--color-paper);
     border-top: 1px solid var(--color-border);
     z-index: 10;
   }
@@ -2066,7 +2066,7 @@ function resetFilters() {
   }
 
   .mobile-nav-btn.is-active {
-    color: var(--color-cobalt);
+    color: var(--color-maple);
     font-weight: 700;
   }
 

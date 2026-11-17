@@ -283,44 +283,40 @@ function handleCitationClick(citation: Citation) {
 
 <template>
   <section class="conversation-view-section" aria-label="AI 旅程對話">
-    <!-- Top Header: Title & Disclosure for detailed token/model usage per brief -->
-    <div class="conversation-top-row">
-      <h2 class="view-title">AI 旅程助理</h2>
+    <!-- Top Header: Title & Disclosure for detailed token/model usage -->
+    <header class="conversation-header">
+      <div class="header-main-row">
+        <h2 class="view-title">AI 旅程助理</h2>
 
-      <!-- Detailed token/model info via disclosure per brief -->
-      <details v-if="usage" class="usage-disclosure" role="region" aria-label="今日對話用量">
-        <summary class="usage-summary">
-          <span class="usage-pill-icon" aria-hidden="true">⚡</span>
-          <span>今日用量：{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
-        </summary>
-        <div class="usage-details-popover">
-          <div class="usage-row">
-            <span class="usage-label">今日請求：</span>
-            <span class="usage-value">{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+        <!-- Detailed token/model info via disclosure per brief -->
+        <details v-if="usage" class="usage-disclosure" role="region" aria-label="今日對話用量">
+          <summary class="usage-summary">
+            <svg class="usage-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <span>今日用量：{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+          </summary>
+          <div class="usage-details-popover">
+            <div class="usage-row">
+              <span class="usage-label">今日請求：</span>
+              <span class="usage-value">{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
+            </div>
+            <div class="usage-row">
+              <span class="usage-label">消耗 Tokens：</span>
+              <span class="usage-value">{{ usage.input_tokens + usage.output_tokens }}</span>
+            </div>
+            <div class="usage-meta-tag">
+              <span>模型：{{ usage.model }}</span>
+              <span>({{ usage.date }} UTC)</span>
+            </div>
           </div>
-          <div class="usage-row">
-            <span class="usage-label">消耗 Tokens：</span>
-            <span class="usage-value">{{ usage.input_tokens + usage.output_tokens }}</span>
-          </div>
-          <div class="usage-meta-tag">
-            <span>模型：{{ usage.model }}</span>
-            <span>({{ usage.date }} UTC)</span>
-          </div>
-        </div>
-      </details>
-    </div>
+        </details>
+      </div>
 
-    <!-- Error Banner -->
-    <div v-if="errorMessage" class="error-banner" role="alert">
-      {{ errorMessage }}
-    </div>
-
-    <!-- 2-column Conversation Workspace -->
-    <div class="chat-layout">
-      <!-- Lightweight History Column -->
-      <aside class="conversations-sidebar" aria-label="對話列表清單">
-        <div class="sidebar-header">
-          <h3 class="sidebar-title">歷史對話</h3>
+      <!-- Compact History Toolbar across top (No secondary framed sidebar) -->
+      <div class="conversation-toolbar" aria-label="歷史對話導覽">
+        <div class="toolbar-top">
+          <span class="toolbar-label">歷史對話</span>
           <form class="create-conv-form" @submit.prevent="handleCreateConversation">
             <input
               v-model="newConversationTitle"
@@ -340,32 +336,27 @@ function handleCitationClick(citation: Citation) {
           </form>
         </div>
 
-        <div v-if="loadingConversations" class="sidebar-loading" role="status" aria-live="polite">
+        <div v-if="loadingConversations" class="toolbar-loading" role="status" aria-live="polite">
           <div class="page-spinner-sm" aria-hidden="true"></div>
           <span>載入中...</span>
         </div>
 
-        <div v-else-if="conversations.length === 0" class="sidebar-empty">
+        <div v-else-if="conversations.length === 0" class="toolbar-empty">
           <span>尚未建立對話。輸入主題後點擊「+ 新對話」開始。</span>
         </div>
 
-        <ul v-else class="conversations-list" role="listbox" aria-label="對話列表">
+        <ul v-else class="conversations-list" aria-label="對話列表">
           <li
             v-for="conv in conversations"
             :key="conv.id"
             class="conversation-item"
             :class="{ 'is-active': conv.id === activeConversationId }"
-            role="option"
-            :aria-selected="conv.id === activeConversationId"
-            tabindex="0"
             @click="selectConversation(conv.id)"
-            @keydown.enter="selectConversation(conv.id)"
-            @keydown.space.prevent="selectConversation(conv.id)"
           >
-            <div class="conv-item-content">
+            <button type="button" class="conv-item-content conversation-select" :aria-pressed="conv.id === activeConversationId">
               <span class="conv-title">{{ conv.title || '無標題對話' }}</span>
               <span class="conv-date">{{ conv.created_at ? conv.created_at.slice(0, 10) : '' }}</span>
-            </div>
+            </button>
             <button
               type="button"
               class="btn-delete-conv"
@@ -373,147 +364,148 @@ function handleCitationClick(citation: Citation) {
               :aria-label="`刪除對話 ${conv.title || '無標題對話'}`"
               @click.stop="promptDeleteConversation(conv)"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </li>
         </ul>
-      </aside>
+      </div>
+    </header>
 
-      <!-- Active Chat Area -->
-      <main class="chat-main" aria-label="對話內容">
-        <div v-if="!activeConversationId" class="no-active-chat">
-          <p>請從左側選擇或建立一個對話。</p>
-        </div>
+    <!-- Error Banner -->
+    <div v-if="errorMessage" class="error-banner" role="alert">
+      {{ errorMessage }}
+    </div>
 
-        <div v-else class="chat-thread-container">
-          <!-- Messages Stream: Natural messages per brief -->
-          <div
-            ref="messagesContainerRef"
-            class="messages-stream"
-            role="log"
-            aria-live="polite"
-            aria-relevant="additions text"
-          >
-            <div v-if="loadingMessages" class="chat-loading" role="status">
-              <div class="page-spinner" aria-hidden="true"></div>
-              <p class="loading-text">載入對話紀錄中...</p>
-            </div>
+    <!-- Flattened Open Message Stream & Single Composer (No enclosing chat card) -->
+    <main class="chat-main" aria-label="對話內容">
+      <div v-if="!activeConversationId" class="no-active-chat">
+        <p>請建立或選擇一個歷史對話以開始旅程交談。</p>
+      </div>
 
-            <div v-else-if="messages.length === 0" class="empty-chat-state">
-              <p class="empty-chat-title">您好！我是您的旅行手記助理。</p>
-              <p class="empty-chat-sub">
-                您可以詢問：「我上次去京都吃了哪幾家店？」或「我有記錄過清水寺的隨筆嗎？」
-              </p>
-            </div>
-
-            <!-- Messages List -->
-            <article
-              v-for="msg in messages"
-              :key="msg.id"
-              class="message-card"
-              :class="msg.role === 'user' ? 'message-user' : 'message-assistant'"
-            >
-              <header class="message-header">
-                <span class="message-role-label">
-                  {{ msg.role === 'user' ? '旅人' : '手記助理' }}
-                </span>
-                <span
-                  v-if="msg.role === 'assistant'"
-                  class="message-status-pill"
-                  :class="getStatusBadge(msg.status).className"
-                >
-                  {{ getStatusBadge(msg.status).text }}
-                </span>
-              </header>
-
-              <!-- Clean text interpolation -->
-              <div class="message-content">
-                {{ msg.content }}
-              </div>
-
-              <!-- Citations List: Source chips per brief -->
-              <div
-                v-if="msg.role === 'assistant' && msg.citations && msg.citations.length > 0"
-                class="citations-container"
-              >
-                <span class="citations-heading">引用手記足跡：</span>
-                <div class="citations-grid">
-                  <div
-                    v-for="cite in msg.citations"
-                    :key="cite.event_id"
-                    class="citation-card"
-                    :class="{ 'is-deleted': cite.state === 'deleted' }"
-                  >
-                    <div class="citation-main">
-                      <span class="cite-place-name">{{ cite.place_name }}</span>
-                      <span class="cite-date">{{ cite.date }}</span>
-                    </div>
-
-                    <div class="citation-actions">
-                      <span
-                        class="cite-state-pill"
-                        :class="getCitationStateBadge(cite.state).className"
-                      >
-                        {{ getCitationStateBadge(cite.state).text }}
-                      </span>
-
-                      <button
-                        v-if="cite.state !== 'deleted'"
-                        type="button"
-                        class="btn-cite-inspect"
-                        @click="handleCitationClick(cite)"
-                      >
-                        檢視足跡
-                      </button>
-                      <span v-else class="cite-deleted-tip">已刪除不可檢視</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- Sending assistant indicator -->
-            <div v-if="sendingMessage" class="message-card message-assistant sending-placeholder" role="status">
-              <span class="message-role-label">手記助理</span>
-              <div class="assistant-thinking-row">
-                <div class="page-spinner-sm" aria-hidden="true"></div>
-                <span class="thinking-text">正在翻閱旅程手記並檢索證據...</span>
-              </div>
-            </div>
+      <div v-else class="chat-thread-container">
+        <!-- Open Messages Stream -->
+        <div
+          ref="messagesContainerRef"
+          class="messages-stream"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+        >
+          <div v-if="loadingMessages" class="chat-loading" role="status">
+            <div class="page-spinner" aria-hidden="true"></div>
+            <p class="loading-text">載入對話紀錄中...</p>
           </div>
 
-          <!-- Message Input Bar -->
-          <footer class="chat-input-bar">
-            <form class="chat-form" @submit.prevent="handleSendMessage">
-              <label for="chat-message-input" class="sr-only">輸入對話訊息</label>
-              <textarea
-                id="chat-message-input"
-                v-model="inputContent"
-                class="form-input chat-textarea"
-                placeholder="詢問任何關於您旅程手記的問題...（Enter 發送，Shift+Enter 換行）"
-                rows="2"
-                :disabled="sendingMessage || loadingMessages"
-                @keydown.enter.exact.prevent="handleSendMessage"
-              ></textarea>
-              <button
-                type="submit"
-                class="btn btn-primary send-btn"
-                :disabled="sendingMessage || loadingMessages || !inputContent.trim()"
+          <div v-else-if="messages.length === 0" class="empty-chat-state">
+            <p class="empty-chat-title">您好！我是您的旅行手記助理。</p>
+            <p class="empty-chat-sub">
+              您可以詢問：「我上次去京都吃了哪幾家店？」或「我有記錄過清水寺的隨筆嗎？」
+            </p>
+          </div>
+
+          <!-- Message turns separated with natural space -->
+          <article
+            v-for="msg in messages"
+            :key="msg.id"
+            class="message-card"
+            :class="msg.role === 'user' ? 'message-user' : 'message-assistant'"
+          >
+            <header class="message-header">
+              <span class="message-role-label">
+                {{ msg.role === 'user' ? '旅人' : '手記助理' }}
+              </span>
+              <span
+                v-if="msg.role === 'assistant'"
+                class="message-status-pill"
+                :class="getStatusBadge(msg.status).className"
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="22" y1="2" x2="11" y2="13" />
-                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                </svg>
-                <span>{{ sendingMessage ? '回覆中...' : '發送' }}</span>
-              </button>
-            </form>
-          </footer>
+                {{ getStatusBadge(msg.status).text }}
+              </span>
+            </header>
+
+            <!-- Natural text in open stream -->
+            <div class="message-content">
+              {{ msg.content }}
+            </div>
+
+            <!-- Citations: Flat text rows right below answer (No nested source cards) -->
+            <div
+              v-if="msg.role === 'assistant' && msg.citations && msg.citations.length > 0"
+              class="citations-container"
+            >
+              <span class="citations-heading">引用手記足跡：</span>
+              <div class="citations-flat-list">
+                <div
+                  v-for="cite in msg.citations"
+                  :key="cite.event_id"
+                  class="citation-card citation-row"
+                  :class="{ 'is-deleted': cite.state === 'deleted' }"
+                >
+                  <span class="cite-bullet" aria-hidden="true">—</span>
+                  <span class="cite-place-name">{{ cite.place_name }}</span>
+                  <span class="cite-date">({{ cite.date }})</span>
+                  <span
+                    class="cite-state-pill"
+                    :class="getCitationStateBadge(cite.state).className"
+                  >
+                    {{ getCitationStateBadge(cite.state).text }}
+                  </span>
+
+                  <button
+                    v-if="cite.state !== 'deleted'"
+                    type="button"
+                    class="btn-cite-inspect"
+                    @click="handleCitationClick(cite)"
+                  >
+                    檢視足跡
+                  </button>
+                  <span v-else class="cite-deleted-tip">已刪除不可檢視</span>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <!-- Sending assistant indicator -->
+          <div v-if="sendingMessage" class="message-card message-assistant sending-placeholder" role="status">
+            <span class="message-role-label">手記助理</span>
+            <div class="assistant-thinking-row">
+              <div class="page-spinner-sm" aria-hidden="true"></div>
+              <span class="thinking-text">正在翻閱旅程手記並檢索證據...</span>
+            </div>
+          </div>
         </div>
-      </main>
-    </div>
+
+        <!-- Single Composer on page -->
+        <footer class="chat-input-bar">
+          <form class="chat-form" @submit.prevent="handleSendMessage">
+            <label for="chat-message-input" class="sr-only">輸入對話訊息</label>
+            <textarea
+              id="chat-message-input"
+              v-model="inputContent"
+              class="form-input chat-textarea"
+              placeholder="詢問任何關於您旅程手記的問題...（Enter 發送，Shift+Enter 換行）"
+              rows="2"
+              :disabled="sendingMessage || loadingMessages"
+              @keydown.enter.exact.prevent="handleSendMessage"
+            ></textarea>
+            <button
+              type="submit"
+              class="btn btn-primary send-btn"
+              :disabled="sendingMessage || loadingMessages || !inputContent.trim()"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+              <span>{{ sendingMessage ? '回覆中...' : '發送' }}</span>
+            </button>
+          </form>
+        </footer>
+      </div>
+    </main>
 
     <!-- Confirm Dialog for Deleting Conversation -->
     <ConfirmDialog
@@ -529,13 +521,30 @@ function handleCitationClick(citation: Citation) {
 
 <style scoped>
 .conversation-view-section {
+  --color-pale-accent: var(--color-maple-subtle);
+  --color-amber-pale: var(--color-amber-subtle);
+
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
   width: 100%;
+  height: calc(100dvh - 80px);
+  min-height: 0;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  box-sizing: border-box;
 }
 
-.conversation-top-row {
+/* Header & Compact Toolbar */
+.conversation-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header-main-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -550,13 +559,7 @@ function handleCitationClick(citation: Citation) {
   letter-spacing: -0.01em;
 }
 
-.view-subtitle {
-  font-size: 0.8125rem;
-  color: var(--color-subtle);
-  margin-top: 0.2rem;
-}
-
-/* Disclosure for token/model info per brief */
+/* Usage disclosure */
 .usage-disclosure {
   position: relative;
   font-size: 0.8125rem;
@@ -567,7 +570,7 @@ function handleCitationClick(citation: Citation) {
   align-items: center;
   gap: 0.4rem;
   padding: 0.35rem 0.65rem;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   cursor: pointer;
@@ -581,17 +584,22 @@ function handleCitationClick(citation: Citation) {
   display: none;
 }
 
-.usage-pill-icon {
-  font-size: 0.875rem;
+.usage-icon {
+  color: var(--color-maple);
+  flex-shrink: 0;
 }
 
 .usage-details-popover {
-  margin-top: 0.5rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 20;
+  min-width: 220px;
   padding: 0.625rem 0.875rem;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 12px rgba(69, 58, 50, 0.08);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -610,7 +618,7 @@ function handleCitationClick(citation: Citation) {
 
 .usage-value {
   font-weight: 700;
-  color: var(--color-cobalt);
+  color: var(--color-maple);
 }
 
 .usage-meta-tag {
@@ -622,129 +630,135 @@ function handleCitationClick(citation: Citation) {
   margin-top: 0.2rem;
 }
 
-.error-banner {
-  background-color: var(--color-error-bg);
-  border: 1px solid var(--color-error-border);
-  color: var(--color-error-text);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-}
-
-/* Chat Layout: Lightweight history column and natural messages */
-.chat-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  background-color: var(--color-white);
-  min-height: 580px;
-  max-height: 75vh;
-  overflow: hidden;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-/* Lightweight Sidebar */
-.conversations-sidebar {
-  border-right: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  background-color: #FAFBFC;
-  min-width: 0;
-}
-
-.sidebar-header {
-  padding: 0.875rem;
-  border-bottom: 1px solid var(--color-border);
+/* Compact History Toolbar (Flat across top) */
+.conversation-toolbar {
   display: flex;
   flex-direction: column;
   gap: 0.625rem;
 }
 
-.sidebar-title {
-  font-size: 0.875rem;
-  font-weight: 700;
-  color: var(--color-ink);
+.toolbar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.toolbar-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-subtle);
 }
 
 .create-conv-form {
   display: flex;
-  gap: 0.35rem;
-  width: 100%;
+  gap: 0.4rem;
+  align-items: center;
 }
 
 .conv-title-input {
-  min-height: 34px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  flex: 1 1 0;
-  min-width: 0;
+  min-height: 32px;
+  height: 32px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8125rem;
+  width: 180px;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-ink);
+}
+
+.conv-title-input:focus {
+  border-color: var(--color-maple);
+  box-shadow: 0 0 0 2px var(--color-pale-accent);
+  outline: none;
 }
 
 .btn-new-conv {
-  min-height: 34px;
-  padding: 0.2rem 0.5rem;
+  min-height: 32px;
+  height: 32px;
+  padding: 0.2rem 0.65rem;
   font-size: 0.75rem;
   white-space: nowrap;
-  flex-shrink: 0;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  color: var(--color-ink);
+  border-radius: var(--radius-xs);
 }
 
-.sidebar-loading,
-.sidebar-empty {
-  padding: 1.5rem 0.875rem;
-  text-align: center;
+.btn-new-conv:hover:not(:disabled) {
+  background-color: var(--color-pale-accent);
+  border-color: var(--color-maple);
+}
+
+.toolbar-loading,
+.toolbar-empty {
   font-size: 0.75rem;
   color: var(--color-subtle);
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.25rem 0;
 }
 
+/* Horizontal pill list */
 .conversations-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
   list-style: none;
-  overflow-y: auto;
-  flex: 1;
+  padding: 0;
+  margin: 0;
 }
 
 .conversation-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0.625rem 0.875rem;
+  gap: 0.45rem;
+  padding: 0.3rem 0.6rem;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  border-bottom: 1px solid var(--color-border-light);
-  transition: background-color 0.15s ease;
+  transition: all 0.15s ease;
+  user-select: none;
 }
 
 .conversation-item:hover {
-  background-color: #F4F5F7;
+  background-color: var(--color-pale-accent);
+  border-color: var(--color-maple);
 }
 
 .conversation-item.is-active {
-  background-color: var(--color-cobalt-subtle);
-  border-left: 3px solid var(--color-cobalt);
+  background-color: var(--color-pale-accent);
+  border-color: var(--color-maple);
 }
 
 .conversation-item:focus-visible {
-  outline: 2px solid var(--color-cobalt);
-  outline-offset: -2px;
+  outline: 2px solid var(--color-maple);
+  outline-offset: 1px;
 }
 
 .conv-item-content {
   display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  min-width: 0;
-  flex: 1;
+  align-items: baseline;
+  gap: 0.35rem;
 }
 
 .conv-title {
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-ink);
+  max-width: 140px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.conversation-item.is-active .conv-title {
+  color: var(--color-maple);
+  font-weight: 600;
 }
 
 .conv-date {
@@ -756,13 +770,14 @@ function handleCitationClick(citation: Citation) {
   background: transparent;
   border: none;
   color: var(--color-subtle);
-  width: 26px;
-  height: 26px;
+  width: 18px;
+  height: 18px;
   border-radius: var(--radius-xs);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  padding: 0;
 }
 
 .btn-delete-conv:hover {
@@ -770,12 +785,23 @@ function handleCitationClick(citation: Citation) {
   color: var(--color-error-text);
 }
 
-/* Chat Main */
+/* Error Banner */
+.error-banner {
+  background-color: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error-text);
+  padding: 0.65rem 0.875rem;
+  border-radius: var(--radius-xs);
+  font-size: 0.875rem;
+}
+
+/* Flattened Chat Main */
 .chat-main {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-width: 0;
+  min-height: 0;
+  width: 100%;
 }
 
 .no-active-chat {
@@ -785,28 +811,40 @@ function handleCitationClick(citation: Citation) {
   height: 100%;
   color: var(--color-subtle);
   font-size: 0.875rem;
-  padding: 2rem;
+  padding: 3rem 1rem;
   text-align: center;
 }
 
 .chat-thread-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 580px;
+  flex: 1;
   width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  min-height: 0;
 }
 
+/* Open message stream: single scrollbox */
 .messages-stream {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: 1rem 0;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  background-color: var(--color-canvas);
+  gap: 1.75rem;
   width: 100%;
-  box-sizing: border-box;
+  min-height: 0;
+}
+
+.conversation-select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
 }
 
 .chat-loading {
@@ -823,7 +861,6 @@ function handleCitationClick(citation: Citation) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
   padding: 3rem 1.5rem;
   text-align: center;
   color: var(--color-subtle);
@@ -838,77 +875,62 @@ function handleCitationClick(citation: Citation) {
 .empty-chat-sub {
   font-size: 0.8125rem;
   margin-top: 0.35rem;
-  max-width: 400px;
+  max-width: 420px;
   line-height: 1.5;
 }
 
-/* Natural Message Cards */
+/* Open Message Turn (No surrounding border/background/shadow/rounded-card) */
 .message-card {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  border-radius: var(--radius-sm);
-  padding: 0.875rem 1rem;
-  max-width: 82%;
-  line-height: 1.5;
-  box-sizing: border-box;
-}
-
-.message-user {
-  align-self: flex-end;
-  background-color: var(--color-cobalt);
-  color: #FFFFFF;
-}
-
-.message-user .message-role-label {
-  color: #FFFFFF;
-  opacity: 0.85;
-}
-
-.message-user .message-content {
-  color: #FFFFFF;
-}
-
-.message-assistant {
-  align-self: flex-start;
-  background-color: var(--color-white);
+  gap: 0.4rem;
+  width: 100%;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
 .message-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+  gap: 0.625rem;
 }
 
 .message-role-label {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: var(--color-cobalt);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+}
+
+.message-user .message-role-label {
+  color: var(--color-maple);
+}
+
+.message-assistant .message-role-label {
+  color: var(--color-olive);
 }
 
 .message-status-pill {
   font-size: 0.6875rem;
-  padding: 0.12rem 0.4rem;
+  padding: 0.1rem 0.4rem;
   border-radius: var(--radius-xs);
   font-weight: 600;
 }
 
 .status-answered {
-  background-color: var(--color-mint);
-  color: var(--color-mint-text);
+  background-color: var(--color-olive-pale);
+  color: var(--color-olive);
 }
 
 .status-insufficient {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning-text);
+  background-color: var(--color-amber-pale);
+  color: #7A5714;
 }
 
 .status-clarify {
-  background-color: var(--color-mango-subtle);
-  color: #172B4D;
+  background-color: var(--color-pale-accent);
+  color: var(--color-maple);
 }
 
 .status-unavailable {
@@ -917,16 +939,18 @@ function handleCitationClick(citation: Citation) {
 }
 
 .message-content {
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   color: var(--color-ink);
   white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.6;
 }
 
-/* Citations Container: Source chips */
+/* Citations as Flat Text Rows / Inline Links (No nested cards) */
 .citations-container {
-  border-top: 1px solid var(--color-border-light);
-  padding-top: 0.5rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--color-border-light);
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -938,33 +962,31 @@ function handleCitationClick(citation: Citation) {
   color: var(--color-subtle);
 }
 
-.citations-grid {
+.citations-flat-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
-.citation-card {
+.citation-card.citation-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.35rem 0;
-  font-size: 0.75rem;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
 }
 
-.citation-card.is-deleted {
-  background-color: #FDF6F6;
-  border-color: #F3D4D4;
-  opacity: 0.8;
+.citation-card.citation-row.is-deleted {
+  opacity: 0.7;
 }
 
-.citation-main {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  flex: 1;
+.cite-bullet {
+  color: var(--color-subtle);
+  user-select: none;
 }
 
 .cite-place-name {
@@ -974,31 +996,24 @@ function handleCitationClick(citation: Citation) {
 
 .cite-date {
   color: var(--color-subtle);
-  font-size: 0.6875rem;
-}
-
-.citation-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
+  font-size: 0.75rem;
 }
 
 .cite-state-pill {
   font-size: 0.6875rem;
-  padding: 0.1rem 0.35rem;
+  padding: 0.08rem 0.35rem;
   border-radius: var(--radius-xs);
   font-weight: 600;
 }
 
 .cite-current {
-  background-color: var(--color-mint);
-  color: var(--color-mint-text);
+  background-color: var(--color-olive-pale);
+  color: var(--color-olive);
 }
 
 .cite-changed {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning-text);
+  background-color: var(--color-amber-pale);
+  color: #7A5714;
 }
 
 .cite-deleted {
@@ -1006,35 +1021,35 @@ function handleCitationClick(citation: Citation) {
   color: var(--color-error-text);
 }
 
+/* Citations as Text Link */
 .btn-cite-inspect {
-  background: var(--color-white);
-  border: 1px solid var(--color-cobalt);
-  color: var(--color-cobalt);
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-xs);
-  font-size: 0.6875rem;
-  font-weight: 500;
+  background: transparent;
+  border: none;
+  color: var(--color-maple);
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
   cursor: pointer;
-  min-height: 26px;
-  white-space: nowrap;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  line-height: inherit;
 }
 
 .btn-cite-inspect:hover {
-  background-color: var(--color-cobalt);
-  color: #FFFFFF;
+  color: var(--color-maple-hover);
 }
 
 .cite-deleted-tip {
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   color: var(--color-subtle);
 }
 
-/* Sending indicator */
+/* Assistant Thinking Placeholder */
 .assistant-thinking-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.35rem 0;
+  padding: 0.2rem 0;
 }
 
 .thinking-text {
@@ -1043,11 +1058,11 @@ function handleCitationClick(citation: Citation) {
   font-style: italic;
 }
 
-/* Chat Input Bar */
+/* Single Composer at bottom */
 .chat-input-bar {
-  padding: 0.875rem 1rem;
+  padding-top: 0.875rem;
   border-top: 1px solid var(--color-border);
-  background-color: var(--color-white);
+  background-color: transparent;
 }
 
 .chat-form {
@@ -1060,22 +1075,41 @@ function handleCitationClick(citation: Citation) {
   resize: none;
   min-height: 44px;
   font-size: 0.875rem;
-  line-height: 1.4;
-  padding: 0.5rem 0.75rem;
+  line-height: 1.45;
+  padding: 0.55rem 0.75rem;
   flex: 1;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  color: var(--color-ink);
+}
+
+.chat-textarea:focus {
+  border-color: var(--color-maple);
+  box-shadow: 0 0 0 2px var(--color-pale-accent);
+  outline: none;
 }
 
 .send-btn {
   height: 44px;
   white-space: nowrap;
   flex-shrink: 0;
+  background-color: var(--color-maple);
+  color: #FFFFFF;
+  border: 1px solid var(--color-maple);
 }
 
+.send-btn:hover:not(:disabled) {
+  background-color: var(--color-maple-hover);
+  border-color: var(--color-maple-hover);
+}
+
+/* Minimal Spinners */
 .page-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(36, 90, 232, 0.2);
-  border-top-color: var(--color-cobalt);
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--color-border-light);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1083,8 +1117,8 @@ function handleCitationClick(citation: Citation) {
 .page-spinner-sm {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(36, 90, 232, 0.3);
-  border-top-color: var(--color-cobalt);
+  border: 2px solid var(--color-border-light);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1100,41 +1134,32 @@ function handleCitationClick(citation: Citation) {
   }
 }
 
-/* Responsive */
+/* Responsive adjustments */
 @media (max-width: 768px) {
-  .chat-layout {
-    grid-template-columns: minmax(0, 1fr);
-    max-height: none;
+  .conversation-view-section { height: calc(100dvh - 160px); }
+  .header-main-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
   }
 
-  .conversations-sidebar {
-    border-right: none;
-    border-bottom: 1px solid var(--color-border);
-    max-height: 200px;
+  .toolbar-top {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .chat-thread-container {
-    min-height: 420px;
+  .create-conv-form {
+    width: 100%;
+  }
+
+  .conv-title-input {
+    flex: 1;
+    width: auto;
   }
 
   .messages-stream {
-    padding: 1rem 0.75rem;
-    gap: 1rem;
-  }
-
-  .message-card {
-    max-width: 100%;
-  }
-
-  .citation-card {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.35rem;
-  }
-
-  .citation-actions {
-    width: 100%;
-    justify-content: flex-end;
+    padding: 0.75rem 0;
+    gap: 1.25rem;
   }
 }
 </style>

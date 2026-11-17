@@ -258,7 +258,7 @@ function handleJump() {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(9, 30, 66, 0.54);
+  background-color: rgba(69, 58, 50, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -269,7 +269,7 @@ function handleJump() {
 .dialog-card {
   background-color: var(--color-paper);
   border-radius: var(--radius-lg);
-  box-shadow: 0 10px 30px rgba(21, 62, 72, 0.2);
+  box-shadow: 0 10px 30px rgba(69, 58, 50, 0.15);
   border: 1px solid var(--color-border);
   width: 100%;
   max-width: 540px;
@@ -309,7 +309,7 @@ function handleJump() {
 
 .btn-close:hover {
   color: var(--color-ink);
-  background-color: rgba(23, 107, 104, 0.08);
+  background-color: var(--color-maple-subtle);
 }
 
 .dialog-body {
@@ -337,8 +337,8 @@ function handleJump() {
 .category-pill {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #4a3805;
-  background-color: #fff2c4;
+  color: var(--color-amber-text);
+  background-color: var(--color-amber-subtle);
   padding: 0.2rem 0.6rem;
   border-radius: var(--radius-sm);
 }
@@ -347,7 +347,7 @@ function handleJump() {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.75rem 1rem;
-  background-color: #f7fbfc;
+  background-color: var(--color-canvas);
   padding: 1rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
@@ -384,7 +384,7 @@ function handleJump() {
 .notes-label {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: var(--color-teal);
+  color: var(--color-maple);
 }
 
 .notes-text {
@@ -392,10 +392,10 @@ function handleJump() {
   color: var(--color-ink);
   line-height: 1.6;
   white-space: pre-line;
-  background-color: #fafdfd;
+  background-color: var(--color-canvas);
   padding: 0.75rem;
   border-radius: var(--radius-sm);
-  border-left: 3px solid var(--color-teal);
+  border-left: 3px solid var(--color-maple);
 }
 
 .version-info {
@@ -411,7 +411,7 @@ function handleJump() {
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--color-border);
-  background-color: #fcfefe;
+  background-color: var(--color-paper);
 }
 
 .jump-btn {
@@ -439,8 +439,8 @@ function handleJump() {
 .page-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(23, 107, 104, 0.2);
-  border-top-color: var(--color-teal);
+  border: 3px solid rgba(169, 85, 53, 0.2);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

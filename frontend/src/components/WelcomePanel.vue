@@ -98,8 +98,8 @@ const emit = defineEmits<{
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background-color: rgba(23, 107, 104, 0.12);
-  color: var(--color-teal);
+  background-color: var(--color-maple-subtle);
+  color: var(--color-maple);
   flex-shrink: 0;
 }
 
@@ -118,7 +118,7 @@ const emit = defineEmits<{
 }
 
 .status-card {
-  background-color: #f7fbfc;
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 1.25rem;
@@ -137,8 +137,8 @@ const emit = defineEmits<{
 .status-pill {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-teal);
-  background-color: rgba(23, 107, 104, 0.1);
+  color: var(--color-olive-text);
+  background-color: var(--color-olive-pale);
   padding: 0.2rem 0.5rem;
   border-radius: var(--radius-sm);
   letter-spacing: 0.05em;
@@ -159,11 +159,11 @@ const emit = defineEmits<{
 .roadmap-notice {
   display: flex;
   gap: 0.75rem;
-  background-color: #fff9e6;
-  border: 1px solid #fae8a8;
+  background-color: var(--color-amber-subtle);
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-sm);
   padding: 0.875rem 1rem;
-  color: #705510;
+  color: var(--color-amber-text);
   font-size: 0.875rem;
   line-height: 1.5;
   margin-top: 0.5rem;
@@ -219,8 +219,8 @@ const emit = defineEmits<{
 .spinner-small {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(23, 107, 104, 0.3);
-  border-top-color: var(--color-teal);
+  border: 2px solid rgba(169, 85, 53, 0.3);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

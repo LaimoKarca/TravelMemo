@@ -400,7 +400,7 @@ function getVectorStatusLabel(status: string): string {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--color-subtle);
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   padding: 0.25rem 0.625rem;
   border-radius: var(--radius-xs);
   border: 1px solid var(--color-border);
@@ -410,15 +410,15 @@ function getVectorStatusLabel(status: string): string {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background-color: #36B37E;
+  background-color: var(--color-olive);
 }
 
 .status-indicator-dot.building {
-  background-color: var(--color-mango);
+  background-color: var(--color-amber);
 }
 
 .status-indicator-dot.degraded {
-  background-color: #FF8B00;
+  background-color: #C06020;
 }
 
 /* Search Form Card */
@@ -617,7 +617,7 @@ function getVectorStatusLabel(status: string): string {
 }
 
 .source-card {
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 1rem 1.25rem;
@@ -631,7 +631,7 @@ function getVectorStatusLabel(status: string): string {
 }
 
 .source-card:hover {
-  border-color: #B3D4FF;
+  border-color: var(--color-maple);
   box-shadow: var(--shadow-sm);
 }
 
@@ -661,8 +661,8 @@ function getVectorStatusLabel(status: string): string {
 .source-date-pill {
   font-size: 0.6875rem;
   font-weight: 600;
-  color: var(--color-mint-text);
-  background-color: var(--color-mint);
+  color: var(--color-olive-text);
+  background-color: var(--color-olive-pale);
   padding: 0.12rem 0.4rem;
   border-radius: var(--radius-xs);
 }
@@ -671,7 +671,7 @@ function getVectorStatusLabel(status: string): string {
   font-size: 0.6875rem;
   font-family: var(--font-mono);
   color: var(--color-subtle);
-  background-color: #EBECF0;
+  background-color: var(--color-canvas);
   padding: 0.12rem 0.4rem;
   border-radius: var(--radius-xs);
 }
@@ -679,9 +679,9 @@ function getVectorStatusLabel(status: string): string {
 .source-cat-pill {
   font-size: 0.6875rem;
   font-weight: 500;
-  color: #172B4D;
-  background-color: var(--color-mango-subtle);
-  border: 1px solid rgba(244, 200, 75, 0.4);
+  color: var(--color-amber-text);
+  background-color: var(--color-amber-subtle);
+  border: 1px solid rgba(224, 182, 91, 0.4);
   padding: 0.12rem 0.4rem;
   border-radius: var(--radius-xs);
 }
@@ -689,13 +689,13 @@ function getVectorStatusLabel(status: string): string {
 .trip-tag {
   font-size: 0.75rem;
   font-weight: 500;
-  color: var(--color-cobalt);
+  color: var(--color-maple);
 }
 
 .score-badge {
   font-size: 0.6875rem;
   color: var(--color-subtle);
-  background-color: #F4F5F7;
+  background-color: var(--color-canvas);
   padding: 0.15rem 0.45rem;
   border-radius: var(--radius-xs);
 }
@@ -752,10 +752,10 @@ function getVectorStatusLabel(status: string): string {
 
 .relation-block {
   font-size: 0.75rem;
-  background-color: var(--color-cobalt-subtle);
+  background-color: var(--color-maple-subtle);
   padding: 0.35rem 0.5rem;
   border-radius: var(--radius-xs);
-  color: var(--color-cobalt);
+  color: var(--color-maple);
 }
 
 .relation-label {
@@ -786,14 +786,14 @@ function getVectorStatusLabel(status: string): string {
   justify-content: center;
   padding: 3rem 1.5rem;
   text-align: center;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-sm);
   gap: 0.75rem;
 }
 
 .empty-icon {
-  color: var(--color-cobalt);
+  color: var(--color-maple);
   opacity: 0.8;
 }
 
@@ -813,8 +813,8 @@ function getVectorStatusLabel(status: string): string {
 .page-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(36, 90, 232, 0.2);
-  border-top-color: var(--color-cobalt);
+  border: 3px solid rgba(169, 85, 53, 0.2);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }

@@ -224,8 +224,8 @@ defineExpose({
 .spinner-small {
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(36, 90, 232, 0.3);
-  border-top-color: var(--color-cobalt);
+  border: 2px solid rgba(169, 85, 53, 0.3);
+  border-top-color: var(--color-maple);
 }
 
 @keyframes spin {

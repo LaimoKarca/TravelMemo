@@ -19,7 +19,7 @@ def _render_otp_html(code: str, expiry_minutes: int, public_url: str = "") -> st
             ' style="margin-top: 20px;">\n'
             "                <tr>\n"
             '                  <td align="center" style="border-radius: 6px;'
-            ' background-color: #245AE8;">\n'
+            ' background-color: #A95535;">\n'
             f'                    <a href="{safe_url}" target="_blank" rel="noopener noreferrer"'
             ' style="font-size: 14px; font-weight: 600; color: #FFFFFF; text-decoration: none;'
             ' padding: 10px 22px; border-radius: 6px; display: inline-block;">'
@@ -36,42 +36,42 @@ def _render_otp_html(code: str, expiry_minutes: int, public_url: str = "") -> st
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TravelMemo 登入驗證碼</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #F5F7FB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif; -webkit-font-smoothing: antialiased; word-break: break-word;">
-  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #F5F7FB; width: 100%; margin: 0; padding: 36px 16px;">
+<body style="margin: 0; padding: 0; background-color: #F6F1E7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang TC', 'Microsoft JhengHei', sans-serif; -webkit-font-smoothing: antialiased; word-break: break-word;">
+  <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="background-color: #F6F1E7; width: 100%; margin: 0; padding: 36px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #FFFFFF; border-radius: 8px; border: 1px solid #DCEDE5; overflow: hidden;">
+        <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="max-width: 520px; background-color: #FBF8F1; border-radius: 8px; border: 1px solid #DCD1BF; overflow: hidden;">
           <tr>
-            <td style="height: 4px; background-color: #245AE8; line-height: 4px; font-size: 4px;">&nbsp;</td>
+            <td style="height: 4px; background-color: #A95535; line-height: 4px; font-size: 4px;">&nbsp;</td>
           </tr>
           <tr>
             <td style="padding: 32px 32px 28px 32px;">
               <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                 <tr>
                   <td align="left" style="vertical-align: middle;">
-                    <span style="font-size: 18px; font-weight: 700; color: #172B4D; letter-spacing: -0.2px;">TravelMemo</span>
+                    <span style="font-size: 18px; font-weight: 700; color: #453A32; letter-spacing: -0.2px;">TravelMemo</span>
                   </td>
                   <td align="right" style="vertical-align: middle;">
                     <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="display: inline-table;">
                       <tr>
-                        <td style="width: 8px; height: 8px; border-radius: 50%; background-color: #245AE8; vertical-align: middle;"></td>
-                        <td style="width: 20px; border-top: 2px dashed #DCEDE5; vertical-align: middle;"></td>
-                        <td style="width: 8px; height: 8px; border-radius: 50%; background-color: #F4C84B; vertical-align: middle;"></td>
+                        <td style="width: 8px; height: 8px; border-radius: 50%; background-color: #A95535; vertical-align: middle;"></td>
+                        <td style="width: 20px; border-top: 2px dashed #DCD1BF; vertical-align: middle;"></td>
+                        <td style="width: 8px; height: 8px; border-radius: 50%; background-color: #E0B65B; vertical-align: middle;"></td>
                       </tr>
                     </table>
                   </td>
                 </tr>
               </table>
 
-              <h1 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #172B4D; line-height: 1.4;">登入驗證碼</h1>
-              <p style="margin: 0 0 24px 0; font-size: 14px; color: #172B4D; line-height: 1.6; opacity: 0.85;">
+              <h1 style="margin: 0 0 12px 0; font-size: 20px; font-weight: 700; color: #453A32; line-height: 1.4;">登入驗證碼</h1>
+              <p style="margin: 0 0 24px 0; font-size: 14px; color: #453A32; line-height: 1.6; opacity: 0.85;">
                 請輸入以下驗證碼登入。
               </p>
 
               <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 24px;">
                 <tr>
-                  <td align="center" style="background-color: #F5F7FB; border: 1px solid #DCEDE5; border-radius: 6px; padding: 20px 16px;">
-                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Consolas, Monaco, monospace; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #172B4D; user-select: all; -webkit-user-select: all; text-align: center; display: inline-block;">
+                  <td align="center" style="background-color: #F6F1E7; border: 1px solid #DCD1BF; border-radius: 6px; padding: 20px 16px;">
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Consolas, Monaco, monospace; font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #453A32; user-select: all; -webkit-user-select: all; text-align: center; display: inline-block;">
                       {safe_code}
                     </div>
                   </td>
@@ -80,21 +80,21 @@ def _render_otp_html(code: str, expiry_minutes: int, public_url: str = "") -> st
 
               <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
                 <tr>
-                  <td style="border-left: 3px solid #245AE8; padding-left: 12px;">
-                    <p style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #172B4D; line-height: 1.5;">
+                  <td style="border-left: 3px solid #A95535; padding-left: 12px;">
+                    <p style="margin: 0 0 4px 0; font-size: 14px; font-weight: 600; color: #453A32; line-height: 1.5;">
                       有效時間為 {safe_minutes} 分鐘。
                     </p>
-                    <p style="margin: 0; font-size: 13px; color: #6B778C; line-height: 1.5;">
+                    <p style="margin: 0; font-size: 13px; color: #766859; line-height: 1.5;">
                       若非本人操作，請忽略此信。
                     </p>
                   </td>
                 </tr>
               </table>{url_block}
 
-              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-top: 24px; border-top: 1px solid #DCEDE5;">
+              <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-top: 24px; border-top: 1px solid #DCD1BF;">
                 <tr>
                   <td style="padding-top: 16px;">
-                    <p style="margin: 0; font-size: 12px; color: #8993A4; line-height: 1.5;">
+                    <p style="margin: 0; font-size: 12px; color: #766859; line-height: 1.5;">
                       TravelMemo &middot; 旅程手記
                     </p>
                   </td>

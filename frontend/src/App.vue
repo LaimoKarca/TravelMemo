@@ -225,7 +225,7 @@ async function handleLogout() {
   grid-template-columns: minmax(320px, 440px) 1fr;
   min-height: 100vh;
   width: 100%;
-  background-color: var(--color-white);
+  background-color: var(--color-paper);
   box-sizing: border-box;
 }
 
@@ -265,8 +265,8 @@ async function handleLogout() {
 .page-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(36, 90, 232, 0.2);
-  border-top-color: var(--color-cobalt);
+  border: 3px solid rgba(169, 85, 53, 0.2);
+  border-top-color: var(--color-maple);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -288,7 +288,7 @@ async function handleLogout() {
   .auth-main {
     min-height: 100vh;
     padding: 2.5rem 1.25rem;
-    background-color: var(--color-white);
+    background-color: var(--color-canvas);
   }
 }
 

@@ -357,7 +357,7 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(9, 30, 66, 0.54);
+  background-color: rgba(69, 58, 50, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -371,7 +371,7 @@ onBeforeUnmount(() => {
   max-width: 540px;
   background-color: var(--color-paper);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 36px rgba(21, 62, 72, 0.2);
+  box-shadow: 0 16px 36px rgba(69, 58, 50, 0.15);
   border: 1px solid var(--color-border);
   padding: 1.75rem;
   display: flex;
@@ -404,16 +404,16 @@ onBeforeUnmount(() => {
 }
 
 .close-button:hover {
-  background-color: rgba(21, 62, 72, 0.08);
+  background-color: var(--color-maple-subtle);
   color: var(--color-ink);
 }
 
 .conflict-banner {
-  background-color: #fff9e6;
-  border: 1px solid #fae8a8;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-md);
   padding: 0.875rem 1rem;
-  color: #705510;
+  color: var(--color-warning-text);
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -429,8 +429,8 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 0.35rem 0.875rem;
   font-size: 0.875rem;
-  background-color: #ffffff;
-  border-color: #d1b54c;
+  background-color: var(--color-paper);
+  border-color: var(--color-border);
 }
 
 .error-banner {
@@ -470,7 +470,7 @@ onBeforeUnmount(() => {
 }
 
 .required-star {
-  color: #ba2f2f;
+  color: var(--color-error-text);
 }
 
 .form-textarea {

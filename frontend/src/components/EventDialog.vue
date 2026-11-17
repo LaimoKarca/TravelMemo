@@ -526,7 +526,7 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
-  background-color: rgba(9, 30, 66, 0.54);
+  background-color: rgba(69, 58, 50, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -541,7 +541,7 @@ onBeforeUnmount(() => {
   max-height: 90vh;
   background-color: var(--color-paper);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 36px rgba(21, 62, 72, 0.2);
+  box-shadow: 0 16px 36px rgba(69, 58, 50, 0.15);
   border: 1px solid var(--color-border);
   padding: 1.75rem;
   display: flex;
@@ -575,16 +575,16 @@ onBeforeUnmount(() => {
 }
 
 .close-button:hover {
-  background-color: rgba(21, 62, 72, 0.08);
+  background-color: var(--color-maple-subtle);
   color: var(--color-ink);
 }
 
 .conflict-banner {
-  background-color: #fff9e6;
-  border: 1px solid #fae8a8;
+  background-color: var(--color-warning-bg);
+  border: 1px solid var(--color-warning-border);
   border-radius: var(--radius-md);
   padding: 0.875rem 1rem;
-  color: #705510;
+  color: var(--color-warning-text);
   font-size: 0.875rem;
   line-height: 1.5;
 }
@@ -600,8 +600,8 @@ onBeforeUnmount(() => {
   min-height: 36px;
   padding: 0.35rem 0.875rem;
   font-size: 0.875rem;
-  background-color: #ffffff;
-  border-color: #d1b54c;
+  background-color: var(--color-paper);
+  border-color: var(--color-border);
 }
 
 .error-banner {
@@ -631,7 +631,7 @@ onBeforeUnmount(() => {
 .fieldset-legend {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-teal);
+  color: var(--color-maple);
   padding: 0 0.5rem;
 }
 
@@ -652,16 +652,16 @@ onBeforeUnmount(() => {
 }
 
 .mode-chip.is-active {
-  background-color: var(--color-teal);
+  background-color: var(--color-maple);
   color: #ffffff;
-  border-color: var(--color-teal);
+  border-color: var(--color-maple);
   font-weight: 500;
 }
 
 .place-bound-hint {
   font-size: 0.8125rem;
   color: var(--color-subtle);
-  background-color: #f7fbfc;
+  background-color: var(--color-canvas);
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-sm);
   display: flex;
@@ -673,7 +673,7 @@ onBeforeUnmount(() => {
 .inline-link-btn {
   background: transparent;
   border: none;
-  color: var(--color-teal);
+  color: var(--color-maple);
   text-decoration: underline;
   cursor: pointer;
   font-size: 0.8125rem;
@@ -692,16 +692,16 @@ onBeforeUnmount(() => {
   font-size: 0.8125rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background-color: #f7fbfc;
+  background-color: var(--color-canvas);
   color: var(--color-ink);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .chip-btn.is-selected {
-  background-color: var(--color-yellow);
-  border-color: #d1b54c;
-  color: #4a3805;
+  background-color: var(--color-amber-subtle);
+  border-color: var(--color-amber);
+  color: var(--color-amber-text);
   font-weight: 600;
 }
 
@@ -754,7 +754,7 @@ onBeforeUnmount(() => {
 }
 
 .required-star {
-  color: #ba2f2f;
+  color: var(--color-error-text);
 }
 
 .field-hint {
