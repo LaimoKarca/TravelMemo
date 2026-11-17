@@ -75,8 +75,6 @@ python deploy/check-public.py https://travel.tan-ji.org
 
 若容器曾被人工停止，從目前 release 目錄設定正確的 RELEASE_ID，再執行上方 Compose up 指令。
 完整主機重開機會影響同機其他服務，請由主機擁有者安排維護時段。
-若平常只靠登入 Windows 後才啟動的遠端 agent 管理主機，重開前應確認有現場操作人員，
-或已有能操作 Windows 登入畫面的遠端連線；Docker 的登入後啟動設定無法取代 Windows 登入。
 
 ## 驗證與回退
 
@@ -99,4 +97,3 @@ python deploy/check-public.py https://travel.tan-ji.org
 - Tan-Ji API 容器通過 Gmail SMTP AUTH，未寄出測試信；實際收碼由使用者首次登入確認。
 - Chrome 可正常顯示登入頁；Cloudflare 的邊緣腳本與網站標頭相容。
 - 後端22項測試通過、2項容器測試預設略過；私人旅程及資料庫整合沿用第二階段有效證據。
-- 尚未進行主機重新開機或資料庫還原演練；不宣稱完成整個 SPEC 階段五。
