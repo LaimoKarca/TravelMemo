@@ -76,9 +76,15 @@
 原始 320 筆查詢與另行改寫的 107 筆明確相鄰診斷分開報告，不宣稱 NEXT 在原始資料上勝過其他方法。
 量測未包含多使用者高並行壓力測試；舊 commit 的實測延遲不標作最終發布版效能。
 
-容器停止／啟動與還原演練已完成；**整台 Tan-Ji 重開機尚未執行**，因會中斷同機其他服務。
-本次讀取的 Docker Desktop `autoStart` 為 false。主機擁有者需安排維護時間，依[部署文件](../DEPLOYMENT.md)
-確認 Windows 登入後 Docker 啟動與外部服務恢復；不將容器驗收當成完整主機重開機證據。
+容器停止／啟動與還原演練已完成；**整台 Tan-Ji 重開機尚未執行**。
+初次驗收時 Docker Desktop `autoStart` 為 false；後續已備份原設定，開啟 Docker 的 Windows 登入後啟動設定，
+並保留原有 Windows 登入方式。此設定尚未經整機重開機複驗。
+
+主機擁有者已授權重開機，但 Desktop Commander 的 `blockedCommands` 禁止 `shutdown`，未改用其他方式繞過。
+唯讀檢查確認 Windows 遠端桌面已啟用且正在監聽，但未驗證外網可連；擁有者目前只有 Desktop Commander 可用，
+且主機未設定 Windows 自動登入。因此保留主機運行，待有現場操作或可用的登入畫面遠端連線後再安排演練。
+後續公開 ready 檢查回傳 `database=true`。恢復程序見[部署文件](../DEPLOYMENT.md)；
+不將容器驗收、啟動設定或使用者授權當成完整主機重開機證據。
 
 本次使用 Herdr 協作實作與交叉檢查、OpenAI Docs、實用 TDD、瀏覽器／介面檢查與交付驗證流程；
 Lead 檢查實際差異與命令結果，未僅依 Worker 的完成訊息宣告通過。

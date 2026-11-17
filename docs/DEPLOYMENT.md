@@ -75,6 +75,8 @@ python deploy/check-public.py https://travel.tan-ji.org
 
 若容器曾被人工停止，從目前 release 目錄設定正確的 RELEASE_ID，再執行上方 Compose up 指令。
 完整主機重開機會影響同機其他服務，請由主機擁有者安排維護時段。
+若平常只靠登入 Windows 後才啟動的遠端 agent 管理主機，重開前應確認有現場操作人員，
+或已有能操作 Windows 登入畫面的遠端連線；Docker 的登入後啟動設定無法取代 Windows 登入。
 
 ## 驗證與回退
 
