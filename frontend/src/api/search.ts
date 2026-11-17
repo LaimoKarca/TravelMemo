@@ -3,7 +3,10 @@ import type { SearchPayload, SearchResponse, SearchEvent } from '../types/search
 
 export async function searchRecall(payload: SearchPayload): Promise<SearchResponse> {
   const body: Record<string, any> = {
-    query: payload.query
+    query: payload.query ?? ''
+  }
+  if (payload.photo_ids && payload.photo_ids.length > 0) {
+    body.photo_ids = payload.photo_ids
   }
   if (payload.trip_id) body.trip_id = payload.trip_id
   if (payload.date_from) body.date_from = payload.date_from

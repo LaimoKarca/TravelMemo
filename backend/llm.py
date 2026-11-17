@@ -80,6 +80,14 @@ class AssistantStructuredOutput(BaseModel):
         default_factory=list,
         description="本次回答所引用的事件 ID 清單（僅能從提供的證據中選取）",
     )
+    answer_scope: Literal["memory", "image", "mixed"] = Field(
+        default="memory",
+        description="回答範疇：純記憶檢索(memory)、純圖片回憶(image)、或二者混合(mixed)",
+    )
+    cited_photo_ids: list[str] = Field(
+        default_factory=list,
+        description="本次回答所引用的照片 ID 清單（僅能從提供的照片證據中選取）",
+    )
 
 
 class LLMResult(BaseModel):
@@ -87,6 +95,8 @@ class LLMResult(BaseModel):
     status: Literal["answered", "insufficient_evidence", "needs_clarification", "unavailable"]
     content: str
     cited_event_ids: list[str] = Field(default_factory=list)
+    answer_scope: Literal["memory", "image", "mixed"] = "memory"
+    cited_photo_ids: list[str] = Field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
 
@@ -181,6 +191,8 @@ class OpenAILLM(BaseLLM):
                     status=parsed.status,
                     content=parsed.content,
                     cited_event_ids=parsed.cited_event_ids,
+                    answer_scope=getattr(parsed, "answer_scope", "memory"),
+                    cited_photo_ids=getattr(parsed, "cited_photo_ids", []),
                     input_tokens=in_tokens,
                     output_tokens=out_tokens,
                 )
@@ -370,6 +382,8 @@ class MockLLM(BaseLLM):
         ] = "answered",
         default_content: str = "這是測試回答。",
         default_cited_event_ids: list[str] | None = None,
+        default_answer_scope: Literal["memory", "image", "mixed"] = "memory",
+        default_cited_photo_ids: list[str] | None = None,
         input_tokens: int = 15,
         output_tokens: int = 25,
         handler: Callable[[str, str], LLMResult] | None = None,
@@ -381,6 +395,8 @@ class MockLLM(BaseLLM):
         self.default_status = default_status
         self.default_content = default_content
         self.default_cited_event_ids = default_cited_event_ids or []
+        self.default_answer_scope = default_answer_scope
+        self.default_cited_photo_ids = default_cited_photo_ids or []
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
         self.handler = handler
@@ -403,6 +419,8 @@ class MockLLM(BaseLLM):
             status=self.default_status,
             content=self.default_content,
             cited_event_ids=list(self.default_cited_event_ids),
+            answer_scope=self.default_answer_scope,
+            cited_photo_ids=list(self.default_cited_photo_ids),
             input_tokens=self.input_tokens,
             output_tokens=self.output_tokens,
         )

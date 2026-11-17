@@ -52,10 +52,20 @@ def main():
             from backend.conversation_store import Neo4jConversationStore
             from backend.retrieval import SearchService
 
-            SearchService(
+            search = SearchService(
                 get_settings(), Neo4jTravelRepository(store.driver, store.database)
-            ).initialize()
-            Neo4jConversationStore(store.driver, store.database).initialize()
+            )
+            search.initialize()
+            conversations = Neo4jConversationStore(store.driver, store.database)
+            conversations.initialize()
+            from backend.photo_search import PhotoSearchService
+            from backend.photo_store import Neo4jPhotoStore
+            from backend.photos import PhotoService
+
+            photos = PhotoService(get_settings(), Neo4jPhotoStore(store.driver, store.database),
+                                  search.repository, conversations)
+            photos.initialize()
+            PhotoSearchService(get_settings(), photos, search.embedder).initialize()
             print("Neo4j constraints and retrieval indexes initialized.")
         finally:
             store.close()
@@ -78,6 +88,13 @@ def main():
             service = SearchService(settings, Neo4jTravelRepository(store.driver, store.database))
             service.initialize()
             service.rebuild()
+            from backend.photo_search import PhotoSearchService
+            from backend.photo_store import Neo4jPhotoStore
+            from backend.photos import PhotoService
+
+            photos = PhotoService(settings, Neo4jPhotoStore(store.driver, store.database), service.repository)
+            photos.initialize()
+            PhotoSearchService(settings, photos, service.embedder).rebuild()
             while service.process_pending():
                 pass
             status = service.index_status()

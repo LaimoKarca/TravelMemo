@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Trip } from '../types/travel'
-import type { SearchItem, SearchPayload, SearchResponse } from '../types/search'
+import type { SearchItem, SearchPayload, SearchResponse, SearchPhotoItem } from '../types/search'
+import type { PhotoDTO } from '../types/photo'
 import { searchRecall } from '../api/search'
 import { ApiError } from '../api/auth'
+import PhotoPicker from './PhotoPicker.vue'
+import PhotoViewer from './PhotoViewer.vue'
 
 const props = defineProps<{
   trips: Trip[]
@@ -30,13 +33,28 @@ const errorMessage = ref('')
 const hasSearched = ref(false)
 const searchResult = ref<SearchResponse | null>(null)
 
+// Image search state
+const searchPhotos = ref<PhotoDTO[]>([])
+const searchPhotoPickerRef = ref<any>(null)
+
+// Lightbox for photo search results
+const viewerVisible = ref(false)
+const viewerPhotos = ref<PhotoDTO[]>([])
+const viewerInitialPhotoId = ref<string | null>(null)
+
+function openPhotoResult(item: SearchPhotoItem) {
+  viewerInitialPhotoId.value = item.photo.id
+  viewerPhotos.value = (searchResult.value?.photo_items || []).map((pi) => pi.photo)
+  viewerVisible.value = true
+}
+
 // Generation counter to guard against stale search results or races with reset
 let searchGeneration = 0
 
 async function handleSearch() {
   const trimmed = query.value.trim()
-  if (!trimmed) {
-    errorMessage.value = '請輸入欲搜尋的關鍵字。'
+  if (!trimmed && searchPhotos.value.length === 0) {
+    errorMessage.value = '請輸入欲搜尋的關鍵字或選取照片。'
     return
   }
 
@@ -48,6 +66,10 @@ async function handleSearch() {
   const payload: SearchPayload = {
     query: trimmed,
     limit: searchLimit.value
+  }
+
+  if (searchPhotos.value.length > 0) {
+    payload.photo_ids = searchPhotos.value.map((p) => p.id)
   }
 
   if (selectedTripId.value) payload.trip_id = selectedTripId.value
@@ -78,6 +100,8 @@ async function handleSearch() {
 function handleResetFilters() {
   searchGeneration++
   query.value = ''
+  searchPhotos.value = []
+  searchPhotoPickerRef.value?.clear()
   selectedTripId.value = ''
   selectedCity.value = ''
   selectedCategory.value = ''
@@ -139,7 +163,7 @@ function getVectorStatusLabel(status: string): string {
               class="form-input query-input"
               placeholder="搜尋地點或行程紀錄..."
               :disabled="loading"
-              required
+              :required="searchPhotos.length === 0"
             />
           </div>
         </div>
@@ -171,7 +195,7 @@ function getVectorStatusLabel(status: string): string {
         <button
           type="submit"
           class="btn btn-primary search-submit-btn"
-          :disabled="loading || !query.trim()"
+          :disabled="loading || searchPhotos.some(p => p.status !== 'ready') || (!query.trim() && searchPhotos.length === 0)"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
@@ -179,6 +203,20 @@ function getVectorStatusLabel(status: string): string {
           </svg>
           <span>{{ loading ? '搜尋中...' : '搜尋' }}</span>
         </button>
+      </div>
+
+      <!-- Image search picker row -->
+      <div class="search-photos-picker-bar">
+        <span class="search-picker-label">以圖搜尋（選填）：</span>
+        <PhotoPicker
+          ref="searchPhotoPickerRef"
+          v-model:photos="searchPhotos"
+          :compact="true"
+          :multiple="true"
+          :max-photos="4"
+          button-text="選取搜尋照片"
+          camera-button-text="拍照搜尋"
+        />
       </div>
 
       <!-- Collapsible Additional Filters Grid (v-show preserves DOM access for tests/a11y) -->
@@ -281,7 +319,7 @@ function getVectorStatusLabel(status: string): string {
     <!-- Results Container -->
     <div v-else-if="searchResult" class="results-container">
       <!-- Empty Results -->
-      <div v-if="searchResult.items.length === 0" class="empty-results">
+      <div v-if="searchResult.items.length === 0 && (!searchResult.photo_items || searchResult.photo_items.length === 0)" class="empty-results">
         <div class="empty-icon" aria-hidden="true">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="11" cy="11" r="8" />
@@ -291,12 +329,72 @@ function getVectorStatusLabel(status: string): string {
         </div>
         <h3 class="empty-title">查無相符的旅行記憶</h3>
         <p class="empty-desc">
-          未找到與「{{ query }}」相關的足跡。建議調整搜尋條件或日期後再試。
+          未找到與{{ query ? `「${query}」` : '指定條件' }}相關的足跡或照片。建議調整搜尋條件或日期後再試。
         </p>
       </div>
 
+      <!-- Matched Photos Section -->
+      <div v-if="searchResult.photo_items && searchResult.photo_items.length > 0" class="photo-results-section">
+        <h3 class="photo-results-title">相符照片記憶 ({{ searchResult.photo_items.length }})</h3>
+        <div class="photo-results-grid">
+          <article
+            v-for="(pItem, pIdx) in searchResult.photo_items"
+            :key="pItem.photo.id + '-' + pIdx"
+            class="photo-result-card"
+          >
+            <div
+              class="photo-result-thumb-box"
+              tabindex="0"
+              role="button"
+              :aria-label="`檢視相符照片：${pItem.photo.caption || pItem.photo.analysis?.summary || '相簿照片'}`"
+              @click="openPhotoResult(pItem)"
+              @keydown.enter="openPhotoResult(pItem)"
+            >
+              <img
+                :src="pItem.photo.thumbnail_url || pItem.photo.url"
+                :alt="pItem.photo.caption || '搜尋照片結果'"
+                class="photo-result-img"
+              />
+              <div class="score-badge photo-score-badge">
+                評分：{{ typeof pItem.score === 'number' ? pItem.score.toFixed(2) : pItem.score }}
+              </div>
+            </div>
+
+            <div class="photo-result-info">
+              <p v-if="pItem.photo.caption" class="photo-result-caption">
+                {{ pItem.photo.caption }}
+              </p>
+              <p v-else-if="pItem.photo.analysis?.summary" class="photo-result-summary">
+                {{ pItem.photo.analysis.summary }}
+              </p>
+
+              <!-- Matched reasons list -->
+              <details v-if="pItem.reasons && pItem.reasons.length > 0" class="reasons-block">
+                <summary class="reasons-title">命中原因</summary>
+                <ul class="reasons-list">
+                  <li v-for="(reason, rIdx) in pItem.reasons" :key="rIdx" class="reason-item">
+                    {{ reason }}
+                  </li>
+                </ul>
+              </details>
+
+              <!-- Jump to Trip button if attached event is known -->
+              <div v-if="pItem.event" class="photo-result-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary btn-sm jump-btn"
+                  @click="emit('jump-trip', { tripId: pItem.event.trip_id, eventId: pItem.event.id })"
+                >
+                  跳至原旅程
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
       <!-- Flat Rows List with source actions and quiet algorithm tags per brief -->
-      <div v-else class="source-cards-grid">
+      <div v-if="searchResult.items.length > 0" class="source-cards-grid">
         <article
           v-for="(item, idx) in searchResult.items"
           :key="item.event.id + '-' + idx"
@@ -367,6 +465,15 @@ function getVectorStatusLabel(status: string): string {
         </article>
       </div>
     </div>
+
+    <!-- Reusable Lightbox Viewer -->
+    <PhotoViewer
+      :visible="viewerVisible"
+      :photos="viewerPhotos"
+      :initial-photo-id="viewerInitialPhotoId"
+      :can-edit-caption="false"
+      @close="viewerVisible = false"
+    />
   </section>
 </template>
 
@@ -428,6 +535,111 @@ function getVectorStatusLabel(status: string): string {
   display: flex;
   flex-direction: column;
   gap: 0.875rem;
+}
+
+.search-photos-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.25rem 0;
+}
+
+.search-picker-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-subtle);
+}
+
+/* Photo Search Results */
+.photo-results-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.photo-results-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.photo-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+
+.photo-result-card {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.photo-result-card:hover {
+  border-color: var(--color-maple);
+  box-shadow: var(--shadow-sm);
+}
+
+.photo-result-thumb-box {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  cursor: pointer;
+  background-color: var(--color-canvas);
+}
+
+.photo-result-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.photo-result-thumb-box:hover .photo-result-img {
+  transform: scale(1.04);
+}
+
+.photo-result-thumb-box:focus-visible {
+  outline: 2px solid var(--color-maple);
+  outline-offset: -2px;
+}
+
+.photo-score-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.6875rem;
+}
+
+.photo-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.photo-result-caption,
+.photo-result-summary {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.photo-result-actions {
+  margin-top: 0.25rem;
 }
 
 .main-query-row {

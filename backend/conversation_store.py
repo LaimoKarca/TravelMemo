@@ -105,6 +105,9 @@ class MemoryConversationStore:
         status: str = "answered",
         citations: list[dict[str, Any]] | None = None,
         created_at: str | None = None,
+        photo_ids: list[str] | None = None,
+        photo_citations: list[dict[str, Any]] | None = None,
+        answer_scope: str = "memory",
     ) -> dict[str, Any] | None:
         with self.lock:
             conv = self.conversations.get(conversation_id)
@@ -120,6 +123,9 @@ class MemoryConversationStore:
                 "status": status,
                 "citations": copy.deepcopy(citations or []),
                 "created_at": created_at or "",
+                "photo_ids": copy.deepcopy(photo_ids or []),
+                "photo_citations": copy.deepcopy(photo_citations or []),
+                "answer_scope": answer_scope or "memory",
             }
             self.messages.setdefault(conversation_id, []).append(msg)
             return {
@@ -129,6 +135,9 @@ class MemoryConversationStore:
                 "status": msg["status"],
                 "citations": copy.deepcopy(msg["citations"]),
                 "created_at": msg["created_at"],
+                "photo_ids": copy.deepcopy(msg["photo_ids"]),
+                "photo_citations": copy.deepcopy(msg["photo_citations"]),
+                "answer_scope": msg["answer_scope"],
             }
 
     def get_messages(
@@ -149,8 +158,11 @@ class MemoryConversationStore:
                 "role": m["role"],
                 "content": m["content"],
                 "status": m["status"],
-                "citations": m["citations"],
+                "citations": m.get("citations", []),
                 "created_at": m["created_at"],
+                "photo_ids": m.get("photo_ids", []),
+                "photo_citations": m.get("photo_citations", []),
+                "answer_scope": m.get("answer_scope", "memory"),
             }
             for m in msgs
         ]
@@ -345,10 +357,16 @@ class Neo4jConversationStore:
         status: str = "answered",
         citations: list[dict[str, Any]] | None = None,
         created_at: str | None = None,
+        photo_ids: list[str] | None = None,
+        photo_citations: list[dict[str, Any]] | None = None,
+        answer_scope: str = "memory",
     ) -> dict[str, Any] | None:
         msg_id = str(uuid4())
         created_at_val = created_at or ""
         citations_json = json.dumps(citations or [])
+        photo_ids_json = json.dumps(photo_ids or [])
+        photo_citations_json = json.dumps(photo_citations or [])
+        answer_scope_val = answer_scope or "memory"
         with self.driver.session(database=self.database) as session:
             record = session.run(
                 """
@@ -363,7 +381,10 @@ class Neo4jConversationStore:
                     status: $status,
                     citations: $citations,
                     created_at: $created_at,
-                    sequence: c.message_seq
+                    sequence: c.message_seq,
+                    photo_ids: $photo_ids,
+                    photo_citations: $photo_citations,
+                    answer_scope: $answer_scope
                 })
                 CREATE (c)-[:HAS_MESSAGE]->(m)
                 RETURN m.id AS id
@@ -376,6 +397,9 @@ class Neo4jConversationStore:
                 status=status,
                 citations=citations_json,
                 created_at=created_at_val,
+                photo_ids=photo_ids_json,
+                photo_citations=photo_citations_json,
+                answer_scope=answer_scope_val,
             ).single()
             if not record:
                 return None
@@ -386,6 +410,9 @@ class Neo4jConversationStore:
                 "status": status,
                 "citations": copy.deepcopy(citations or []),
                 "created_at": created_at_val,
+                "photo_ids": copy.deepcopy(photo_ids or []),
+                "photo_citations": copy.deepcopy(photo_citations or []),
+                "answer_scope": answer_scope_val,
             }
 
     def get_messages(
@@ -407,7 +434,9 @@ class Neo4jConversationStore:
                 """
                 MATCH (c:Conversation {id: $conversation_id, owner_id: $owner_id})-[:HAS_MESSAGE]->(m:Message)
                 RETURN m.id AS id, m.role AS role, m.content AS content, m.status AS status,
-                       m.citations AS citations, m.created_at AS created_at
+                       m.citations AS citations, m.created_at AS created_at,
+                       m.photo_ids AS photo_ids, m.photo_citations AS photo_citations,
+                       m.answer_scope AS answer_scope
                 ORDER BY coalesce(m.sequence, 0) ASC, m.created_at ASC, m.id ASC
                 """,
                 conversation_id=conversation_id,
@@ -417,6 +446,11 @@ class Neo4jConversationStore:
             for r in result:
                 citations_raw = r["citations"]
                 parsed_citations = json.loads(citations_raw) if citations_raw else []
+                photo_ids_raw = r.get("photo_ids") if "photo_ids" in r else None
+                parsed_photo_ids = json.loads(photo_ids_raw) if photo_ids_raw else []
+                photo_citations_raw = r.get("photo_citations") if "photo_citations" in r else None
+                parsed_photo_citations = json.loads(photo_citations_raw) if photo_citations_raw else []
+                answer_scope = r.get("answer_scope") or "memory"
                 messages.append(
                     {
                         "id": r["id"],
@@ -425,6 +459,9 @@ class Neo4jConversationStore:
                         "status": r["status"],
                         "citations": parsed_citations,
                         "created_at": r["created_at"],
+                        "photo_ids": parsed_photo_ids,
+                        "photo_citations": parsed_photo_citations,
+                        "answer_scope": answer_scope,
                     }
                 )
             return messages

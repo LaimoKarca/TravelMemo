@@ -39,9 +39,15 @@ export async function listMessages(conversationId: string): Promise<MessageListR
 }
 
 export async function sendMessage(conversationId: string, payload: SendMessagePayload): Promise<Message> {
+  const body: Record<string, any> = {
+    content: payload.content ?? ''
+  }
+  if (payload.photo_ids && payload.photo_ids.length > 0) {
+    body.photo_ids = payload.photo_ids
+  }
   return request<Message>(`/conversations/${encodeURIComponent(conversationId)}/messages`, {
     method: 'POST',
-    body: JSON.stringify({ content: payload.content })
+    body: JSON.stringify(body)
   })
 }
 

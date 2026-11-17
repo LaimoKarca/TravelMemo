@@ -1,3 +1,5 @@
+import type { PhotoDTO } from './photo'
+
 export type MessageRole = 'user' | 'assistant'
 
 export type MessageStatus =
@@ -7,6 +9,17 @@ export type MessageStatus =
   | 'unavailable'
 
 export type CitationState = 'current' | 'changed' | 'deleted'
+
+export type AnswerScope = 'memory' | 'image' | 'mixed'
+
+export interface PhotoCitation {
+  photo_id: string
+  version: number
+  state: CitationState
+  caption?: string
+  thumbnail_url: string
+  url: string
+}
 
 export interface Citation {
   event_id: string
@@ -30,6 +43,9 @@ export interface Message {
   status: MessageStatus
   citations: Citation[]
   created_at: string
+  photos?: PhotoDTO[]
+  photo_citations?: PhotoCitation[]
+  answer_scope?: AnswerScope
 }
 
 export interface ConversationSummary {
@@ -51,7 +67,8 @@ export interface MessageListResponse {
 }
 
 export interface SendMessagePayload {
-  content: string
+  content?: string
+  photo_ids?: string[]
 }
 
 export interface UsageMeResponse {

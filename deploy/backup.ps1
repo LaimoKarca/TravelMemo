@@ -23,6 +23,12 @@ if ($dataMount.Count -ne 1 -or $dataMount[0].Type -ne 'volume') { throw 'Expecte
 $volume = $dataMount[0].Name
 $image = $containerInfo[0].Config.Image
 $imageId = $containerInfo[0].Image
+$apiInfo = docker inspect travelmemo-api-1 | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0) { throw 'TravelMemo API container was not found.' }
+$mediaMount = @($apiInfo[0].Mounts | Where-Object Destination -eq '/app/media')
+if ($mediaMount.Count -gt 1 -or ($mediaMount.Count -eq 1 -and $mediaMount[0].Type -ne 'volume')) {
+    throw 'Expected a named photo volume.'
+}
 $stopped = $false
 try {
     # An offline archive includes both the user database and Neo4j system/auth data.
@@ -42,9 +48,18 @@ try {
         '-c', 'tar -czf /backup/neo4j-data.tar.gz -C /source .')
     $archive = Join-Path $destination 'neo4j-data.tar.gz'
     $manifest = @{
-        format = 1; created_at = [DateTime]::UtcNow.ToString('o'); release_id = $ReleaseId
+        format = 2; created_at = [DateTime]::UtcNow.ToString('o'); release_id = $ReleaseId
         source_volume = $volume; neo4j_image = $image; neo4j_image_id = $imageId
         nodes = $nodeCount; sha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    if ($mediaMount.Count -eq 1) {
+        $mediaVolume = $mediaMount[0].Name
+        Invoke-Docker -Arguments @('run', '--rm', '--network', 'none', '--user', '0', '--entrypoint', 'bash',
+            '--mount', "type=volume,source=$mediaVolume,target=/source,readonly",
+            '--mount', "type=bind,source=$destination,target=/backup", $imageId,
+            '-c', 'tar -czf /backup/photos-data.tar.gz -C /source .')
+        $manifest.media_volume = $mediaVolume
+        $manifest.media_sha256 = (Get-FileHash -LiteralPath (Join-Path $destination 'photos-data.tar.gz') -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     [IO.File]::WriteAllText((Join-Path $destination 'manifest.json'), ($manifest | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     Write-Output "Backup created: $destination"

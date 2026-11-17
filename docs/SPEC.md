@@ -54,5 +54,7 @@ OpenAI 官方 Python SDK Responses API，預設 gpt-6-luna（依使用者後續�
 Docker Compose 與 Tunnel 提供自行部署入口，資料保存在獨立持久卷；更新前備份並保留回退方式。
 檢索評估與私人旅程資料分離，使用一致的模型與輸入設定，分別比較精確向量及近似向量搜尋。
 
-照片辨識、地圖、分享共編、個人 Key、公開註冊及完整研究管理介面延後。
+圖片以壓縮檔保存於私人資料卷，Neo4j 保存附件、解析與搜尋資料；支援旅程相簿、事件附圖、
+圖片理解後的文字檢索及聊天附圖。個人經歷仍需事件來源，不能由圖片推定到訪日期或順序。
+地圖、分享共編、個人 Key、公開註冊及完整研究管理介面延後。
 參考資料位於 docs/reference；既有研究參考：https://github.com/LaimoKarca/fuzzy-travel-recall-benchmark 。

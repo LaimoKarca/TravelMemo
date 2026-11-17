@@ -9,13 +9,14 @@ import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.auth import AuthError, AuthService
 from backend.context_memory import pack_prompt, prepare_memory
 from backend.conversation_store import MemoryConversationStore
 from backend.dependencies import authenticate as authenticate_dep
 from backend.llm import BaseLLM, LLMResult, OpenAILLM
+from backend.photo_conversation import handle_photo_conversation, resolve_photo_references
 from backend.safety import SafetyUnavailable, check_request
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,19 @@ class ConversationListResponse(BaseModel):
 
 class MessageCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    content: str = Field(min_length=1, max_length=10000)
+    content: str = Field(default="", max_length=10000)
+    photo_ids: list[str] = Field(default_factory=list, max_length=4)
+    review_photo_id: str | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def validate_content_or_photos(self) -> "MessageCreate":
+        has_content = bool(self.content and self.content.strip())
+        has_photos = bool(self.photo_ids)
+        if not has_content and not has_photos:
+            raise ValueError("必須提供對話內容或照片。")
+        if len(self.photo_ids) > 4:
+            raise ValueError("每則訊息最多附加 4 張照片。")
+        return self
 
 
 class CitationRelation(BaseModel):
@@ -113,14 +126,28 @@ class Citation(BaseModel):
     relation: CitationRelation | None = None
 
 
-class Message(BaseModel):
+class PhotoCitation(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    photo_id: str
+    version: int
+    analysis_version: int = 1
+    state: Literal["current", "changed", "deleted"]
+    caption: str = ""
+    thumbnail_url: str = ""
+    url: str = ""
+
+
+class Message(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     id: str
     role: Literal["user", "assistant"]
     content: str
     status: Literal["answered", "insufficient_evidence", "needs_clarification", "unavailable"]
     citations: list[Citation]
     created_at: str
+    photos: list[dict[str, Any]] = Field(default_factory=list)
+    photo_citations: list[PhotoCitation] = Field(default_factory=list)
+    answer_scope: Literal["memory", "image", "mixed"] = "memory"
 
 
 class MessageListResponse(BaseModel):
@@ -146,11 +173,15 @@ class ConversationService:
         store: Any = None,
         clock: Any = time.time,
         llm: BaseLLM | None = None,
+        photo_service: Any = None,
+        photo_analyzer: Any = None,
     ):
         self.settings = settings
         self.search_service = search_service
         self.store = store if store is not None else MemoryConversationStore()
         self.clock = clock
+        self.photo_service = photo_service
+        self.photo_analyzer = photo_analyzer or getattr(photo_service, "analyzer", None)
         self.model_name = getattr(settings, "openai_model", "gpt-6-luna")
         self.timeout = float(getattr(settings, "openai_timeout", 45.0))
         self.max_output_tokens = int(getattr(settings, "openai_max_output_tokens", 2000))
@@ -196,7 +227,20 @@ class ConversationService:
         return self.store.list_conversations(owner_id)
 
     def delete_conversation(self, owner_id: str, conversation_id: str) -> bool:
-        return self.store.delete_conversation(owner_id, conversation_id)
+        messages = self.store.get_messages(owner_id, conversation_id)
+        msg_ids = [m["id"] for m in messages] if messages else []
+        deleted = self.store.delete_conversation(owner_id, conversation_id)
+        if deleted and self.photo_service:
+            for mid in msg_ids:
+                try:
+                    self.photo_service.detach_target(owner_id, "message", mid)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Error detaching photo message target: %s", type(exc).__name__)
+            try:
+                self.photo_service.detach_target(owner_id, "conversation", conversation_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Error detaching photo conversation target: %s", type(exc).__name__)
+        return deleted
 
     def _call_search(
         self,
@@ -312,6 +356,56 @@ class ConversationService:
             )
         return res_citation
 
+    def _verify_photo_citation(
+        self, owner_id: str, photo_citation: dict[str, Any]
+    ) -> dict[str, Any]:
+        pid = photo_citation["photo_id"]
+        if not self.photo_service:
+            return {
+                "photo_id": pid,
+                "version": photo_citation.get("version", 1),
+                "analysis_version": photo_citation.get("analysis_version", 1),
+                "state": photo_citation.get("state", "current"),
+                "caption": photo_citation.get("caption", ""),
+                "thumbnail_url": photo_citation.get("thumbnail_url", ""),
+                "url": photo_citation.get("url", ""),
+            }
+
+        cur_photo = self.photo_service.get(owner_id, pid)
+        if cur_photo is None:
+            # Tombstone for deleted picture: no binary access
+            state = "deleted"
+            caption = photo_citation.get("caption", "")
+            thumb = ""
+            url = ""
+            ver = photo_citation.get("version", 1)
+            aver = photo_citation.get("analysis_version", 1)
+        else:
+            cur_ver = cur_photo.get("version", 1)
+            cur_aver = cur_photo.get("analysis_version", 1)
+            if (
+                cur_ver != photo_citation.get("version")
+                or cur_aver != photo_citation.get("analysis_version")
+            ):
+                state = "changed"
+            else:
+                state = "current"
+            caption = cur_photo.get("caption", "")
+            thumb = cur_photo.get("thumbnail_url") or f"/api/v1/photos/{pid}/thumbnail"
+            url = cur_photo.get("url") or f"/api/v1/photos/{pid}/content"
+            ver = cur_ver
+            aver = cur_aver
+
+        return {
+            "photo_id": pid,
+            "version": ver,
+            "analysis_version": aver,
+            "state": state,
+            "caption": caption,
+            "thumbnail_url": thumb,
+            "url": url,
+        }
+
     def get_messages(
         self, owner_id: str, conversation_id: str
     ) -> list[dict[str, Any]] | None:
@@ -324,6 +418,31 @@ class ConversationService:
             verified_citations = [
                 self._verify_citation(owner_id, c) for c in msg.get("citations", [])
             ]
+            verified_photo_citations = [
+                self._verify_photo_citation(owner_id, pc)
+                for pc in msg.get("photo_citations", [])
+            ]
+
+            photos = []
+            for pid in msg.get("photo_ids", []):
+                if self.photo_service:
+                    p = self.photo_service.get(owner_id, pid)
+                    if p is not None:
+                        photos.append(p)
+                    else:
+                        # Tombstone: no binary access for deleted picture
+                        photos.append(
+                            {
+                                "id": pid,
+                                "status": "deleted",
+                                "caption": "照片已刪除",
+                                "url": "",
+                                "thumbnail_url": "",
+                            }
+                        )
+                else:
+                    photos.append({"id": pid, "status": "ready"})
+
             result_messages.append(
                 {
                     "id": msg["id"],
@@ -332,6 +451,9 @@ class ConversationService:
                     "status": msg["status"],
                     "citations": verified_citations,
                     "created_at": msg["created_at"],
+                    "photos": photos,
+                    "photo_citations": verified_photo_citations,
+                    "answer_scope": msg.get("answer_scope", "memory"),
                 }
             )
         return result_messages
@@ -394,14 +516,28 @@ class ConversationService:
         return False, None, None
 
     def post_message(
-        self, owner_id: str, conversation_id: str, content: str
+        self,
+        owner_id: str,
+        conversation_id: str,
+        content: str = "",
+        photo_ids: list[str] | None = None,
+        review_photo_id: str | None = None,
     ) -> dict[str, Any]:
         # 1. Verify conversation exists and belongs to owner
         conv = self.store.get_conversation(owner_id, conversation_id)
         if not conv:
             raise HTTPException(status_code=404, detail="找不到指定的對話。")
 
-        if len(json.dumps(content, ensure_ascii=False)) > self.prompt_max_chars - 6000:
+        content_val = content if content is not None else ""
+        pids = list(photo_ids) if photo_ids else []
+
+        if not content_val.strip() and not pids:
+            raise HTTPException(status_code=422, detail="必須提供對話內容或照片。")
+
+        if len(pids) > 4:
+            raise HTTPException(status_code=422, detail="每則訊息最多附加 4 張照片。")
+
+        if len(json.dumps(content_val, ensure_ascii=False)) > self.prompt_max_chars - 6000:
             raise HTTPException(status_code=422, detail="問題內容過長，請縮短後再試。")
 
         # Bound screening and answering together; rejected requests never add history.
@@ -417,37 +553,76 @@ class ConversationService:
             raise HTTPException(status_code=429, detail=err_msg or "AI 服務忙碌，請稍候再試。")
 
         try:
-            try:
-                decision = check_request(content, self.llm.classify_safety)
-            except SafetyUnavailable:
-                raise HTTPException(status_code=503, detail="安全檢查暫時無法完成，請稍後再試。") from None
-            if decision.decision == "block":
-                logger.info("Chat request blocked: %s", decision.reason)
-                raise HTTPException(status_code=400, detail="此請求無法處理，請改問旅程內容。")
+            # 2. Safety check BEFORE adding message or binding photos
+            if content_val.strip():
+                try:
+                    decision = check_request(content_val, self.llm.classify_safety)
+                except SafetyUnavailable:
+                    raise HTTPException(status_code=503, detail="安全檢查暫時無法完成，請稍後再試。") from None
+                if decision.decision == "block":
+                    logger.info("Chat request blocked: %s", decision.reason)
+                    raise HTTPException(status_code=400, detail="此請求無法處理，請改問旅程內容。")
 
-            # 3. Append user message only after slot is reserved
-            self.store.add_message(
+            # 3. If photo_ids provided, validate ready_evidence first
+            ready_photos: list[dict[str, Any]] = []
+            if pids:
+                if not self.photo_service:
+                    raise HTTPException(status_code=400, detail="照片服務未啟用。")
+                # ready_evidence throws 404 if missing/not owned, 409 if pending/processing
+                ready_photos = self.photo_service.ready_evidence(owner_id, pids)
+
+            # 4. Append user message only after slot is reserved & checks pass
+            user_msg = self.store.add_message(
                 owner_id=owner_id,
                 conversation_id=conversation_id,
                 role="user",
-                content=content,
+                content=content_val,
                 status="answered",
                 citations=[],
                 created_at=self._iso_now(),
+                photo_ids=pids,
+                photo_citations=[],
+                answer_scope="memory",
             )
 
-            # 4. Check multi-turn context (bounded by conversation_history_limit)
+            # 5. Bind photos to conversation and accepted user message
+            if pids and self.photo_service:
+                for pid in pids:
+                    try:
+                        self.photo_service.bind(owner_id, pid, "conversation", conversation_id)
+                        self.photo_service.bind(owner_id, pid, "message", user_msg["id"])
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Error binding photo %s: %s", pid, type(exc).__name__)
+
+            # 6. Check multi-turn context (bounded by conversation_history_limit)
             existing_messages = self.store.get_messages(owner_id, conversation_id) or []
             # exclude the latest user message just appended
             prev_messages = existing_messages[:-1]
             if not prev_messages and conv.get("title") in {None, "", "新對話", "無標題對話"}:
-                fallback = " ".join(content.split())[:40] or "新對話"
-                try:
-                    title = self.llm.summarize_title(content)
-                    title = " ".join(title.split())[:40] if isinstance(title, str) else fallback
-                except Exception:  # noqa: BLE001 - optional metadata must not prevent an answer
-                    title = fallback
-                self.store.set_conversation_title(owner_id, conversation_id, title or fallback)
+                if content_val.strip():
+                    fallback = " ".join(content_val.split())[:40] or "新對話"
+                    try:
+                        title = self.llm.summarize_title(content_val)
+                        title = " ".join(title.split())[:40] if isinstance(title, str) else fallback
+                    except Exception:  # noqa: BLE001 - optional metadata must not prevent an answer
+                        title = fallback
+                    self.store.set_conversation_title(owner_id, conversation_id, title or fallback)
+                elif pids and ready_photos:
+                    # First image only title: summarize analysis.summary, content fallback '圖片回憶'
+                    first_summary = ready_photos[0].get("analysis", {}).get("summary", "")
+                    title = "圖片回憶"
+                    if first_summary:
+                        try:
+                            cand_title = self.llm.summarize_title(first_summary)
+                            cand_title = " ".join(cand_title.split())[:40] if isinstance(cand_title, str) else ""
+                            if cand_title and cand_title != "新對話":
+                                title = cand_title
+                            else:
+                                title = first_summary[:40]
+                        except Exception:  # noqa: BLE001
+                            title = first_summary[:40]
+                    self.store.set_conversation_title(owner_id, conversation_id, title or "圖片回憶")
+
             old_memory = self.store.get_memory(owner_id, conversation_id)
             memory_summary, prev_messages, new_memory = prepare_memory(
                 prev_messages, old_memory, self.llm.summarize_context,
@@ -457,6 +632,59 @@ class ConversationService:
             )
             if new_memory != old_memory:
                 self.store.set_memory(owner_id, conversation_id, new_memory)
+
+            # 7. Check if this query refers to photos
+            target_photo_ids: list[str] = []
+            if pids:
+                target_photo_ids = pids
+            elif self.photo_service:
+                needs_photo_clarify, photo_clarify_text, resolved_pids = resolve_photo_references(
+                    owner_id=owner_id,
+                    query=content_val,
+                    photo_ids=None,
+                    prev_messages=prev_messages,
+                    photo_service=self.photo_service,
+                    review_photo_id=review_photo_id,
+                )
+                if needs_photo_clarify:
+                    return self.store.add_message(
+                        owner_id=owner_id,
+                        conversation_id=conversation_id,
+                        role="assistant",
+                        content=photo_clarify_text or "請釐清欲查詢的照片。",
+                        status="needs_clarification",
+                        citations=[],
+                        created_at=self._iso_now(),
+                        photo_ids=[],
+                        photo_citations=[],
+                        answer_scope="image",
+                    )
+                if resolved_pids:
+                    target_photo_ids = resolved_pids
+
+            # 8. If photo targets identified -> run Photo Conversation Pipeline!
+            if target_photo_ids and self.photo_service:
+                return handle_photo_conversation(
+                    owner_id=owner_id,
+                    conversation_id=conversation_id,
+                    content=content_val,
+                    target_photo_ids=target_photo_ids,
+                    photo_service=self.photo_service,
+                    search_service=self.search_service,
+                    store=self.store,
+                    llm=self.llm,
+                    today_utc=today_utc,
+                    iso_now=self._iso_now(),
+                    prev_messages=prev_messages,
+                    memory_summary=memory_summary,
+                    analyzer=self.photo_analyzer,
+                    review_photo_id=review_photo_id,
+                    evidence_limit=self.evidence_limit,
+                    prompt_max_chars=self.prompt_max_chars,
+                )
+
+            # 9. Otherwise: Existing text response flow (fully preserved)
+            content = content_val
 
             needs_clarify, clarify_text, anchor_event = self._check_followup_ambiguity(
                 owner_id, content, prev_messages
@@ -843,7 +1071,13 @@ def create_conversation_router(
     @router.post("/conversations/{id}/messages", response_model=Message, status_code=200)
     def send_message(id: str, body: MessageCreate, request: Request):
         owner_id = auth_user(request, write=True)
-        msg = service.post_message(owner_id, id, body.content)
+        msg = service.post_message(
+            owner_id=owner_id,
+            conversation_id=id,
+            content=body.content,
+            photo_ids=body.photo_ids,
+            review_photo_id=body.review_photo_id,
+        )
         return msg
 
     @router.get("/usage/me", response_model=UsageMeResponse)

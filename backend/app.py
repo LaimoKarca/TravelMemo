@@ -33,6 +33,8 @@ def create_app(
     conversation_store=None,
     llm=None,
     embedder=None,
+    photo_service=None,
+    photo_analyzer=None,
 ):
     settings = settings or get_settings()
     owned = store is None
@@ -40,6 +42,10 @@ def create_app(
     auth = AuthService(settings, store, sender or smtp_sender(settings), clock)
     from backend.conversation import ConversationService, create_conversation_router
     from backend.conversation_store import MemoryConversationStore, Neo4jConversationStore
+    from backend.photo_analysis import PhotoAnalysisWorker
+    from backend.photo_search import PhotoSearchService
+    from backend.photo_store import MemoryPhotoStore, Neo4jPhotoStore
+    from backend.photos import PhotoService, create_photo_router
     from backend.retrieval import SearchService
     from backend.search import create_search_router
     from backend.travel import create_travel_router
@@ -59,15 +65,25 @@ def create_app(
             if isinstance(store, Neo4jStore)
             else MemoryConversationStore()
         )
+    if photo_service is None:
+        photo_store = Neo4jPhotoStore(store.driver, store.database) if isinstance(store, Neo4jStore) else MemoryPhotoStore()
+        photo_service = PhotoService(settings, photo_store, travel_repository, conversation_store, clock=clock)
+    shared_embedder = getattr(search_service, "embedder", embedder)
+    photo_search = PhotoSearchService(settings, photo_service, embedder=shared_embedder)
+    photo_worker = PhotoAnalysisWorker(settings, photo_service, analyzer=photo_analyzer, embedder=shared_embedder)
+    search_service.photo_search = photo_search
     conversations = ConversationService(
         settings, search_service, conversation_store, clock=clock, llm=llm
     )
+    conversations.photo_service = photo_service
+    conversations.photo_analyzer = photo_worker.analyzer
 
     async def cleanup():
         while True:
             await asyncio.sleep(3600)
             try:
                 await asyncio.to_thread(store.cleanup, clock())
+                await asyncio.to_thread(photo_service.cleanup)
             except (Neo4jError, ServiceUnavailable, OSError):
                 logging.getLogger(__name__).warning("Auth cleanup unavailable")
 
@@ -80,8 +96,11 @@ def create_app(
             tasks.append(asyncio.create_task(cleanup()))
         await asyncio.to_thread(search_service.initialize)
         await asyncio.to_thread(conversation_store.initialize)
+        await asyncio.to_thread(photo_service.initialize)
+        await asyncio.to_thread(photo_search.initialize)
         if owned:
             tasks.append(asyncio.create_task(search_service.run_worker()))
+            tasks.append(asyncio.create_task(photo_worker.run_worker()))
         try:
             yield
         finally:
@@ -106,6 +125,8 @@ def create_app(
     app.state.search = search_service
     app.state.conversations = conversations
     app.state.travel = travel_repository
+    app.state.photos = photo_service
+    app.state.photo_worker = photo_worker
 
     @app.middleware("http")
     async def origin_check(request: Request, call_next):
@@ -212,7 +233,8 @@ def create_app(
         )
         return response
 
-    app.include_router(create_travel_router(auth, travel_repository))
-    app.include_router(create_search_router(auth, search_service))
+    app.include_router(create_travel_router(auth, travel_repository, photo_service=photo_service))
+    app.include_router(create_search_router(auth, search_service, photo_search=photo_search))
+    app.include_router(create_photo_router(auth, photo_service))
     app.include_router(create_conversation_router(auth, conversations))
     return app

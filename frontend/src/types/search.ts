@@ -1,4 +1,5 @@
 import type { Event } from './travel'
+import type { PhotoDTO } from './photo'
 
 export interface SearchEvent extends Event {
   trip_name?: string
@@ -18,8 +19,16 @@ export interface SearchItem {
   relation: SearchRelation | null
 }
 
+export interface SearchPhotoItem {
+  photo: PhotoDTO
+  score: number
+  reasons: string[]
+  event?: SearchEvent | null
+}
+
 export interface SearchPayload {
-  query: string
+  query?: string
+  photo_ids?: string[]
   trip_id?: string
   date_from?: string
   date_to?: string
@@ -30,6 +39,7 @@ export interface SearchPayload {
 
 export interface SearchResponse {
   items: SearchItem[]
+  photo_items?: SearchPhotoItem[]
   clarification: string | null
   vector_status: string
 }

@@ -3,6 +3,11 @@
 --index-url https://pypi.org/simple
 --extra-index-url https://download.pytorch.org/whl/cpu
 
+pillow==13.0.0
+    # via travelmemo
+pillow-heif==1.8.1
+    # via travelmemo
+
 annotated-doc==0.0.6
     # via fastapi
 annotated-types==0.8.0

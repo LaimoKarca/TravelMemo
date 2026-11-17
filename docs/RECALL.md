@@ -70,4 +70,4 @@ docker exec travelmemo-api-1 python main.py rebuild-index
 參見 [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses)
 及 [資料控制說明](https://developers.openai.com/api/docs/guides/your-data)。
 
-照片辨識、分享共編、地圖規劃與個人 API Key 不在本版範圍。
+相簿、圖片理解與聊天附圖見 [圖片手記](PHOTOS.md)。分享共編、地圖規劃與個人 API Key 不在本版範圍。

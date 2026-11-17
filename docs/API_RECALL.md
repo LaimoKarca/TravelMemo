@@ -47,9 +47,11 @@ Python 入口固定單一 API process，模型共用並限制編碼並行；不�
 | GET /conversations | 無 | {items:[對話摘要]} |
 | DELETE /conversations/{id} | 無 | 204 |
 | GET /conversations/{id}/messages | 無 | {items:[訊息]} |
-| POST /conversations/{id}/messages | {content} | 助理訊息 |
+| POST /conversations/{id}/messages | {content,photo_ids?}，文字或圖片至少一項 | 助理訊息 |
 
 訊息結構為 `{id,role,content,status,citations,created_at}`。
+另提供 `photos`、`photo_citations` 與 `answer_scope`，舊訊息預設為空圖片清單及 memory。
+`answer_scope` 是 image、memory 或 mixed；圖片描述可引用照片，私人經歷仍須事件引用。
 role 是 user 或 assistant；status 是 answered、insufficient_evidence、needs_clarification 或 unavailable。
 citations 每筆為 `{event_id,trip_id,date,place_name,version,state}`，
 state 是 current、changed 或 deleted。關係引用可額外保存 relation 證據；

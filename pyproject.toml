@@ -12,6 +12,7 @@ dependencies = [
     "neo4j>=6,<7", "email-validator>=2.2,<3", "tzdata>=2025.1",
     "numpy>=2,<3", "rank-bm25==0.2.2", "transformers>=4.50,<5",
     "torch>=2.6,<3", "openai>=2,<4",
+    "Pillow==13.0.0", "pillow-heif==1.8.1",
 ]
 
 [project.optional-dependencies]

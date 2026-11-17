@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { Trip, Event, Place, CreateEventPayload, UpdateEventPayload } from '../types/travel'
+import type { PhotoDTO } from '../types/photo'
+import { listPhotos, bindPhoto, deletePhoto, retryPhoto, updatePhoto } from '../api/photos'
+import PhotoGallery from './PhotoGallery.vue'
+import PhotoPicker from './PhotoPicker.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -22,7 +26,7 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'submit', payload: CreateEventPayload | UpdateEventPayload): void
+  (e: 'submit', payload: CreateEventPayload | UpdateEventPayload, stagedPhotoIds?: string[]): void
   (e: 'refresh'): void
   (e: 'cancel'): void
 }>()
@@ -48,6 +52,72 @@ const isEdit = computed(() => !!props.event)
 const dialogTitle = computed(() => (isEdit.value ? '編輯旅行足跡' : '記錄旅行足跡'))
 
 const commonCategories = ['景點', '美食', '住宿', '交通', '購物', '文化', '咖啡', '休閒']
+
+const eventPhotos = ref<PhotoDTO[]>([])
+const loadingPhotos = ref(false)
+const stagedPhotos = ref<PhotoDTO[]>([])
+const eventPhotoPickerRef = ref<any>(null)
+
+async function fetchEventPhotos(eventId: string) {
+  loadingPhotos.value = true
+  try {
+    const res = await listPhotos({ event_id: eventId })
+    eventPhotos.value = res.items || []
+  } catch {
+    // Non-blocking error for photos
+  } finally {
+    loadingPhotos.value = false
+  }
+}
+
+async function handleEventPhotoUploaded(photo: PhotoDTO) {
+  if (props.event) {
+    try {
+      await bindPhoto(photo.id, 'event', props.event.id)
+      eventPhotos.value.push(photo)
+      eventPhotoPickerRef.value?.removePhoto(photo.id)
+      if (eventPhotoPickerRef.value?.stagedPhotos?.length === 0) {
+        eventPhotoPickerRef.value?.clear()
+      }
+    } catch {
+      // Non-blocking
+    }
+  }
+}
+
+async function handleDeleteEventPhoto(payload: { photoId: string; version: number }) {
+  try {
+    await deletePhoto(payload.photoId, payload.version)
+    eventPhotos.value = eventPhotos.value.filter((p) => p.id !== payload.photoId)
+  } catch {
+    // Non-blocking
+  }
+}
+
+async function handleRetryEventPhoto(payload: { photoId: string; version: number }) {
+  try {
+    const updated = await retryPhoto(payload.photoId, payload.version)
+    const idx = eventPhotos.value.findIndex((p) => p.id === payload.photoId)
+    if (idx !== -1) eventPhotos.value[idx] = updated
+  } catch {
+    // Non-blocking
+  }
+}
+
+async function handleUpdateEventPhotoCaption(payload: { photoId: string; caption: string; version: number }) {
+  try {
+    const updated = await updatePhoto(payload.photoId, { caption: payload.caption, version: payload.version })
+    const idx = eventPhotos.value.findIndex((p) => p.id === payload.photoId)
+    if (idx !== -1) eventPhotos.value[idx] = updated
+  } catch {
+    // Non-blocking
+  }
+}
+
+function handleCancel() {
+  stagedPhotos.value = []
+  emit('cancel')
+}
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -138,8 +208,14 @@ watch(
   (val, oldVal) => {
     if (val) {
       launcherRef.value = document.activeElement as HTMLElement | null
+      stagedPhotos.value = []
       if (!props.hasConflict) {
         resetFormFromProps()
+      }
+      if (props.event) {
+        fetchEventPhotos(props.event.id)
+      } else {
+        eventPhotos.value = []
       }
       nextTick(() => {
         const firstInput = dialogRef.value?.querySelector<HTMLElement>('#event-place-name')
@@ -147,6 +223,7 @@ watch(
         ;(firstInput || firstFocusable)?.focus()
       })
     } else if (oldVal) {
+      stagedPhotos.value = []
       nextTick(() => {
         launcherRef.value?.focus()
       })
@@ -239,7 +316,7 @@ function handleSubmit() {
       time: normalizedTime,
       notes: notes.value
     }
-    emit('submit', payload)
+    emit('submit', payload, stagedPhotos.value.map((p) => p.id))
   }
 }
 
@@ -499,12 +576,56 @@ onBeforeUnmount(() => {
           ></textarea>
         </div>
 
+        <!-- Event Photos Section -->
+        <fieldset class="form-fieldset">
+          <legend class="fieldset-legend">足跡相片</legend>
+
+          <!-- For existing event: direct photo gallery & upload -->
+          <div v-if="isEdit && event" class="event-photos-edit-mode">
+            <PhotoPicker
+              ref="eventPhotoPickerRef"
+              :compact="true"
+              :multiple="true"
+              button-text="新增照片"
+              camera-button-text="拍照"
+              @upload-complete="handleEventPhotoUploaded"
+            />
+            <div class="photos-sub-wrapper">
+              <PhotoGallery
+                :photos="eventPhotos"
+                :loading="loadingPhotos"
+                :can-set-cover="false"
+                :can-reorder="false"
+                :can-delete="true"
+                :can-edit-caption="true"
+                empty-text="此處足跡尚未附帶照片"
+                @delete="handleDeleteEventPhoto"
+                @retry="handleRetryEventPhoto"
+                @update-caption="handleUpdateEventPhotoCaption"
+                @refresh="props.event && fetchEventPhotos(props.event.id)"
+              />
+            </div>
+          </div>
+
+          <!-- For new event: staged photo picker + previews -->
+          <div v-else class="event-photos-new-mode">
+            <p class="field-hint staged-hint">可先拍照或選取照片，儲存足跡時將自動綁定：</p>
+            <PhotoPicker
+              v-model:photos="stagedPhotos"
+              :compact="true"
+              :multiple="true"
+              button-text="選擇照片"
+              camera-button-text="拍照"
+            />
+          </div>
+        </fieldset>
+
         <footer class="dialog-footer">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="loading"
-            @click="emit('cancel')"
+            @click="handleCancel"
           >
             取消
           </button>
@@ -776,6 +897,14 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+.photos-sub-wrapper {
+  margin-top: 0.75rem;
+}
+
+.staged-hint {
+  margin-bottom: 0.5rem;
 }
 
 .spinner-small {

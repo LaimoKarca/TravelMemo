@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     conversation_summary_trigger: int = Field(default=12, ge=4, le=50)
     conversation_summary_chars_trigger: int = Field(default=12000, ge=2000, le=50000)
     conversation_prompt_max_chars: int = Field(default=24000, ge=18000, le=50000)
+    vision_model: str = ""
+    media_root: str = "data/media"
+    media_upload_max_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
+    media_max_pixels: int = Field(default=50_000_000, ge=1_000_000, le=100_000_000)
+    media_max_dimension: int = Field(default=2048, ge=512, le=4096)
+    media_image_max_bytes: int = Field(default=512 * 1024, ge=16 * 1024)
+    media_thumbnail_max_bytes: int = Field(default=64 * 1024, ge=1024)
+    media_user_quota_bytes: int = Field(default=250 * 1024 * 1024, ge=1024)
+    media_global_quota_bytes: int = Field(default=5 * 1024 * 1024 * 1024, ge=1024)
+    media_poll_seconds: float = Field(default=3, ge=0.1, le=300)
+    media_orphan_seconds: int = Field(default=3600, ge=60)
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_revision: str = Field(
         default="614241f622f53c4eeff9890bdc4f31cfecc418b3", pattern=r"^[0-9a-f]{40}$"
@@ -77,6 +88,10 @@ class Settings(BaseSettings):
         match = re.match(r"^gpt-(\d+)(?:[.-]|$)", self.openai_model)
         if not match or int(match.group(1)) < 5:
             raise ValueError("OPENAI_MODEL must be GPT-5 or newer")
+        if self.vision_model:
+            vision_match = re.match(r"^gpt-(\d+)(?:[.-]|$)", self.vision_model)
+            if not vision_match or int(vision_match.group(1)) < 5:
+                raise ValueError("VISION_MODEL must be GPT-5 or newer")
         if self.smtp_tls not in {"starttls", "ssl", "none"}:
             raise ValueError("SMTP_TLS must be starttls, ssl or none")
         if self.app_env not in {"development", "production"}:

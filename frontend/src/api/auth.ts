@@ -44,7 +44,13 @@ export async function request<T>(
   headers.set('Accept', 'application/json')
 
   if (options.body && !(options.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json')
+    if (options.body instanceof Blob) {
+      if (!headers.has('Content-Type')) {
+        headers.set('Content-Type', (options.body as Blob).type || 'application/octet-stream')
+      }
+    } else if (!headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json')
+    }
   }
 
   // Include in-memory CSRF token if present and not already provided

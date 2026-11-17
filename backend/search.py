@@ -13,7 +13,8 @@ from backend.travel import Event
 
 class SearchInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    query: str = Field(min_length=1, max_length=500)
+    query: str = Field(default="", max_length=500)
+    photo_ids: list[str] = Field(default_factory=list, max_length=4)
     trip_id: str | None = Field(default=None, max_length=100)
     date_from: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     date_to: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
@@ -25,8 +26,6 @@ class SearchInput(BaseModel):
     @classmethod
     def validate_query(cls, v: str) -> str:
         trimmed = v.strip()
-        if not trimmed:
-            raise ValueError("查詢字串不得為空或全為空白。")
         return trimmed
 
     @field_validator("date_from", "date_to")
@@ -41,6 +40,8 @@ class SearchInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_date_range(self):
+        if not self.query and not self.photo_ids:
+            raise ValueError("查詢字串不得為空白，或請選擇圖片。")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("起始日期不得晚於結束日期。")
         return self
@@ -67,6 +68,7 @@ class SearchResponse(BaseModel):
     items: list[SearchResultItem]
     clarification: str | None = None
     vector_status: str
+    photo_items: list[dict] = Field(default_factory=list)
 
 
 class EventDetailResponse(Event):
@@ -74,7 +76,7 @@ class EventDetailResponse(Event):
     trip_name: str | None = None
 
 
-def create_search_router(auth: AuthService, service: Any, prefix: str = "/api/v1") -> APIRouter:
+def create_search_router(auth: AuthService, service: Any, prefix: str = "/api/v1", photo_search: Any = None) -> APIRouter:
     router = APIRouter(prefix=prefix)
 
     def _auth(request: Request, write: bool = False) -> str:
@@ -93,12 +95,21 @@ def create_search_router(auth: AuthService, service: Any, prefix: str = "/api/v1
             "city": body.city,
             "category": body.category,
         }
+        query = body.query
+        if body.photo_ids:
+            if photo_search is None:
+                raise HTTPException(status_code=503, detail="圖片搜尋暫時無法使用。")
+            photo_search.photo_service.ready_evidence(owner_id, body.photo_ids)
+            clues = photo_search.get_query_text(owner_id, body.photo_ids)
+            query = f"{query}\n{clues}".strip()[:2000]
         res = service.search(
             owner_id=owner_id,
-            query=body.query,
+            query=query,
             filters=filters,
             limit=body.limit,
         )
+        if photo_search is not None:
+            res["photo_items"] = photo_search.search(owner_id, query, limit=body.limit, **filters)
         return res
 
     @router.get("/search/status")

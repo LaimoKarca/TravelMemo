@@ -7,7 +7,7 @@ COPY pyproject.toml main.py README.md LICENSE ./
 COPY backend ./backend
 COPY experiments ./experiments
 RUN pip install --no-deps . && useradd --uid 10001 --create-home app \
-    && mkdir -p /app/data/models && chown -R app:app /app/data
+    && mkdir -p /app/data/models /app/media && chown -R app:app /app/data /app/media
 USER app
 EXPOSE 8000
 CMD ["python", "main.py", "serve", "--host", "0.0.0.0", "--port", "8000"]

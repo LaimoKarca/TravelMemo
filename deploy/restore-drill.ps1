@@ -14,13 +14,27 @@ $suffix = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $volume = "travelmemo-restore-drill-$suffix"
 $container = "travelmemo-restore-drill-$suffix"
 $network = "travelmemo-restore-drill-$suffix"
+$mediaVolume = "travelmemo-restore-media-$suffix"
 function Invoke-Docker([string[]]$Arguments) {
     & docker @Arguments
     if ($LASTEXITCODE -ne 0) { throw "Docker operation failed (exit $LASTEXITCODE)." }
 }
 $created = $false
 $networkCreated = $false
+$mediaCreated = $false
 try {
+    if ($manifest.media_sha256) {
+        $mediaArchive = Join-Path $backupRoot 'photos-data.tar.gz'
+        if ((Get-FileHash -LiteralPath $mediaArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.media_sha256) {
+            throw 'Photo archive integrity check failed.'
+        }
+        Invoke-Docker -Arguments @('volume', 'create', $mediaVolume) | Out-Null
+        $mediaCreated = $true
+        Invoke-Docker -Arguments @('run', '--rm', '--network', 'none', '--user', '0', '--entrypoint', 'bash',
+            '--mount', "type=volume,source=$mediaVolume,target=/photos",
+            '--mount', "type=bind,source=$backupRoot,target=/backup,readonly", $manifest.neo4j_image_id,
+            '-c', 'tar -xzf /backup/photos-data.tar.gz -C /photos && chown -R 10001:10001 /photos')
+    }
     Invoke-Docker -Arguments @('network', 'create', '--internal', $network) | Out-Null
     $networkCreated = $true
     Invoke-Docker -Arguments @('volume', 'create', $volume) | Out-Null
@@ -75,5 +89,8 @@ try {
     }
     if ($networkCreated -and $network -match '^travelmemo-restore-drill-[a-f0-9]{12}$') {
         docker network rm $network | Out-Null
+    }
+    if ($mediaCreated -and $mediaVolume -match '^travelmemo-restore-media-[a-f0-9]{12}$') {
+        docker volume rm $mediaVolume | Out-Null
     }
 }

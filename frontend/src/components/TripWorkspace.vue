@@ -24,6 +24,17 @@ import {
   deleteEvent,
   reorderEvents
 } from '../api/travel'
+import {
+  listPhotos,
+  bindPhoto,
+  deletePhoto,
+  retryPhoto,
+  updatePhoto,
+  reorderTripPhotos,
+  getTripCover,
+  setTripCover
+} from '../api/photos'
+import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import StatusAlert from './StatusAlert.vue'
 import TripDialog from './TripDialog.vue'
@@ -33,6 +44,9 @@ import RecallSearch from './RecallSearch.vue'
 import ConversationView from './ConversationView.vue'
 import SourceDetailModal from './SourceDetailModal.vue'
 import TravelDivider from './TravelDivider.vue'
+import PhotoGallery from './PhotoGallery.vue'
+import PhotoPicker from './PhotoPicker.vue'
+import PhotoViewer from './PhotoViewer.vue'
 import { useTravelMotion } from '../composables/useTravelMotion'
 
 const props = defineProps<{
@@ -71,6 +85,7 @@ function setTabRef(el: any, index: number) {
 function switchTab(tab: WorkspaceTab) {
   if (activeTab.value !== tab) {
     activeTab.value = tab
+    clearAlert()
     triggerTabWash(450)
   }
 }
@@ -149,6 +164,28 @@ const currentTrip = ref<Trip | null>(null)
 const currentEvents = ref<Event[]>([])
 const nextEdges = ref<Array<{ from_id: string; to_id: string }>>([])
 const reusablePlaces = ref<Place[]>([])
+
+// Photo state
+const currentTripPhotos = ref<PhotoDTO[]>([])
+const currentTripCoverId = ref<string | null>(null)
+const loadingTripPhotos = ref(false)
+const tripCovers = ref<Record<string, string | null>>({})
+const tripPhotoPickerRef = ref<any>(null)
+
+// Lightbox for timeline event photos
+const timelineViewerVisible = ref(false)
+const timelineSelectedPhotoId = ref<string | null>(null)
+
+function openTimelinePhotoViewer(photoId: string) {
+  timelineSelectedPhotoId.value = photoId
+  timelineViewerVisible.value = true
+}
+
+function getEventPhotos(eventId: string): PhotoDTO[] {
+  return currentTripPhotos.value.filter((p) =>
+    p.bindings?.some((b) => b.kind === 'event' && b.target_id === eventId)
+  )
+}
 
 // Filters for current trip
 const selectedCityFilter = ref<string>('all')
@@ -328,6 +365,107 @@ async function selectTrip(tripId: string) {
   } finally {
     loadingDetail.value = false
   }
+  fetchTripPhotos(tripId)
+}
+
+async function fetchTripPhotos(tripId: string) {
+  loadingTripPhotos.value = true
+  try {
+    const [photosRes, coverRes] = await Promise.all([
+      listPhotos({ trip_id: tripId }),
+      getTripCover(tripId)
+    ])
+    currentTripPhotos.value = photosRes.items || []
+    currentTripCoverId.value = coverRes.photo_id
+    tripCovers.value[tripId] = coverRes.photo_id
+  } catch {
+    // Non-blocking
+  } finally {
+    loadingTripPhotos.value = false
+  }
+}
+
+async function handleTripPhotoUploaded(photo: PhotoDTO) {
+  if (currentTrip.value) {
+    try {
+      await bindPhoto(photo.id, 'trip', currentTrip.value.id)
+      currentTripPhotos.value.push(photo)
+      showAlert('已新增照片至旅程相簿。', 'success')
+      // Clear staged preview after successful bind (without deleting bound photo)
+      // so duplicate thumbnail does not appear in picker and does not hold against 20-upload cap
+      tripPhotoPickerRef.value?.removePhoto(photo.id)
+      if (tripPhotoPickerRef.value?.stagedPhotos?.length === 0) {
+        tripPhotoPickerRef.value?.clear()
+      }
+    } catch (err: any) {
+      showAlert(err instanceof ApiError ? err.detail : '新增照片至旅程相簿失敗。', 'error')
+    }
+  }
+}
+
+async function handleSetCover(photoId: string) {
+  if (!currentTrip.value) return
+  actionInProgress.value = true
+  try {
+    const res = await setTripCover(currentTrip.value.id, photoId)
+    currentTripCoverId.value = res.photo_id
+    tripCovers.value[currentTrip.value.id] = res.photo_id
+    showAlert('已更新旅程封面照片。', 'success')
+  } catch (err: any) {
+    showAlert(err instanceof ApiError ? err.detail : '設定封面照片失敗。', 'error')
+  } finally {
+    actionInProgress.value = false
+  }
+}
+
+async function handleReorderPhotos(photoIds: string[]) {
+  if (!currentTrip.value) return
+  try {
+    const res = await reorderTripPhotos(currentTrip.value.id, photoIds)
+    currentTripPhotos.value = res.items || []
+    showAlert('已更新相簿照片順序。', 'success')
+  } catch (err: any) {
+    showAlert(err instanceof ApiError ? err.detail : '調整照片順序失敗。', 'error')
+  }
+}
+
+async function handleDeletePhoto(payload: { photoId: string; version: number }) {
+  actionInProgress.value = true
+  try {
+    await deletePhoto(payload.photoId, payload.version)
+    currentTripPhotos.value = currentTripPhotos.value.filter((p) => p.id !== payload.photoId)
+    if (currentTripCoverId.value === payload.photoId) {
+      currentTripCoverId.value = null
+      if (currentTrip.value) tripCovers.value[currentTrip.value.id] = null
+    }
+    showAlert('已刪除照片。', 'info')
+  } catch (err: any) {
+    showAlert(err instanceof ApiError ? err.detail : '刪除照片失敗。', 'error')
+  } finally {
+    actionInProgress.value = false
+  }
+}
+
+async function handleRetryPhoto(payload: { photoId: string; version: number }) {
+  try {
+    const updated = await retryPhoto(payload.photoId, payload.version)
+    const idx = currentTripPhotos.value.findIndex((p) => p.id === payload.photoId)
+    if (idx !== -1) currentTripPhotos.value[idx] = updated
+    showAlert('已重新提交 AI 照片分析。', 'info')
+  } catch (err: any) {
+    showAlert(err instanceof ApiError ? err.detail : '重試照片分析失敗。', 'error')
+  }
+}
+
+async function handleUpdateCaption(payload: { photoId: string; caption: string; version: number }) {
+  try {
+    const updated = await updatePhoto(payload.photoId, { caption: payload.caption, version: payload.version })
+    const idx = currentTripPhotos.value.findIndex((p) => p.id === payload.photoId)
+    if (idx !== -1) currentTripPhotos.value[idx] = updated
+    showAlert('已更新照片說明。', 'success')
+  } catch (err: any) {
+    showAlert(err instanceof ApiError ? err.detail : '更新照片說明失敗。', 'error')
+  }
 }
 
 function backToTripList() {
@@ -336,6 +474,8 @@ function backToTripList() {
   currentTrip.value = null
   currentEvents.value = []
   nextEdges.value = []
+  currentTripPhotos.value = []
+  currentTripCoverId.value = null
   fetchTrips()
 }
 
@@ -451,7 +591,10 @@ function openEditEventModal(event: Event) {
   showEventModal.value = true
 }
 
-async function handleEventSubmit(payload: CreateEventPayload | UpdateEventPayload) {
+async function handleEventSubmit(
+  payload: CreateEventPayload | UpdateEventPayload,
+  stagedPhotoIds: string[] = []
+) {
   if (!currentTrip.value) return
   actionInProgress.value = true
   eventModalError.value = ''
@@ -466,6 +609,15 @@ async function handleEventSubmit(payload: CreateEventPayload | UpdateEventPayloa
       await fetchPlaces()
     } else {
       const created = await createEvent(currentTrip.value.id, payload as CreateEventPayload)
+      if (stagedPhotoIds && stagedPhotoIds.length > 0) {
+        for (const pId of stagedPhotoIds) {
+          try {
+            await bindPhoto(pId, 'event', created.id)
+          } catch {
+            // Non-blocking bind error
+          }
+        }
+      }
       showAlert(`已記錄旅行足跡「${created.place_name}」`, 'success')
       showEventModal.value = false
       await selectTrip(currentTrip.value.id)
@@ -684,8 +836,11 @@ function resetFilters() {
     </header>
 
     <!-- Main Content Area: Fluid and Spacious -->
-    <main class="workspace-main">
-      <div class="workspace-content-pane" :class="{ 'tab-wash-active': isTabWashing }">
+    <main class="workspace-main" :class="{ 'is-chat-tab': activeTab === 'chat' }">
+      <div
+        class="workspace-content-pane"
+        :class="{ 'tab-wash-active': isTabWashing, 'is-chat-pane': activeTab === 'chat' }"
+      >
         <!-- Global Alert Notification Area -->
         <StatusAlert :message="alertMessage" :type="alertType" />
 
@@ -758,7 +913,13 @@ function resetFilters() {
                 @keydown.space.prevent="selectTrip(trip.id)"
               >
                 <div class="trip-cover" aria-hidden="true">
-                  <svg viewBox="0 0 360 88" fill="none" preserveAspectRatio="xMidYMid slice">
+                  <img
+                    v-if="tripCovers[trip.id]"
+                    :src="'/api/v1/photos/' + tripCovers[trip.id] + '/thumbnail'"
+                    alt=""
+                    class="trip-cover-img"
+                  />
+                  <svg v-else viewBox="0 0 360 88" fill="none" preserveAspectRatio="xMidYMid slice">
                     <path d="M0 22H360M0 66H360M45 0V88M135 0V88M225 0V88M315 0V88" stroke="currentColor" stroke-opacity=".07" />
                     <path d="M40 59C80 59 68 23 116 25S171 73 216 58 242 22 294 29" stroke="currentColor" stroke-width="2" stroke-dasharray="5 6" stroke-linecap="round" />
                     <circle cx="40" cy="59" r="7" fill="var(--color-paper)" stroke="currentColor" stroke-width="2" />
@@ -900,6 +1061,41 @@ function resetFilters() {
                   {{ currentTrip.description }}
                 </p>
               </div>
+            </div>
+
+            <!-- Trip Photo Gallery Section -->
+            <div class="trip-gallery-block" role="region" aria-label="旅程相簿">
+              <div class="gallery-header-row">
+                <div class="gallery-title-group">
+                  <h3 class="gallery-title">旅程相簿</h3>
+                  <span class="gallery-count-pill">{{ currentTripPhotos.length }} 張照片</span>
+                </div>
+                <PhotoPicker
+                  ref="tripPhotoPickerRef"
+                  :compact="true"
+                  :multiple="true"
+                  button-text="新增相簿照片"
+                  camera-button-text="拍照"
+                  @upload-complete="handleTripPhotoUploaded"
+                />
+              </div>
+
+              <PhotoGallery
+                :photos="currentTripPhotos"
+                :cover-photo-id="currentTripCoverId"
+                :loading="loadingTripPhotos"
+                :can-set-cover="true"
+                :can-reorder="true"
+                :can-delete="true"
+                :can-edit-caption="true"
+                empty-text="這趟旅程尚未新增照片，點擊上方按鈕記錄旅途片刻。"
+                @set-cover="handleSetCover"
+                @reorder="handleReorderPhotos"
+                @delete="handleDeletePhoto"
+                @retry="handleRetryPhoto"
+                @update-caption="handleUpdateCaption"
+                @refresh="currentTrip && fetchTripPhotos(currentTrip.id)"
+              />
             </div>
 
             <!-- Flattened Filter Bar: City & Category Filtering -->
@@ -1069,6 +1265,26 @@ function resetFilters() {
                         {{ evt.notes }}
                       </p>
 
+                      <!-- Event Photos Thumbnails if present -->
+                      <div v-if="getEventPhotos(evt.id).length > 0" class="event-photos-strip">
+                        <div
+                          v-for="ep in getEventPhotos(evt.id)"
+                          :key="ep.id"
+                          class="event-photo-item"
+                          tabindex="0"
+                          role="button"
+                          :aria-label="`檢視足跡照片：${ep.caption || '照片'}`"
+                          @click="openTimelinePhotoViewer(ep.id)"
+                          @keydown.enter="openTimelinePhotoViewer(ep.id)"
+                        >
+                          <img
+                            :src="ep.thumbnail_url || ep.url"
+                            :alt="ep.caption || '足跡照片'"
+                            class="event-photo-thumb"
+                          />
+                        </div>
+                      </div>
+
                       <!-- Route connection indication -->
                       <div v-if="getNextEventName(evt.id)" class="next-destination-indicator">
                         <span class="next-arrow" aria-hidden="true">➔</span>
@@ -1125,7 +1341,7 @@ function resetFilters() {
           id="workspace-panel-chat"
           role="tabpanel"
           aria-labelledby="workspace-tab-chat"
-          class="tabpanel-container"
+          class="tabpanel-container chat-tabpanel"
           tabindex="0"
         >
           <ConversationView
@@ -1204,6 +1420,14 @@ function resetFilters() {
       :initial-event="sourceModalInitialEvent"
       @close="showSourceModal = false"
       @jump="handleJumpToTrip"
+    />
+
+    <PhotoViewer
+      :visible="timelineViewerVisible"
+      :photos="currentTripPhotos"
+      :initial-photo-id="timelineSelectedPhotoId"
+      :can-edit-caption="false"
+      @close="timelineViewerVisible = false"
     />
   </div>
 </template>
@@ -1378,6 +1602,12 @@ function resetFilters() {
   min-width: 0;
 }
 
+.workspace-main.is-chat-tab {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .workspace-content-pane {
   position: relative;
   padding: 2rem 2.5rem;
@@ -1387,6 +1617,25 @@ function resetFilters() {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.workspace-content-pane.is-chat-pane {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 2.5rem 1rem;
+}
+
+.chat-tabpanel {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Tab switch gentle cream ripple/wash <=600ms without layout shift */
@@ -1547,10 +1796,96 @@ function resetFilters() {
   height: 96px;
   background: var(--color-maple-subtle);
   color: var(--color-maple);
+  position: relative;
+  overflow: hidden;
 }
 .trip-cover svg { width: 100%; height: 100%; }
+.trip-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 .trip-card:nth-child(3n + 2) .trip-cover { background: var(--color-olive-pale); color: var(--color-olive); }
 .trip-card:nth-child(3n) .trip-cover { background: var(--color-amber-subtle); color: var(--color-amber-text); }
+
+/* Trip Gallery Block: Flat layout without outer card frame */
+.trip-gallery-block {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0.5rem 0 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.gallery-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.gallery-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gallery-title {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.gallery-count-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-maple);
+  background-color: var(--color-maple-subtle);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-xs);
+}
+
+/* Event Photos Strip on Timeline */
+.event-photos-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.event-photo-item {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  background-color: var(--color-canvas);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.event-photo-item:hover {
+  transform: scale(1.05);
+  border-color: var(--color-maple);
+}
+
+.event-photo-item:focus-visible {
+  outline: 2px solid var(--color-maple);
+  outline-offset: 1px;
+}
+
+.event-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
 .trip-badge-row {
   display: flex;
@@ -2129,6 +2464,11 @@ function resetFilters() {
 
   .workspace-content-pane {
     padding: 1rem 0.875rem 5rem;
+  }
+
+  .workspace-content-pane.is-chat-pane {
+    padding: 0.75rem 0.875rem calc(56px + 0.75rem);
+    height: calc(100vh - 56px);
   }
 
   /* Mobile bottom 3-tab navigation */

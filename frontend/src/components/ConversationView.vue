@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type {
   ConversationSummary,
   Message,
   Citation,
-  MessageStatus
+  MessageStatus,
+  PhotoCitation
 } from '../types/conversation'
+import type { PhotoDTO } from '../types/photo'
+import type { Trip, Event as TravelEvent } from '../types/travel'
 import {
   listConversations,
   createConversation,
@@ -13,8 +16,12 @@ import {
   listMessages,
   sendMessage
 } from '../api/conversation'
+import { listTrips, getTrip } from '../api/travel'
+import { bindPhoto, getPhoto, retryPhoto } from '../api/photos'
 import { ApiError } from '../api/auth'
 import ConfirmDialog from './ConfirmDialog.vue'
+import PhotoPicker from './PhotoPicker.vue'
+import PhotoViewer from './PhotoViewer.vue'
 
 const emit = defineEmits<{
   (e: 'view-citation', citation: Citation): void
@@ -42,9 +49,261 @@ function onHistoryToggle(e: Event) {
 const inputContent = ref('')
 const errorMessage = ref('')
 const composerInputRef = ref<HTMLTextAreaElement | null>(null)
+const chatPhotoPickerRef = ref<any>(null)
+
+// Staged photos for current composer message
+const stagedChatPhotos = ref<PhotoDTO[]>([])
 
 // Drafts cache per conversation to preserve user draft across switches
 const drafts = ref<Record<string, string>>({})
+
+// Save to Journal modal state
+const showSaveModal = ref(false)
+const photoToSave = ref<PhotoDTO | null>(null)
+const availableTrips = ref<Trip[]>([])
+const tripEventsForSave = ref<TravelEvent[]>([])
+const saveSelectedTripId = ref('')
+const saveSelectedEventId = ref('')
+const savingToJournal = ref(false)
+const saveSuccessMessage = ref('')
+const saveErrorMessage = ref('')
+
+// Lightbox viewer state
+const viewerVisible = ref(false)
+const viewerPhotos = ref<PhotoDTO[]>([])
+const viewerInitialPhotoId = ref<string | null>(null)
+
+function openLightbox(photo: PhotoDTO, photosList: PhotoDTO[] = []) {
+  viewerInitialPhotoId.value = photo.id
+  viewerPhotos.value = photosList.length > 0 ? photosList : [photo]
+  viewerVisible.value = true
+}
+
+function openCitationPhoto(pCite: PhotoCitation) {
+  const syntheticPhoto: PhotoDTO = {
+    id: pCite.photo_id,
+    caption: pCite.caption || '',
+    version: pCite.version || 1,
+    analysis_version: 1,
+    status: 'ready',
+    analysis: {
+      summary: pCite.caption || '',
+      visible_text: [],
+      tags: [],
+      place_candidates: [],
+      date_candidate: null,
+      uncertainties: []
+    },
+    width: 0,
+    height: 0,
+    size_bytes: 0,
+    thumbnail_size_bytes: 0,
+    created_at: '',
+    updated_at: '',
+    bindings: [],
+    url: pCite.url,
+    thumbnail_url: pCite.thumbnail_url
+  }
+  openLightbox(syntheticPhoto, [syntheticPhoto])
+}
+
+async function openSaveToJournalModal(photo: PhotoDTO) {
+  photoToSave.value = photo
+  saveSelectedTripId.value = ''
+  saveSelectedEventId.value = ''
+  tripEventsForSave.value = []
+  saveSuccessMessage.value = ''
+  saveErrorMessage.value = ''
+  showSaveModal.value = true
+
+  try {
+    const res = await listTrips()
+    availableTrips.value = res.items || []
+  } catch {
+    // Non-blocking
+  }
+}
+
+async function onSaveTripChange() {
+  saveSelectedEventId.value = ''
+  tripEventsForSave.value = []
+  if (!saveSelectedTripId.value) return
+
+  try {
+    const detail = await getTrip(saveSelectedTripId.value)
+    tripEventsForSave.value = detail.events || []
+  } catch {
+    // Non-blocking
+  }
+}
+
+async function confirmSaveToJournal() {
+  if (!photoToSave.value || !saveSelectedTripId.value) return
+  savingToJournal.value = true
+  saveSuccessMessage.value = ''
+  saveErrorMessage.value = ''
+
+  const kind = saveSelectedEventId.value ? 'event' : 'trip'
+  const targetId = saveSelectedEventId.value || saveSelectedTripId.value
+
+  try {
+    await bindPhoto(photoToSave.value.id, kind, targetId)
+    saveSuccessMessage.value = '已成功將照片存入旅行手記！'
+    setTimeout(() => {
+      showSaveModal.value = false
+      photoToSave.value = null
+    }, 1200)
+  } catch (err: any) {
+    saveErrorMessage.value = err instanceof ApiError ? err.detail : '加入手記失敗，請稍後再試。'
+  } finally {
+    savingToJournal.value = false
+  }
+}
+
+function closeSaveModal() {
+  showSaveModal.value = false
+  photoToSave.value = null
+}
+
+function getAnswerScopeLabel(scope?: string): string {
+  if (scope === 'image') return '照片依據'
+  if (scope === 'mixed') return '回憶與照片依據'
+  return '手記回憶依據'
+}
+
+// Bounded polling for photos with status pending | processing
+let chatPollTimer: ReturnType<typeof setTimeout> | null = null
+let chatPollCount = 0
+
+const hasPendingChatPhotos = computed(() => {
+  return messages.value.some((m) =>
+    m.photos?.some((p) => p.status === 'pending' || p.status === 'processing')
+  )
+})
+
+function checkAndScheduleChatPoll() {
+  if (chatPollTimer) {
+    clearTimeout(chatPollTimer)
+    chatPollTimer = null
+  }
+  if (!activeConversationId.value || !hasPendingChatPhotos.value || chatPollCount >= 10) {
+    return
+  }
+  const delay = Math.min(2000 + chatPollCount * 1000, 8000)
+  chatPollTimer = setTimeout(async () => {
+    chatPollCount++
+    if (activeConversationId.value) {
+      try {
+        const res = await listMessages(activeConversationId.value)
+        messages.value = res.items || []
+      } catch {
+        // Non-blocking
+      }
+    }
+  }, delay)
+}
+
+watch(hasPendingChatPhotos, (pending) => {
+  if (pending) {
+    checkAndScheduleChatPoll()
+  } else {
+    chatPollCount = 0
+    if (chatPollTimer) {
+      clearTimeout(chatPollTimer)
+      chatPollTimer = null
+    }
+  }
+})
+
+// Bounded polling for staged photos in composer until ready
+let stagedPollTimer: ReturnType<typeof setTimeout> | null = null
+let stagedPollCount = 0
+
+const hasPendingStagedPhotos = computed(() => {
+  return stagedChatPhotos.value.some((p) => p.status === 'pending' || p.status === 'processing')
+})
+
+const hasUnreadyStagedPhotos = computed(() => {
+  return stagedChatPhotos.value.some((p) => p.status !== 'ready')
+})
+
+const hasFailedOrBlockedStagedPhotos = computed(() => {
+  return stagedChatPhotos.value.some((p) => p.status === 'failed' || p.status === 'blocked')
+})
+
+function checkAndScheduleStagedPoll() {
+  if (stagedPollTimer) {
+    clearTimeout(stagedPollTimer)
+    stagedPollTimer = null
+  }
+
+  if (!hasPendingStagedPhotos.value || stagedPollCount >= 20) {
+    return
+  }
+
+  const delay = Math.min(1500 + stagedPollCount * 500, 5000)
+  stagedPollTimer = setTimeout(async () => {
+    stagedPollCount++
+    const pendingList = stagedChatPhotos.value.filter((p) => p.status === 'pending' || p.status === 'processing')
+    for (const p of pendingList) {
+      try {
+        const latest = await getPhoto(p.id)
+        const idx = stagedChatPhotos.value.findIndex((item) => item.id === p.id)
+        if (idx !== -1) {
+          stagedChatPhotos.value[idx] = latest
+        }
+      } catch {
+        // Non-blocking poll
+      }
+    }
+    if (hasPendingStagedPhotos.value) {
+      checkAndScheduleStagedPoll()
+    }
+  }, delay)
+}
+
+watch(
+  hasPendingStagedPhotos,
+  (hasPending) => {
+    if (hasPending) {
+      checkAndScheduleStagedPoll()
+    } else {
+      stagedPollCount = 0
+      if (stagedPollTimer) {
+        clearTimeout(stagedPollTimer)
+        stagedPollTimer = null
+      }
+    }
+  },
+  { immediate: true }
+)
+
+async function handleRetryStagedPhoto(photoId: string) {
+  const photo = stagedChatPhotos.value.find((p) => p.id === photoId)
+  if (!photo) return
+  try {
+    const updated = await retryPhoto(photo.id, photo.version)
+    const idx = stagedChatPhotos.value.findIndex((p) => p.id === photo.id)
+    if (idx !== -1) {
+      stagedChatPhotos.value[idx] = updated
+    }
+    stagedPollCount = 0
+    checkAndScheduleStagedPoll()
+  } catch {
+    // Non-blocking
+  }
+}
+
+onBeforeUnmount(() => {
+  if (chatPollTimer) {
+    clearTimeout(chatPollTimer)
+    chatPollTimer = null
+  }
+  if (stagedPollTimer) {
+    clearTimeout(stagedPollTimer)
+    stagedPollTimer = null
+  }
+})
 
 // Generation counter to invalidate stale loads when switching or on create/delete
 let messageLoadGen = 0
@@ -132,6 +391,8 @@ function handleStartNewConversation() {
   messages.value = []
   loadingMessages.value = false
   inputContent.value = drafts.value['new'] || ''
+  stagedChatPhotos.value = []
+  chatPhotoPickerRef.value?.clear()
   errorMessage.value = ''
   nextTick(() => {
     composerInputRef.value?.focus()
@@ -173,10 +434,17 @@ async function handleConfirmDelete() {
 
 async function handleSendMessage() {
   const content = inputContent.value.trim()
-  if (!content || sendingMessage.value) return
+  if ((!content && stagedChatPhotos.value.length === 0) || sendingMessage.value || hasUnreadyStagedPhotos.value) return
 
   const sendGen = messageLoadGen
   let targetId = activeConversationId.value
+
+  const stagedCopies = [...stagedChatPhotos.value]
+  const photoIds = stagedCopies.map((p) => p.id)
+
+  // Clear staged photos
+  stagedChatPhotos.value = []
+  chatPhotoPickerRef.value?.clear()
 
   // Optimistically append user message
   const tempUserMessage: Message = {
@@ -185,6 +453,7 @@ async function handleSendMessage() {
     content,
     status: 'answered',
     citations: [],
+    photos: stagedCopies,
     created_at: new Date().toISOString()
   }
 
@@ -226,13 +495,17 @@ async function handleSendMessage() {
           messages.value.splice(tempIdx, 1)
         }
         inputContent.value = content
+        stagedChatPhotos.value = stagedCopies
         errorMessage.value = err instanceof ApiError ? err.detail : '建立新對話失敗，請稍後再試。'
         return
       }
     }
 
     try {
-      const reply = await sendMessage(targetId, { content })
+      const reply = await sendMessage(targetId, {
+        content,
+        photo_ids: photoIds.length > 0 ? photoIds : undefined
+      })
       // Only append reply if still matching generation & active conversation
       if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
         messages.value.push(reply)
@@ -249,6 +522,7 @@ async function handleSendMessage() {
 
       if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
         inputContent.value = content
+        stagedChatPhotos.value = stagedCopies
         errorMessage.value = err instanceof ApiError ? err.detail : '發送訊息失敗，請稍後再試。'
       } else {
         drafts.value[targetId] = content
@@ -435,6 +709,13 @@ function handleCitationClick(citation: Citation) {
                 {{ msg.role === 'user' ? '旅人' : '手記助理' }}
               </span>
               <span
+                v-if="msg.role === 'assistant' && msg.answer_scope"
+                class="answer-scope-pill"
+                :class="'scope-' + msg.answer_scope"
+              >
+                {{ getAnswerScopeLabel(msg.answer_scope) }}
+              </span>
+              <span
                 v-if="msg.role === 'assistant'"
                 class="message-status-pill"
                 :class="getStatusBadge(msg.status).className"
@@ -446,6 +727,41 @@ function handleCitationClick(citation: Citation) {
             <!-- Natural text in open stream -->
             <div class="message-content">
               {{ msg.content }}
+            </div>
+
+            <!-- Attached Photos (User or Assistant) -->
+            <div
+              v-if="msg.photos && msg.photos.length > 0"
+              class="message-photos-grid"
+            >
+              <div
+                v-for="photo in msg.photos"
+                :key="photo.id"
+                class="message-photo-item"
+              >
+                <div
+                  class="photo-thumb-wrap"
+                  tabindex="0"
+                  role="button"
+                  :aria-label="`檢視照片：${photo.caption || '照片'}`"
+                  @click="openLightbox(photo, msg.photos || [])"
+                  @keydown.enter="openLightbox(photo, msg.photos || [])"
+                >
+                  <img
+                    :src="photo.thumbnail_url || photo.url"
+                    :alt="photo.caption || '對話照片'"
+                    class="message-photo-img"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="btn-save-to-journal"
+                  title="存入旅行手記"
+                  @click="openSaveToJournalModal(photo)"
+                >
+                  存入手記
+                </button>
+              </div>
             </div>
 
             <!-- Citations: Flat text rows right below answer (No nested source cards) -->
@@ -483,6 +799,67 @@ function handleCitationClick(citation: Citation) {
                 </div>
               </div>
             </div>
+
+            <!-- Photo Citations -->
+            <div
+              v-if="msg.role === 'assistant' && msg.photo_citations && msg.photo_citations.length > 0"
+              class="photo-citations-container"
+            >
+              <span class="citations-heading">引用手記照片：</span>
+              <div class="photo-citations-list">
+                <div
+                  v-for="pCite in msg.photo_citations"
+                  :key="pCite.photo_id"
+                  class="photo-citation-card"
+                  :class="{ 'is-deleted': pCite.state === 'deleted' }"
+                  tabindex="0"
+                  role="button"
+                  :aria-label="`檢視引用照片：${pCite.caption || '手記照片'}`"
+                  @click="openCitationPhoto(pCite)"
+                  @keydown.enter="openCitationPhoto(pCite)"
+                >
+                  <img
+                    :src="pCite.thumbnail_url || pCite.url"
+                    :alt="pCite.caption || '引用照片'"
+                    class="cite-photo-thumb"
+                  />
+                  <div class="cite-photo-info">
+                    <span class="cite-photo-caption">{{ pCite.caption || '手記照片' }}</span>
+                    <span
+                      class="cite-state-pill"
+                      :class="getCitationStateBadge(pCite.state).className"
+                    >
+                      {{ getCitationStateBadge(pCite.state).text }}
+                    </span>
+                  </div>
+                  <button
+                    v-if="pCite.state !== 'deleted'"
+                    type="button"
+                    class="btn-save-cite-to-journal"
+                    title="存入旅行手記"
+                    @click.stop="openSaveToJournalModal({
+                      id: pCite.photo_id,
+                      caption: pCite.caption || '',
+                      version: pCite.version || 1,
+                      analysis_version: 1,
+                      status: 'ready',
+                      analysis: { summary: pCite.caption || '', visible_text: [], tags: [], place_candidates: [], date_candidate: null, uncertainties: [] },
+                      width: 0,
+                      height: 0,
+                      size_bytes: 0,
+                      thumbnail_size_bytes: 0,
+                      created_at: '',
+                      updated_at: '',
+                      bindings: [],
+                      url: pCite.url,
+                      thumbnail_url: pCite.thumbnail_url
+                    })"
+                  >
+                    存入手記
+                  </button>
+                </div>
+              </div>
+            </div>
           </article>
 
           <!-- Sending assistant indicator -->
@@ -509,10 +886,11 @@ function handleCitationClick(citation: Citation) {
               :disabled="sendingMessage || loadingMessages"
               @keydown.enter.exact.prevent="handleSendMessage"
             ></textarea>
+
             <button
               type="submit"
               class="btn btn-primary send-btn"
-              :disabled="sendingMessage || loadingMessages || !inputContent.trim()"
+              :disabled="sendingMessage || loadingMessages || hasUnreadyStagedPhotos || (!inputContent.trim() && stagedChatPhotos.length === 0)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="22" y1="2" x2="11" y2="13" />
@@ -520,10 +898,112 @@ function handleCitationClick(citation: Citation) {
               </svg>
               <span>{{ sendingMessage ? '回覆中...' : '發送' }}</span>
             </button>
+
+            <div class="composer-picker-row">
+              <PhotoPicker
+                ref="chatPhotoPickerRef"
+                v-model:photos="stagedChatPhotos"
+                :compact="true"
+                :multiple="true"
+                :max-photos="4"
+                button-text="選取照片"
+                camera-button-text="拍照"
+                @retry="handleRetryStagedPhoto"
+              />
+
+              <div v-if="hasPendingStagedPhotos" class="reading-indicator" role="status" aria-live="polite">
+                <div class="page-spinner-sm" aria-hidden="true"></div>
+                <span class="reading-text">正在識別照片內容...</span>
+              </div>
+
+              <div v-else-if="hasFailedOrBlockedStagedPhotos" class="staged-alert-hint" role="alert">
+                <span class="alert-icon" aria-hidden="true">⚠️</span>
+                <span>照片未就緒，請重試或移除無法識別的照片</span>
+              </div>
+            </div>
           </form>
         </footer>
       </div>
     </main>
+
+    <!-- Save Photo to Journal Modal -->
+    <div
+      v-if="showSaveModal"
+      class="dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="存入旅行手記"
+    >
+      <div class="save-modal-card">
+        <h3 class="save-modal-title">存入旅行手記</h3>
+        <p class="save-modal-desc">選擇要將這張照片加入的旅程手記或足跡：</p>
+
+        <div class="form-group">
+          <label for="save-trip-select" class="form-label">選擇旅程手記</label>
+          <select
+            id="save-trip-select"
+            v-model="saveSelectedTripId"
+            class="form-input form-select"
+            @change="onSaveTripChange"
+          >
+            <option value="">-- 請選擇旅程 --</option>
+            <option v-for="t in availableTrips" :key="t.id" :value="t.id">
+              {{ t.name }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="saveSelectedTripId && tripEventsForSave.length > 0" class="form-group">
+          <label for="save-event-select" class="form-label">選擇特定足跡（選填）</label>
+          <select
+            id="save-event-select"
+            v-model="saveSelectedEventId"
+            class="form-input form-select"
+          >
+            <option value="">綁定於整個旅程（相簿）</option>
+            <option v-for="e in tripEventsForSave" :key="e.id" :value="e.id">
+              {{ e.place_name }} ({{ e.date }})
+            </option>
+          </select>
+        </div>
+
+        <div v-if="saveSuccessMessage" class="save-success-banner" role="status">
+          {{ saveSuccessMessage }}
+        </div>
+        <div v-if="saveErrorMessage" class="error-banner" role="alert">
+          {{ saveErrorMessage }}
+        </div>
+
+        <footer class="dialog-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            :disabled="savingToJournal"
+            @click="closeSaveModal"
+          >
+            關閉
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="savingToJournal || !saveSelectedTripId"
+            @click="confirmSaveToJournal"
+          >
+            {{ savingToJournal ? '儲存中...' : '確認加入手記' }}
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <!-- Reusable Lightbox Viewer -->
+    <PhotoViewer
+      :visible="viewerVisible"
+      :photos="viewerPhotos"
+      :initial-photo-id="viewerInitialPhotoId"
+      :show-save-to-journal-action="true"
+      @close="viewerVisible = false"
+      @save-to-journal="openSaveToJournalModal"
+    />
 
     <!-- Confirm Dialog for Deleting Conversation -->
     <ConfirmDialog
@@ -546,7 +1026,8 @@ function handleCitationClick(citation: Citation) {
   flex-direction: column;
   gap: 1rem;
   width: 100%;
-  height: calc(100dvh - 80px);
+  flex: 1;
+  height: 100%;
   min-height: 0;
   background-color: var(--color-canvas);
   color: var(--color-ink);
@@ -1100,15 +1581,15 @@ function handleCitationClick(citation: Citation) {
   box-sizing: border-box;
   margin: 0;
   resize: none;
-  min-height: 44px;
+  min-height: 48px;
   font-size: 0.875rem;
   line-height: 1.45;
   padding: 0.55rem 0.75rem;
-  flex: 1;
   background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   color: var(--color-ink);
+  grid-column: 1;
 }
 
 .chat-textarea:focus {
@@ -1119,19 +1600,286 @@ function handleCitationClick(citation: Citation) {
 
 .send-btn {
   height: auto;
-  min-height: 44px;
+  min-height: 48px;
   margin: 0;
+  grid-column: 2;
   align-self: stretch;
   white-space: nowrap;
-  flex-shrink: 0;
   background-color: var(--color-maple);
   color: #FFFFFF;
   border: 1px solid var(--color-maple);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 1.15rem;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
 }
 
 .send-btn:hover:not(:disabled) {
   background-color: var(--color-maple-hover);
   border-color: var(--color-maple-hover);
+}
+
+.composer-picker-row {
+  grid-column: 1 / -1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.reading-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--color-amber-subtle, #fdf6ec);
+  border: 1px solid var(--color-amber-border, #f5dab1);
+  border-radius: var(--radius-xs);
+  color: var(--color-ink);
+  font-size: 0.8125rem;
+}
+
+.reading-text {
+  color: var(--color-subtle);
+  font-size: 0.8125rem;
+}
+
+.staged-alert-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--color-error-text);
+  background-color: var(--color-error-bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
+}
+
+/* Answer Scope Pill */
+.answer-scope-pill {
+  font-size: 0.6875rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-xs);
+  font-weight: 600;
+}
+
+.scope-image {
+  background-color: var(--color-amber-subtle);
+  color: var(--color-amber-text);
+}
+
+.scope-mixed {
+  background-color: var(--color-maple-subtle);
+  color: var(--color-maple);
+}
+
+.scope-memory {
+  background-color: var(--color-olive-pale);
+  color: var(--color-olive);
+}
+
+/* Chat Message Photos Grid */
+.message-photos-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 0.5rem;
+}
+
+.message-photo-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+
+.photo-thumb-wrap {
+  max-width: 240px;
+  max-height: 200px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  background-color: var(--color-canvas);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.photo-thumb-wrap:hover {
+  transform: scale(1.02);
+  border-color: var(--color-maple);
+}
+
+.photo-thumb-wrap:focus-visible {
+  outline: 2px solid var(--color-maple);
+  outline-offset: 1px;
+}
+
+.message-photo-img {
+  max-width: 240px;
+  max-height: 200px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+.btn-save-to-journal {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  color: var(--color-maple);
+  padding: 0.15rem 0.4rem;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-save-to-journal:hover {
+  background-color: var(--color-maple-subtle);
+  border-color: var(--color-maple);
+}
+
+/* Photo Citations */
+.photo-citations-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--color-border-light);
+}
+
+.photo-citations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.photo-citation-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.photo-citation-card:hover {
+  border-color: var(--color-maple);
+}
+
+.photo-citation-card.is-deleted {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cite-photo-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid var(--color-border-light);
+  flex-shrink: 0;
+}
+
+.cite-photo-info {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.cite-photo-caption {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-save-cite-to-journal {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  font-size: 0.6875rem;
+  color: var(--color-maple);
+  padding: 0.15rem 0.4rem;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-save-cite-to-journal:hover {
+  background-color: var(--color-maple-subtle);
+  border-color: var(--color-maple);
+}
+
+/* Save Modal */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(69, 58, 50, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  z-index: 1000;
+}
+
+.save-modal-card {
+  width: 100%;
+  max-width: 480px;
+  background-color: var(--color-paper);
+  border-radius: var(--radius-md);
+  box-shadow: 0 16px 36px rgba(69, 58, 50, 0.15);
+  border: 1px solid var(--color-border);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.save-modal-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.save-modal-desc {
+  font-size: 0.875rem;
+  color: var(--color-subtle);
+}
+
+.save-success-banner {
+  font-size: 0.875rem;
+  color: var(--color-success-text);
+  background-color: var(--color-success-bg);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-success-border);
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 /* Minimal Spinners */
@@ -1166,7 +1914,15 @@ function handleCitationClick(citation: Citation) {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .conversation-view-section { height: calc(100dvh - 160px); }
+  .conversation-view-section {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .chat-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
   .header-main-row {
     flex-direction: column;
     align-items: flex-start;

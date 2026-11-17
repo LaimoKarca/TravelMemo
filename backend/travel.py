@@ -135,7 +135,7 @@ class EventOrderInput(BaseModel):
     event_ids: list[str]
 
 
-def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api/v1") -> APIRouter:
+def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api/v1", photo_service: Any = None) -> APIRouter:
     router = APIRouter(prefix=prefix)
 
     def authenticate(request: Request, require_csrf: bool = False) -> str:
@@ -194,7 +194,12 @@ def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api
     def delete_trip(id: str, request: Request, version: int = Query(...)):
         owner_id = authenticate(request, require_csrf=True)
         try:
+            detail = repository.get_trip_detail(owner_id, id) if photo_service is not None else None
             repository.delete_trip(owner_id, id, version)
+            if photo_service is not None:
+                for event in (detail or {}).get("events", []):
+                    photo_service.detach_target(owner_id, "event", event["id"])
+                photo_service.detach_target(owner_id, "trip", id)
             return Response(status_code=204)
         except TravelNotFoundError as exc:
             raise HTTPException(status_code=404, detail=exc.message)
@@ -236,6 +241,8 @@ def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api
         owner_id = authenticate(request, require_csrf=True)
         try:
             repository.delete_event(owner_id, id, version)
+            if photo_service is not None:
+                photo_service.detach_target(owner_id, "event", id)
             return Response(status_code=204)
         except TravelNotFoundError as exc:
             raise HTTPException(status_code=404, detail=exc.message)
