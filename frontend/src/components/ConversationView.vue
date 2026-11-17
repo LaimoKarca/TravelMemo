@@ -636,12 +636,9 @@ function handleCitationClick(citation: Citation) {
   display: grid;
   grid-template-columns: 240px 1fr;
   background-color: var(--color-white);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
   min-height: 580px;
   max-height: 75vh;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
   width: 100%;
   box-sizing: border-box;
 }
@@ -875,8 +872,6 @@ function handleCitationClick(citation: Citation) {
 .message-assistant {
   align-self: flex-start;
   background-color: var(--color-white);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
 }
 
 .message-header {
@@ -954,10 +949,7 @@ function handleCitationClick(citation: Citation) {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  background-color: #FAFBFC;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  padding: 0.35rem 0.625rem;
+  padding: 0.35rem 0;
   font-size: 0.75rem;
 }
 

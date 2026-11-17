@@ -24,7 +24,7 @@ function handleSubmit() {
     <div class="form-intro">
       <h2 class="form-title">旅人登入</h2>
       <p class="form-desc">
-        輸入您的電子信箱，系統將寄送一次性六位數驗證碼至信箱。無需記憶密碼。
+        輸入信箱，取得登入驗證碼。
       </p>
     </div>
 
@@ -45,7 +45,7 @@ function handleSubmit() {
         aria-describedby="email-hint"
       />
       <p id="email-hint" class="field-hint">
-        請輸入有效的電子信箱以接收登入驗證碼
+        請使用允許登入的信箱
       </p>
     </div>
 

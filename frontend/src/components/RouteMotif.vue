@@ -7,7 +7,7 @@
     <div class="motif-content">
       <div class="motif-badge">
         <span class="badge-brand">TravelMemo</span>
-        <span class="badge-desc">探索與留存</span>
+        <span class="badge-desc">旅程手記</span>
       </div>
 
       <div class="route-map" aria-hidden="true">
@@ -31,28 +31,23 @@
           <!-- Waypoint 1 -->
           <circle cx="50" cy="65" r="8" fill="#FFFFFF" stroke="#245AE8" stroke-width="2.5" />
           <circle cx="50" cy="65" r="3.5" fill="#F4C84B" />
-          <text x="66" y="70" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">啟程時刻</text>
+          <text x="66" y="70" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">出發</text>
 
           <!-- Waypoint 2 -->
           <circle cx="210" cy="150" r="7" fill="#FFFFFF" stroke="#245AE8" stroke-width="2" />
           <circle cx="210" cy="150" r="3" fill="#245AE8" />
-          <text x="145" y="178" fill="#5E6C84" font-size="11" font-family="system-ui, sans-serif">沿途的足跡</text>
 
           <!-- Waypoint 3 -->
           <circle cx="85" cy="240" r="7" fill="#FFFFFF" stroke="#245AE8" stroke-width="2" />
           <circle cx="85" cy="240" r="3" fill="#245AE8" />
-          <text x="32" y="268" fill="#5E6C84" font-size="11" font-family="system-ui, sans-serif">尋訪與對話</text>
 
           <!-- Waypoint 4 (Destination) -->
           <circle cx="215" cy="315" r="9" fill="#F4C84B" stroke="#172B4D" stroke-width="2" />
           <circle cx="215" cy="315" r="3" fill="#172B4D" />
-          <text x="156" y="344" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">記憶歸檔</text>
+          <text x="156" y="344" fill="#172B4D" font-size="12" font-weight="600" font-family="system-ui, sans-serif">下一站</text>
         </svg>
       </div>
 
-      <div class="motif-footer">
-        <p class="motif-caption">每一處駐足，都是值得回溯的旅程故事。</p>
-      </div>
     </div>
   </aside>
 </template>
