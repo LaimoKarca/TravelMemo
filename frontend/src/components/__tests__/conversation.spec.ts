@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ConversationView from '../ConversationView.vue'
 import * as convApi from '../../api/conversation'
-import type { ConversationSummary, Message, UsageMeResponse } from '../../types/conversation'
+import type { ConversationSummary, Message } from '../../types/conversation'
 
 const mockConversations: ConversationSummary[] = [
   {
@@ -48,35 +48,53 @@ const mockMessages: Message[] = [
   }
 ]
 
-const mockUsage: UsageMeResponse = {
-  date: '2026-11-20',
-  requests: 4,
-  input_tokens: 650,
-  output_tokens: 280,
-  daily_limit: 50,
-  model: 'gpt-6-luna'
-}
-
 describe('ConversationView', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.spyOn(convApi, 'listConversations').mockResolvedValue({ items: [...mockConversations] })
     vi.spyOn(convApi, 'listMessages').mockResolvedValue({ items: [...mockMessages] })
-    vi.spyOn(convApi, 'getUsage').mockResolvedValue(mockUsage)
+    vi.spyOn(convApi, 'sendMessage').mockResolvedValue({
+      id: 'm-default-reply',
+      role: 'assistant',
+      content: '預設回覆',
+      status: 'answered',
+      citations: [],
+      created_at: '2026-11-20T10:01:00Z'
+    })
   })
 
-  it('renders conversations list, active messages, citations, and usage banner', async () => {
+  it('renders conversations list, initial blank chat, and loads conversation on click', async () => {
     const wrapper = mount(ConversationView)
     await flushPromises()
 
-    // Title and usage
+    // Title exists, but usage disclosure and tokens/quota are removed
     expect(wrapper.text()).toContain('AI 旅程助理')
-    expect(wrapper.text()).toContain('4 / 50 次')
-    expect(wrapper.text()).toContain('消耗 Tokens：930')
-    expect(wrapper.text()).toContain('模型：gpt-6-luna')
+    expect(wrapper.find('.usage-disclosure').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('今日用量')
+    expect(wrapper.text()).not.toContain('消耗 Tokens')
+    expect(wrapper.text()).not.toContain('模型：')
 
-    // Conversations sidebar
-    expect(wrapper.text()).toContain('京都行程回顧')
+    // Initial view is new blank chat
+    expect(wrapper.find('.empty-chat-state').exists()).toBe(true)
+    expect(wrapper.text()).toContain('您好！我是您的旅行手記助理。')
+    expect(wrapper.find('#chat-message-input').exists()).toBe(true)
+
+    // Collapsed history details with far-right chevron and aria-expanded
+    const historyDetails = wrapper.find('details.history-details')
+    expect(historyDetails.exists()).toBe(true)
+    expect((historyDetails.element as HTMLDetailsElement).open).toBe(false)
+
+    const summary = historyDetails.find('summary.history-summary')
+    expect(summary.exists()).toBe(true)
+    expect(summary.attributes('aria-expanded')).toBe('false')
+    expect(summary.text()).toContain('歷史對話 (1)')
+
+    const chevron = summary.find('.history-chevron')
+    expect(chevron.exists()).toBe(true)
+
+    // Click conversation to load messages
+    await wrapper.find('.conversation-item').trigger('click')
+    await flushPromises()
 
     // Messages
     expect(wrapper.text()).toContain('我上次在京都有去嵐山嗎？')
@@ -95,6 +113,10 @@ describe('ConversationView', () => {
     const wrapper = mount(ConversationView)
     await flushPromises()
 
+    // Select c-1 to view citations
+    await wrapper.find('.conversation-item').trigger('click')
+    await flushPromises()
+
     const inspectBtn = wrapper.find('button.btn-cite-inspect')
     expect(inspectBtn.exists()).toBe(true)
     await inspectBtn.trigger('click')
@@ -103,45 +125,149 @@ describe('ConversationView', () => {
     expect(wrapper.emitted('view-citation')![0][0]).toEqual(mockMessages[1].citations[0])
   })
 
-  it('creates a new conversation', async () => {
-    const createSpy = vi.spyOn(convApi, 'createConversation').mockResolvedValue({
-      id: 'c-2',
-      title: '花東縱谷美食',
-      created_at: '2026-11-20T11:00:00Z'
-    })
+  it('new conversation button resets to blank chat without DB call and focuses composer', async () => {
+    const createSpy = vi.spyOn(convApi, 'createConversation')
 
     const wrapper = mount(ConversationView)
     await flushPromises()
 
-    await wrapper.find('.conv-title-input').setValue('花東縱谷美食')
-    await wrapper.find('form.create-conv-form').trigger('submit.prevent')
+    // Select c-1 first
+    await wrapper.find('.conversation-item').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('我上次在京都有去嵐山嗎？')
+
+    // Click new conversation button
+    await wrapper.find('button.btn-new-conv').trigger('click')
     await flushPromises()
 
-    expect(createSpy).toHaveBeenCalledWith({ title: '花東縱谷美食' })
-    expect(wrapper.text()).toContain('花東縱谷美食')
+    // Should NOT create conversation in DB yet
+    expect(createSpy).not.toHaveBeenCalled()
+    // Should be in blank chat state
+    expect(wrapper.find('.empty-chat-state').exists()).toBe(true)
   })
 
-  it('sends message and renders new assistant response and updates usage', async () => {
+  it('on first send in blank chat lazily creates conversation then sends message and reloads list', async () => {
+    const createSpy = vi.spyOn(convApi, 'createConversation').mockResolvedValue({
+      id: 'c-lazy-1',
+      title: '新對話',
+      created_at: '2026-11-20T10:05:00Z'
+    })
     const sendSpy = vi.spyOn(convApi, 'sendMessage').mockResolvedValue({
       id: 'm-3',
       role: 'assistant',
       content: '手記中未提及此類別紀錄。',
       status: 'insufficient_evidence',
       citations: [],
+      created_at: '2026-11-20T10:05:01Z'
+    })
+    const listSpy = vi.spyOn(convApi, 'listConversations')
+
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    // Blank chat: type and send
+    await wrapper.find('#chat-message-input').setValue('我有去過宇治嗎？')
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
+    await flushPromises()
+
+    // Lazily created conversation with empty object
+    expect(createSpy).toHaveBeenCalledWith({})
+    expect(sendSpy).toHaveBeenCalledWith('c-lazy-1', { content: '我有去過宇治嗎？' })
+    // Reloads conversation list to update auto-generated title
+    expect(listSpy).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('我有去過宇治嗎？')
+    expect(wrapper.text()).toContain('手記中未提及此類別紀錄。')
+  })
+
+  it('if send fails on first send, keeps draft and reuses created ID on retry without deleting data', async () => {
+    const createSpy = vi.spyOn(convApi, 'createConversation').mockResolvedValue({
+      id: 'c-lazy-retry',
+      title: '新對話',
       created_at: '2026-11-20T10:05:00Z'
+    })
+    const deleteSpy = vi.spyOn(convApi, 'deleteConversation')
+    const sendSpy = vi.spyOn(convApi, 'sendMessage')
+      .mockRejectedValueOnce(new (await import('../../api/auth')).ApiError(500, '發送失敗'))
+      .mockResolvedValueOnce({
+        id: 'm-retry-ok',
+        role: 'assistant',
+        content: '重試成功回覆',
+        status: 'answered',
+        citations: [],
+        created_at: '2026-11-20T10:05:02Z'
+      })
+
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    const input = wrapper.find('#chat-message-input')
+    await input.setValue('重試發問草稿')
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
+    await flushPromises()
+
+    // Create was called once
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    // Never delete potentially persisted conversation
+    expect(deleteSpy).not.toHaveBeenCalled()
+    // Draft is kept in composer
+    expect((input.element as HTMLTextAreaElement).value).toBe('重試發問草稿')
+    expect(wrapper.text()).toContain('發送失敗')
+
+    // Retry sending
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
+    await flushPromises()
+
+    // Reuses the created ID without re-creating
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    expect(sendSpy).toHaveBeenLastCalledWith('c-lazy-retry', { content: '重試發問草稿' })
+    expect(deleteSpy).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('重試成功回覆')
+  })
+
+  it('removes keyboard instructions from placeholder while preserving Enter shortcut', async () => {
+    vi.spyOn(convApi, 'createConversation').mockResolvedValue({
+      id: 'c-shortcut',
+      title: '新對話',
+      created_at: '2026-11-20T10:06:00Z'
+    })
+    const sendSpy = vi.spyOn(convApi, 'sendMessage').mockResolvedValue({
+      id: 'm-enter',
+      role: 'assistant',
+      content: '捷徑正常回覆',
+      status: 'answered',
+      citations: [],
+      created_at: '2026-11-20T10:06:00Z'
     })
 
     const wrapper = mount(ConversationView)
     await flushPromises()
 
-    await wrapper.find('#chat-message-input').setValue('我有去過宇治嗎？')
-    await wrapper.find('form.chat-form').trigger('submit.prevent')
+    const input = wrapper.find('#chat-message-input')
+    expect(input.attributes('placeholder')).toBe('詢問任何關於您旅程手記的問題...')
+    expect(input.attributes('placeholder')).not.toContain('Enter')
+    expect(input.attributes('placeholder')).not.toContain('Shift+Enter')
+
+    await input.setValue('透過鍵盤發送訊息')
+    await input.trigger('keydown.enter.exact')
     await flushPromises()
 
-    expect(sendSpy).toHaveBeenCalledWith('c-1', { content: '我有去過宇治嗎？' })
-    expect(wrapper.text()).toContain('我有去過宇治嗎？')
-    expect(wrapper.text()).toContain('手記中未提及此類別紀錄。')
-    expect(wrapper.text()).toContain('手記證據不足')
+    expect(sendSpy).toHaveBeenCalledWith('c-shortcut', { content: '透過鍵盤發送訊息' })
+  })
+
+  it('toggles collapsed history details and updates aria-expanded', async () => {
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    const details = wrapper.find('details.history-details')
+    const summary = details.find('summary.history-summary')
+    expect((details.element as HTMLDetailsElement).open).toBe(false)
+    expect(summary.attributes('aria-expanded')).toBe('false')
+
+    // Simulate native details toggle open
+    ;(details.element as HTMLDetailsElement).open = true
+    await details.trigger('toggle')
+
+    expect(summary.attributes('aria-expanded')).toBe('true')
   })
 
   it('prompts and executes delete conversation', async () => {
@@ -179,22 +305,9 @@ describe('ConversationView', () => {
     })
 
     const listMessagesSpy = vi.spyOn(convApi, 'listMessages')
-      // Initial mount loads c-1
-      .mockResolvedValueOnce({
-        items: [
-          {
-            id: 'm-c1-init',
-            role: 'assistant',
-            content: '這是京都的初始訊息',
-            status: 'answered',
-            citations: [],
-            created_at: '2026-11-20T10:00:00Z'
-          }
-        ]
-      })
-      // Next: user clicks c-2 (slow)
+      // First click on c-2 (slow)
       .mockReturnValueOnce(c2Promise)
-      // Next: user clicks back to c-1 (fast)
+      // Next: user clicks c-1 (fast)
       .mockResolvedValueOnce({
         items: [
           {
@@ -210,13 +323,12 @@ describe('ConversationView', () => {
 
     const wrapper = mount(ConversationView)
     await flushPromises()
-    expect(wrapper.text()).toContain('這是京都的初始訊息')
 
     const items = wrapper.findAll('.conversation-item')
     // Click c-2 (loads slowly)
     await items[1].trigger('click')
 
-    // Before c-2 resolves, user clicks back to c-1
+    // Before c-2 resolves, user clicks c-1
     await items[0].trigger('click')
     await flushPromises()
 
@@ -272,6 +384,11 @@ describe('ConversationView', () => {
     const wrapper = mount(ConversationView)
     await flushPromises()
 
+    // Select c-1
+    const items = wrapper.findAll('.conversation-item')
+    await items[0].trigger('click')
+    await flushPromises()
+
     // User is on c-1, types message
     await wrapper.find('#chat-message-input').setValue('發送給對話一的新提問')
     await wrapper.find('form.chat-form').trigger('submit.prevent')
@@ -279,7 +396,6 @@ describe('ConversationView', () => {
     expect(sendSpy).toHaveBeenCalledWith('c-1', { content: '發送給對話一的新提問' })
 
     // While send is pending, user clicks c-2
-    const items = wrapper.findAll('.conversation-item')
     await items[1].trigger('click')
     await flushPromises()
 
@@ -321,12 +437,14 @@ describe('ConversationView', () => {
     await flushPromises()
 
     const input = wrapper.find('#chat-message-input')
+    const items = wrapper.findAll('.conversation-item')
 
-    // 1. Type draft on c-1
+    // 1. Select c-1 and type draft
+    await items[0].trigger('click')
+    await flushPromises()
     await input.setValue('對話一的未送出草稿')
 
     // 2. Switch to c-2
-    const items = wrapper.findAll('.conversation-item')
     await items[1].trigger('click')
     await flushPromises()
 
@@ -357,7 +475,7 @@ describe('ConversationView', () => {
     expect((input.element as HTMLTextAreaElement).value).toBe('')
   })
 
-  it('handleCreateConversation invalidates in-flight listMessages', async () => {
+  it('handleStartNewConversation invalidates in-flight listMessages', async () => {
     let resolveC1!: (val: { items: Message[] }) => void
     const c1Promise = new Promise<{ items: Message[] }>((resolve) => {
       resolveC1 = resolve
@@ -367,21 +485,18 @@ describe('ConversationView', () => {
       items: [{ id: 'c-old', title: '舊對話', created_at: '2026-11-20T10:00:00Z' }]
     })
     vi.spyOn(convApi, 'listMessages').mockReturnValueOnce(c1Promise)
-    vi.spyOn(convApi, 'createConversation').mockResolvedValue({
-      id: 'c-new',
-      title: '全新對話',
-      created_at: '2026-11-20T10:10:00Z'
-    })
 
     const wrapper = mount(ConversationView)
-    // Old listMessages is in flight
-
-    // User creates new conversation
-    await wrapper.find('.conv-title-input').setValue('全新對話')
-    await wrapper.find('form.create-conv-form').trigger('submit.prevent')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('全新對話')
+    // Click c-old (starts in-flight load)
+    await wrapper.find('.conversation-item').trigger('click')
+
+    // User clicks "+ 新對話" button
+    await wrapper.find('.btn-new-conv').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.empty-chat-state').exists()).toBe(true)
 
     // Old listMessages resolves late
     resolveC1({
@@ -398,7 +513,7 @@ describe('ConversationView', () => {
     })
     await flushPromises()
 
-    // The late response must NOT be placed in the new conversation
+    // The late response must NOT be placed in the blank chat
     expect(wrapper.text()).not.toContain('舊對話的幽靈訊息')
   })
 
@@ -412,6 +527,10 @@ describe('ConversationView', () => {
     )
 
     const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    // Select c-1
+    await wrapper.find('.conversation-item').trigger('click')
     await flushPromises()
 
     const input = wrapper.find('#chat-message-input')
@@ -429,48 +548,116 @@ describe('ConversationView', () => {
     expect(wrapper.text()).toContain('請求過於頻繁或已達用量上限，請稍候再試。')
   })
 
-  it('failed createConversation does not invalidate active conversation loading', async () => {
-    let resolveC1!: (val: { items: Message[] }) => void
-    const c1Promise = new Promise<{ items: Message[] }>((resolve) => {
-      resolveC1 = resolve
-    })
-
-    vi.spyOn(convApi, 'listConversations').mockResolvedValue({
-      items: [{ id: 'c-active', title: '既有對話', created_at: '2026-11-20T10:00:00Z' }]
-    })
-    vi.spyOn(convApi, 'listMessages').mockReturnValueOnce(c1Promise)
+  it('failed lazy createConversation on first send removes optimistic message, restores draft, and resets sendingMessage', async () => {
     vi.spyOn(convApi, 'createConversation').mockRejectedValue(
       new (await import('../../api/auth')).ApiError(500, '伺服器建立失敗')
     )
 
     const wrapper = mount(ConversationView)
     await flushPromises()
-    // listMessages for c-active is in flight
 
-    // Attempt to create conversation which fails
-    await wrapper.find('.conv-title-input').setValue('嘗試建立但失敗')
-    await wrapper.find('form.create-conv-form').trigger('submit.prevent')
+    const input = wrapper.find('#chat-message-input')
+    await input.setValue('嘗試發送但建立對話失敗')
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
     await flushPromises()
 
     expect(wrapper.text()).toContain('伺服器建立失敗')
+    expect(wrapper.text()).not.toContain('嘗試發送但建立對話失敗')
+    expect((input.element as HTMLTextAreaElement).value).toBe('嘗試發送但建立對話失敗')
+    // sendingMessage must be reset to false so button is not stuck in replying state
+    expect(wrapper.find('button.send-btn').text()).toContain('發送')
+  })
 
-    // Active load completes
-    resolveC1({
-      items: [
-        {
-          id: 'm-active',
-          role: 'assistant',
-          content: '既有對話的重要紀錄',
-          status: 'answered',
-          citations: [],
-          created_at: '2026-11-20T10:00:00Z'
-        }
-      ]
+  it('first-create race: resetting to New while lazy create is in flight resets sendingMessage and preserves created conversation without deletion', async () => {
+    let resolveCreate!: (val: ConversationSummary) => void
+    const createPromise = new Promise<ConversationSummary>((resolve) => {
+      resolveCreate = resolve
+    })
+    vi.spyOn(convApi, 'createConversation').mockReturnValueOnce(createPromise)
+    const deleteSpy = vi.spyOn(convApi, 'deleteConversation')
+    const sendSpy = vi.spyOn(convApi, 'sendMessage')
+
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    // 1. In blank chat, user types and sends
+    const input = wrapper.find('#chat-message-input')
+    await input.setValue('發送後立即點擊新對話')
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
+
+    // sending is in flight
+    expect(wrapper.find('button.send-btn').text()).toContain('回覆中...')
+
+    // 2. User clicks "+ 新對話" while lazy create is still in flight
+    // Call handleStartNewConversation
+    const newConvBtn = wrapper.find('button.btn-new-conv')
+    await newConvBtn.trigger('click')
+    await flushPromises()
+
+    // 3. Lazy create now resolves late
+    resolveCreate({
+      id: 'c-late-created',
+      title: '延遲建立成功的對話',
+      created_at: '2026-11-20T10:10:00Z'
     })
     await flushPromises()
 
-    // Active load must NOT be discarded
-    expect(wrapper.text()).toContain('既有對話的重要紀錄')
+    // sendingMessage must NOT be stuck true
+    expect(wrapper.find('button.send-btn').text()).toContain('發送')
+
+    // Late message send should not have been called for aborted context
+    expect(sendSpy).not.toHaveBeenCalled()
+
+    // Never delete ambiguous potentially persisted data
+    expect(deleteSpy).not.toHaveBeenCalled()
+
+    // The created conversation is preserved in conversations list
+    expect(wrapper.text()).toContain('延遲建立成功的對話')
+
+    // Optimistic message from the aborted send is not left dangling
+    expect(wrapper.text()).not.toContain('發送後立即點擊新對話')
+  })
+
+  it('first-create race: switching conversation while lazy create is in flight does not hijack target conversation', async () => {
+    let resolveCreate!: (val: ConversationSummary) => void
+    const createPromise = new Promise<ConversationSummary>((resolve) => {
+      resolveCreate = resolve
+    })
+    vi.spyOn(convApi, 'createConversation').mockReturnValueOnce(createPromise)
+    const deleteSpy = vi.spyOn(convApi, 'deleteConversation')
+    const sendSpy = vi.spyOn(convApi, 'sendMessage')
+
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+
+    // 1. In blank chat, user types and sends
+    await wrapper.find('#chat-message-input').setValue('發送後切換至舊對話')
+    await wrapper.find('form.chat-form').trigger('submit.prevent')
+
+    // 2. User switches to c-1
+    const items = wrapper.findAll('.conversation-item')
+    await items[0].trigger('click')
+    await flushPromises()
+
+    // 3. Late create resolves
+    resolveCreate({
+      id: 'c-late-switch',
+      title: '切換期間建立的對話',
+      created_at: '2026-11-20T10:12:00Z'
+    })
+    await flushPromises()
+
+    // sendingMessage must reset to false
+    expect(wrapper.find('button.send-btn').text()).toContain('發送')
+
+    // Does not call send for aborted context
+    expect(sendSpy).not.toHaveBeenCalled()
+
+    // Never delete persisted row
+    expect(deleteSpy).not.toHaveBeenCalled()
+
+    // Preserved in list
+    expect(wrapper.text()).toContain('切換期間建立的對話')
   })
 
   it('deleting inactive conversation does not invalidate active conversation loading', async () => {
@@ -489,6 +676,10 @@ describe('ConversationView', () => {
 
     const wrapper = mount(ConversationView)
     await flushPromises()
+
+    // Select c-active
+    const items = wrapper.findAll('.conversation-item')
+    await items[0].trigger('click')
     // listMessages for c-active is in flight
 
     // Delete inactive conversation c-inactive

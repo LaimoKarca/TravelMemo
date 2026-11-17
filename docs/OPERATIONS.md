@@ -28,16 +28,14 @@
 依供應商設定 `SMTP_USER`、`SMTP_PASSWORD`、`SMTP_FROM`。部分服務需要應用程式密碼或寄件網域驗證。
 帳密僅填本機 `.env`。正式設定前不宣稱外部郵件投遞已驗證。
 
-目前此工作區 `.env` 已依使用者要求切換為 Gmail SMTP。若要保留此設定又在開發時攔信，
-可執行 `powershell -File deploy/start-dev.ps1 -CaptureMail`；此指令僅覆寫啟動程序中的 SMTP
-環境變數，停止該程序後不影響 `.env`。使用者設定應用程式密碼後，已通過本機及正式容器的 Gmail SMTP 認證。
+若要在本機開發時攔截信件進行除錯，可執行 `powershell -File deploy/start-dev.ps1 -CaptureMail`；此指令僅在啟動程序中覆寫 SMTP 環境變數導向 Mailpit，停止該程序後不影響 `.env` 設定。
 
-OpenAI 預設模型已依後續指示改為 `gpt-6-luna`，API Key 保留在 `.env`。
+OpenAI 預設模型設定為 `gpt-6-luna`，API Key 保留在 `.env`。
 對話與引用操作見 [回憶搜尋與 AI 對話](RECALL.md)。本版保存文字紀錄，不提供圖片辨識。
 
 `APP_ENV=production` 要求 HTTPS `PUBLIC_URL`、`COOKIE_SECURE=true`、非空允許名單、
 已設定 SMTP 及加密 SMTP。不要將開發 Mailpit 或 Neo4j Browser 暴露到網路。
-更完整 Docker / Cloudflare 部署、備份還原及重啟演練於階段五交付。
+更完整 Docker / Cloudflare 部署與備份還原見 [部署說明](DEPLOYMENT.md) 與 [備份與還原](BACKUP_RESTORE.md)。
 
 ## 啟停與資料
 
@@ -48,7 +46,7 @@ API：`python main.py serve`，Ctrl+C 停止。前端：`npm.cmd run dev`。
 
 Neo4j 密碼透過 `.env` 初始化；既有資料卷不會因改 `.env` 而重設資料庫密碼。
 第一次啟動需要下載映像及等待 Neo4j 就緒。初始化命令可重複執行，建立唯一性約束。
-所有 AuthRecord 以唯一 key 保存 JSON 狀態；OTP 僅存 HMAC、session 僅存 token 雜湊。
+所有 AuthRecord 以唯一 key 保存 JSON 狀態；OTP 與工作階段僅保存不可直接還原的驗證資料。
 使用資料庫鎖將狀態轉換序列化，避免同碼平行兌換。到期記錄每小時清理。
 
 ## 排錯

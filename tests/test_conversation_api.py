@@ -206,7 +206,7 @@ def test_conversation_flow_and_usage():
         assert usage["requests"] == 1
         assert usage["input_tokens"] == 20
         assert usage["output_tokens"] == 30
-        assert usage["daily_limit"] == 50
+        assert usage["daily_limit"] == 0
         assert usage["model"] == "gpt-6-luna"
 
         # 6. Delete conversation

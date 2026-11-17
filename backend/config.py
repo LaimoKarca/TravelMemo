@@ -38,11 +38,13 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-6-luna"
     openai_timeout: float = Field(default=45, ge=1, le=180)
     openai_max_output_tokens: int = Field(default=2000, ge=128, le=10000)
-    ai_daily_limit: int = Field(default=50, ge=1, le=10000)
     ai_user_concurrency: int = Field(default=1, ge=1, le=10)
     ai_global_concurrency: int = Field(default=2, ge=1, le=10)
     conversation_history_limit: int = Field(default=12, ge=2, le=50)
     conversation_evidence_limit: int = Field(default=8, ge=1, le=20)
+    conversation_summary_trigger: int = Field(default=12, ge=4, le=50)
+    conversation_summary_chars_trigger: int = Field(default=12000, ge=2000, le=50000)
+    conversation_prompt_max_chars: int = Field(default=24000, ge=18000, le=50000)
     embedding_model: str = "intfloat/multilingual-e5-small"
     embedding_revision: str = Field(
         default="614241f622f53c4eeff9890bdc4f31cfecc418b3", pattern=r"^[0-9a-f]{40}$"

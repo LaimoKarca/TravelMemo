@@ -1,12 +1,12 @@
 import datetime
 import hmac
-import zoneinfo
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.auth import AuthError, AuthService
+from backend.timezones import normalize_timezone
 from backend.travel_store import (
     TravelConflictError,
     TravelNotFoundError,
@@ -26,10 +26,9 @@ class TripCreate(BaseModel):
     @classmethod
     def validate_timezone(cls, v: str) -> str:
         try:
-            zoneinfo.ZoneInfo(v)
-        except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+            return normalize_timezone(v)
+        except ValueError:
             raise ValueError(f"無效的時區: {v}")
-        return v
 
     @model_validator(mode="after")
     def validate_dates(self):

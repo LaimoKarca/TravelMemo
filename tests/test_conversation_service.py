@@ -45,7 +45,7 @@ def test_conversation_crud_and_cross_account():
     settings = SimpleNamespace(openai_api_key="test-key", openai_model="gpt-6-luna")
     search_service = FakeSearchService()
     store = MemoryConversationStore()
-    service = ConversationService(settings, search_service, store=store)
+    service = ConversationService(settings, search_service, store=store, llm=MockLLM())
 
     c1 = service.create_conversation("user-1", title="首爾五日")
     assert c1["title"] == "首爾五日"
@@ -165,7 +165,7 @@ def test_search_clarification_and_multiturn_clarification():
     search_service = FakeSearchService(
         search_results={"items": [], "clarification": "請指定要查詢哪一個行程之後？"}
     )
-    service = ConversationService(settings, search_service, store=store)
+    service = ConversationService(settings, search_service, store=store, llm=MockLLM())
     c = service.create_conversation("user-1")
     msg = service.post_message("user-1", c["id"], "之後去了哪裡？")
     assert msg["status"] == "needs_clarification"
@@ -199,7 +199,7 @@ def test_search_clarification_and_multiturn_clarification():
     assert "哪一個地點" in msg2["content"]
 
 
-def test_concurrency_and_daily_rate_limiting():
+def test_no_daily_quota():
     settings = SimpleNamespace(openai_api_key="test-key", openai_model="gpt-6-luna")
     search_service = FakeSearchService()
     store = MemoryConversationStore()
@@ -208,20 +208,14 @@ def test_concurrency_and_daily_rate_limiting():
 
     c = service.create_conversation("user-1")
 
-    # Reach daily limit (50)
-    for _ in range(50):
+    # More than the old daily limit is accepted.
+    for _ in range(51):
         service.post_message("user-1", c["id"], "hi")
 
-    # 51st request gets 429
-    with pytest.raises(HTTPException) as exc_info:
-        service.post_message("user-1", c["id"], "hi 51")
-    assert exc_info.value.status_code == 429
-    assert "上限" in exc_info.value.detail
-
-    # Usage reflects 50 requests
+    # Internal diagnostics remain available, but do not enforce a quota.
     usage = service.get_usage("user-1")
-    assert usage["requests"] == 50
-    assert usage["daily_limit"] == 50
+    assert usage["requests"] == 51
+    assert usage["daily_limit"] == 0
     assert usage["model"] == "gpt-6-luna"
 
 
@@ -382,7 +376,7 @@ def test_config_fields_respected():
     store = MemoryConversationStore()
     service = ConversationService(settings, search_service, store=store, llm=llm)
 
-    assert service.daily_limit == 5
+    assert service.daily_limit == 0
     assert service.user_concurrency == 1
     assert service.global_concurrency == 2
     assert service.history_limit == 2
@@ -519,7 +513,8 @@ def test_429_does_not_pollute_history():
     msgs = service.get_messages("user-clean", c["id"])
     assert len(msgs) == 2  # user + assistant
 
-    # Request 2: hits daily limit (429)
+    # Request 2: another request is already in progress (429).
+    store.user_active["user-clean"] = 1
     with pytest.raises(HTTPException) as exc_info:
         service.post_message("user-clean", c["id"], "Second message (should be rejected)")
     assert exc_info.value.status_code == 429

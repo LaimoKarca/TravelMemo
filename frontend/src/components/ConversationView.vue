@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import type {
   ConversationSummary,
   Message,
   Citation,
-  UsageMeResponse,
   MessageStatus
 } from '../types/conversation'
 import {
@@ -12,8 +11,7 @@ import {
   createConversation,
   deleteConversation,
   listMessages,
-  sendMessage,
-  getUsage
+  sendMessage
 } from '../api/conversation'
 import { ApiError } from '../api/auth'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -27,16 +25,23 @@ const emit = defineEmits<{
 const conversations = ref<ConversationSummary[]>([])
 const activeConversationId = ref<string | null>(null)
 const messages = ref<Message[]>([])
-const usage = ref<UsageMeResponse | null>(null)
 
 const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const sendingMessage = ref(false)
-const loadingUsage = ref(false)
 
-const newConversationTitle = ref('')
+const isHistoryOpen = ref(false)
+const activeConversation = computed(() => {
+  return conversations.value.find((c) => c.id === activeConversationId.value) || null
+})
+
+function onHistoryToggle(e: Event) {
+  isHistoryOpen.value = (e.target as HTMLDetailsElement).open
+}
+
 const inputContent = ref('')
 const errorMessage = ref('')
+const composerInputRef = ref<HTMLTextAreaElement | null>(null)
 
 // Drafts cache per conversation to preserve user draft across switches
 const drafts = ref<Record<string, string>>({})
@@ -52,10 +57,7 @@ const deletingConversation = ref(false)
 const messagesContainerRef = ref<HTMLElement | null>(null)
 
 onMounted(async () => {
-  await Promise.all([
-    fetchConversations(),
-    fetchUsage()
-  ])
+  await fetchConversations()
 })
 
 async function fetchConversations() {
@@ -65,33 +67,30 @@ async function fetchConversations() {
     const res = await listConversations()
     conversations.value = res.items || []
     loadingConversations.value = false
-    if (!activeConversationId.value && conversations.value.length > 0) {
-      selectConversation(conversations.value[0].id)
-    }
+    // Initial AI view remains a new blank chat rather than auto-selecting history
   } catch (err: any) {
     errorMessage.value = err instanceof ApiError ? err.detail : '載入對話列表失敗，請稍後再試。'
     loadingConversations.value = false
   }
 }
 
-async function fetchUsage() {
-  loadingUsage.value = true
+async function reloadConversationsPreservingSelection() {
   try {
-    const res = await getUsage()
-    usage.value = res
+    const res = await listConversations()
+    conversations.value = res.items || []
   } catch {
-    // Non-blocking usage fetch
-  } finally {
-    loadingUsage.value = false
+    // Non-blocking reload
   }
 }
 
 async function selectConversation(id: string) {
   if (activeConversationId.value === id && messages.value.length > 0) return
 
-  // Preserve draft of current active conversation before switching
-  if (activeConversationId.value && activeConversationId.value !== id) {
+  // Preserve draft of current active conversation or blank chat before switching
+  if (activeConversationId.value) {
     drafts.value[activeConversationId.value] = inputContent.value
+  } else {
+    drafts.value['new'] = inputContent.value
   }
 
   activeConversationId.value = id
@@ -123,32 +122,20 @@ async function selectConversation(id: string) {
   }
 }
 
-async function handleCreateConversation() {
-  errorMessage.value = ''
-  const title = newConversationTitle.value.trim() || undefined
-  loadingConversations.value = true
-
-  try {
-    const created = await createConversation({ title })
-    newConversationTitle.value = ''
-    conversations.value.unshift(created)
-
-    // Save previous draft if applicable
-    if (activeConversationId.value) {
-      drafts.value[activeConversationId.value] = inputContent.value
-    }
-
-    // Invalidate in-flight message loads only upon successful creation
-    messageLoadGen++
-    activeConversationId.value = created.id
-    messages.value = []
-    inputContent.value = ''
-    loadingMessages.value = false
-  } catch (err: any) {
-    errorMessage.value = err instanceof ApiError ? err.detail : '建立新對話失敗，請稍後再試。'
-  } finally {
-    loadingConversations.value = false
+function handleStartNewConversation() {
+  // Preserve draft of current conversation before resetting to blank
+  if (activeConversationId.value) {
+    drafts.value[activeConversationId.value] = inputContent.value
   }
+  messageLoadGen++
+  activeConversationId.value = null
+  messages.value = []
+  loadingMessages.value = false
+  inputContent.value = drafts.value['new'] || ''
+  errorMessage.value = ''
+  nextTick(() => {
+    composerInputRef.value?.focus()
+  })
 }
 
 function promptDeleteConversation(conv: ConversationSummary) {
@@ -167,17 +154,13 @@ async function handleConfirmDelete() {
     conversations.value = conversations.value.filter((c) => c.id !== targetId)
     delete drafts.value[targetId]
 
-    // Only invalidate and switch if deleting the currently active conversation
+    // If deleting the active conversation, reset to blank chat
     if (activeConversationId.value === targetId) {
       messageLoadGen++
-      if (conversations.value.length > 0) {
-        await selectConversation(conversations.value[0].id)
-      } else {
-        activeConversationId.value = null
-        messages.value = []
-        inputContent.value = ''
-        loadingMessages.value = false
-      }
+      activeConversationId.value = null
+      messages.value = []
+      inputContent.value = drafts.value['new'] || ''
+      loadingMessages.value = false
     }
     showDeleteConfirm.value = false
     conversationToDelete.value = null
@@ -189,9 +172,11 @@ async function handleConfirmDelete() {
 }
 
 async function handleSendMessage() {
-  const targetId = activeConversationId.value
   const content = inputContent.value.trim()
-  if (!content || !targetId || sendingMessage.value) return
+  if (!content || sendingMessage.value) return
+
+  const sendGen = messageLoadGen
+  let targetId = activeConversationId.value
 
   // Optimistically append user message
   const tempUserMessage: Message = {
@@ -205,7 +190,11 @@ async function handleSendMessage() {
 
   // Clear input and current draft
   inputContent.value = ''
-  delete drafts.value[targetId]
+  if (targetId) {
+    delete drafts.value[targetId]
+  } else {
+    delete drafts.value['new']
+  }
 
   messages.value.push(tempUserMessage)
   sendingMessage.value = true
@@ -214,27 +203,57 @@ async function handleSendMessage() {
   scrollToBottom()
 
   try {
-    const reply = await sendMessage(targetId, { content })
-    // Only append reply if still same active conversation
-    if (activeConversationId.value === targetId) {
-      messages.value.push(reply)
-      await scrollToBottom()
-    }
-    await fetchUsage()
-  } catch (err: any) {
-    // Failed send: remove optimistic message and restore draft
-    const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
-    if (tempIdx !== -1) {
-      messages.value.splice(tempIdx, 1)
+    // On first send in blank chat, lazily create conversation
+    if (!targetId) {
+      try {
+        const created = await createConversation({})
+        // Check if user navigated away or reset while create was in flight
+        if (sendGen !== messageLoadGen) {
+          // Never delete ambiguous potentially persisted data: retain created conversation
+          conversations.value.unshift(created)
+          const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
+          if (tempIdx !== -1) {
+            messages.value.splice(tempIdx, 1)
+          }
+          return
+        }
+        targetId = created.id
+        activeConversationId.value = created.id
+        conversations.value.unshift(created)
+      } catch (err: any) {
+        const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
+        if (tempIdx !== -1) {
+          messages.value.splice(tempIdx, 1)
+        }
+        inputContent.value = content
+        errorMessage.value = err instanceof ApiError ? err.detail : '建立新對話失敗，請稍後再試。'
+        return
+      }
     }
 
-    if (activeConversationId.value === targetId) {
-      inputContent.value = content
-      errorMessage.value = err instanceof ApiError ? err.detail : '發送訊息失敗，請稍後再試。'
-    } else {
-      drafts.value[targetId] = content
+    try {
+      const reply = await sendMessage(targetId, { content })
+      // Only append reply if still matching generation & active conversation
+      if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
+        messages.value.push(reply)
+        await scrollToBottom()
+      }
+      // Reload conversation list without changing active selection to pick up backend auto-generated title
+      await reloadConversationsPreservingSelection()
+    } catch (err: any) {
+      // Failed send: remove optimistic message and restore draft
+      const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
+      if (tempIdx !== -1) {
+        messages.value.splice(tempIdx, 1)
+      }
+
+      if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
+        inputContent.value = content
+        errorMessage.value = err instanceof ApiError ? err.detail : '發送訊息失敗，請稍後再試。'
+      } else {
+        drafts.value[targetId] = content
+      }
     }
-    await fetchUsage()
   } finally {
     sendingMessage.value = false
   }
@@ -283,95 +302,97 @@ function handleCitationClick(citation: Citation) {
 
 <template>
   <section class="conversation-view-section" aria-label="AI 旅程對話">
-    <!-- Top Header: Title & Disclosure for detailed token/model usage -->
+    <!-- Top Header: Title & Collapsed History -->
     <header class="conversation-header">
       <div class="header-main-row">
         <h2 class="view-title">AI 旅程助理</h2>
-
-        <!-- Detailed token/model info via disclosure per brief -->
-        <details v-if="usage" class="usage-disclosure" role="region" aria-label="今日對話用量">
-          <summary class="usage-summary">
-            <svg class="usage-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            <span>今日用量：{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
-          </summary>
-          <div class="usage-details-popover">
-            <div class="usage-row">
-              <span class="usage-label">今日請求：</span>
-              <span class="usage-value">{{ usage.requests }} / {{ usage.daily_limit }} 次</span>
-            </div>
-            <div class="usage-row">
-              <span class="usage-label">消耗 Tokens：</span>
-              <span class="usage-value">{{ usage.input_tokens + usage.output_tokens }}</span>
-            </div>
-            <div class="usage-meta-tag">
-              <span>模型：{{ usage.model }}</span>
-              <span>({{ usage.date }} UTC)</span>
-            </div>
-          </div>
-        </details>
+        <button
+          type="button"
+          class="btn btn-secondary btn-new-conv"
+          :disabled="loadingConversations"
+          @click="handleStartNewConversation"
+        >
+          + 新對話
+        </button>
       </div>
 
-      <!-- Compact History Toolbar across top (No secondary framed sidebar) -->
-      <div class="conversation-toolbar" aria-label="歷史對話導覽">
-        <div class="toolbar-top">
-          <span class="toolbar-label">歷史對話</span>
-          <form class="create-conv-form" @submit.prevent="handleCreateConversation">
-            <input
-              v-model="newConversationTitle"
-              type="text"
-              class="form-input conv-title-input"
-              placeholder="新對話主題..."
-              maxlength="40"
-              :disabled="loadingConversations"
-            />
-            <button
-              type="submit"
-              class="btn btn-secondary btn-new-conv"
-              :disabled="loadingConversations"
-            >
-              + 新對話
-            </button>
-          </form>
-        </div>
-
-        <div v-if="loadingConversations" class="toolbar-loading" role="status" aria-live="polite">
-          <div class="page-spinner-sm" aria-hidden="true"></div>
-          <span>載入中...</span>
-        </div>
-
-        <div v-else-if="conversations.length === 0" class="toolbar-empty">
-          <span>尚未建立對話。輸入主題後點擊「+ 新對話」開始。</span>
-        </div>
-
-        <ul v-else class="conversations-list" aria-label="對話列表">
-          <li
-            v-for="conv in conversations"
-            :key="conv.id"
-            class="conversation-item"
-            :class="{ 'is-active': conv.id === activeConversationId }"
-            @click="selectConversation(conv.id)"
+      <!-- Compact History Toolbar with Collapsible Details/Summary -->
+      <details
+        class="history-details"
+        :open="isHistoryOpen"
+        role="region"
+        aria-label="歷史對話紀錄"
+        @toggle="onHistoryToggle"
+      >
+        <summary class="history-summary" :aria-expanded="isHistoryOpen">
+          <span class="history-summary-left">
+            <span class="history-summary-title">歷史對話 ({{ conversations.length }})</span>
+            <span v-if="activeConversation" class="history-active-title">
+              · {{ activeConversation.title || '無標題對話' }}
+            </span>
+          </span>
+          <svg
+            class="history-chevron"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
           >
-            <button type="button" class="conv-item-content conversation-select" :aria-pressed="conv.id === activeConversationId">
-              <span class="conv-title">{{ conv.title || '無標題對話' }}</span>
-              <span class="conv-date">{{ conv.created_at ? conv.created_at.slice(0, 10) : '' }}</span>
-            </button>
-            <button
-              type="button"
-              class="btn-delete-conv"
-              title="刪除此對話"
-              :aria-label="`刪除對話 ${conv.title || '無標題對話'}`"
-              @click.stop="promptDeleteConversation(conv)"
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </summary>
+
+        <div class="conversation-toolbar" aria-label="歷史對話導覽">
+          <div class="toolbar-top">
+            <span class="toolbar-label">歷史對話紀錄</span>
+          </div>
+
+          <div v-if="loadingConversations" class="toolbar-loading" role="status" aria-live="polite">
+            <div class="page-spinner-sm" aria-hidden="true"></div>
+            <span>載入中...</span>
+          </div>
+
+          <div v-else-if="conversations.length === 0" class="toolbar-empty">
+            <span>尚未建立對話。在下方輸入訊息即可直接交談。</span>
+          </div>
+
+          <ul v-else class="conversations-list" aria-label="對話列表">
+            <li
+              v-for="conv in conversations"
+              :key="conv.id"
+              class="conversation-item"
+              :class="{ 'is-active': conv.id === activeConversationId }"
+              @click="selectConversation(conv.id)"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-          </li>
-        </ul>
-      </div>
+              <button
+                type="button"
+                class="conv-item-content conversation-select"
+                :aria-pressed="conv.id === activeConversationId"
+              >
+                <span class="conv-title">{{ conv.title || '無標題對話' }}</span>
+                <span class="conv-date">{{ conv.created_at ? conv.created_at.slice(0, 10) : '' }}</span>
+              </button>
+              <button
+                type="button"
+                class="btn-delete-conv"
+                title="刪除此對話"
+                :aria-label="`刪除對話 ${conv.title || '無標題對話'}`"
+                @click.stop="promptDeleteConversation(conv)"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </li>
+          </ul>
+        </div>
+      </details>
     </header>
 
     <!-- Error Banner -->
@@ -381,11 +402,7 @@ function handleCitationClick(citation: Citation) {
 
     <!-- Flattened Open Message Stream & Single Composer (No enclosing chat card) -->
     <main class="chat-main" aria-label="對話內容">
-      <div v-if="!activeConversationId" class="no-active-chat">
-        <p>請建立或選擇一個歷史對話以開始旅程交談。</p>
-      </div>
-
-      <div v-else class="chat-thread-container">
+      <div class="chat-thread-container">
         <!-- Open Messages Stream -->
         <div
           ref="messagesContainerRef"
@@ -484,9 +501,10 @@ function handleCitationClick(citation: Citation) {
             <label for="chat-message-input" class="sr-only">輸入對話訊息</label>
             <textarea
               id="chat-message-input"
+              ref="composerInputRef"
               v-model="inputContent"
               class="form-input chat-textarea"
-              placeholder="詢問任何關於您旅程手記的問題...（Enter 發送，Shift+Enter 換行）"
+              placeholder="詢問任何關於您旅程手記的問題..."
               rows="2"
               :disabled="sendingMessage || loadingMessages"
               @keydown.enter.exact.prevent="handleSendMessage"
@@ -546,7 +564,7 @@ function handleCitationClick(citation: Citation) {
 
 .header-main-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
@@ -559,75 +577,78 @@ function handleCitationClick(citation: Citation) {
   letter-spacing: -0.01em;
 }
 
-/* Usage disclosure */
-.usage-disclosure {
-  position: relative;
-  font-size: 0.8125rem;
-}
-
-.usage-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.35rem 0.65rem;
+/* History Collapsible Disclosure */
+.history-details {
   background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
-  cursor: pointer;
-  color: var(--color-subtle);
-  font-weight: 500;
-  list-style: none;
-  user-select: none;
+  transition: border-color 0.15s ease;
 }
 
-.usage-summary::-webkit-details-marker {
+.history-details[open] {
+  border-color: var(--color-border);
+}
+
+.history-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: 0.8125rem;
+  color: var(--color-ink);
+}
+
+.history-summary::-webkit-details-marker {
   display: none;
 }
 
-.usage-icon {
-  color: var(--color-maple);
-  flex-shrink: 0;
+.history-summary:focus-visible {
+  outline: 2px solid var(--color-maple);
+  outline-offset: 1px;
 }
 
-.usage-details-popover {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 0.35rem);
-  z-index: 20;
-  min-width: 220px;
-  padding: 0.625rem 0.875rem;
-  background-color: var(--color-paper);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 4px 12px rgba(69, 58, 50, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-}
-
-.usage-row {
+.history-summary-left {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.usage-label {
+.history-summary-title {
+  font-weight: 600;
+  color: var(--color-ink);
+  flex-shrink: 0;
+}
+
+.history-active-title {
   color: var(--color-subtle);
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.usage-value {
-  font-weight: 700;
-  color: var(--color-maple);
-}
-
-.usage-meta-tag {
+.history-chevron {
+  margin-left: auto;
   color: var(--color-subtle);
-  display: flex;
-  gap: 0.35rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.history-details[open] .history-chevron {
+  transform: rotate(180deg);
+}
+
+.history-details .conversation-toolbar {
+  padding: 0.75rem;
   border-top: 1px solid var(--color-border-light);
-  padding-top: 0.25rem;
-  margin-top: 0.2rem;
+  background-color: var(--color-paper);
 }
 
 /* Compact History Toolbar (Flat across top) */
@@ -1066,12 +1087,18 @@ function handleCitationClick(citation: Citation) {
 }
 
 .chat-form {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.625rem;
-  align-items: flex-end;
+  align-items: stretch;
 }
 
 .chat-textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
   resize: none;
   min-height: 44px;
   font-size: 0.875rem;
@@ -1091,7 +1118,10 @@ function handleCitationClick(citation: Citation) {
 }
 
 .send-btn {
-  height: 44px;
+  height: auto;
+  min-height: 44px;
+  margin: 0;
+  align-self: stretch;
   white-space: nowrap;
   flex-shrink: 0;
   background-color: var(--color-maple);

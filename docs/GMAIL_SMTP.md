@@ -72,10 +72,10 @@ Gmail SMTP 伺服器是 `smtp.gmail.com`，587使用STARTTLS，465使用SSL。
 ### 正式 Docker API
 
 在部署原始碼目錄執行，換成自己的正式設定檔位置。
-RELEASE_ID 要與目前部署版本相同；主機已有 current.json 時可查其 image_tag。
+RELEASE_ID 要與你目前部署的映像版本相同。
 
 ```powershell
-$configFile = 'D:\Services\TravelMemo\.env'
+$configFile = 'C:\Services\TravelMemo\.env'
 $env:RELEASE_ID = '<目前部署的映像版本>'
 docker compose --env-file $configFile -f deploy/compose.prod.yml up -d --no-deps --force-recreate api
 ```

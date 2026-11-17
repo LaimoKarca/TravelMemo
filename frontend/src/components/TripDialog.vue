@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { Trip, CreateTripPayload, UpdateTripPayload } from '../types/travel'
+import { getTimezoneOptions, normalizeTimezoneInput } from '../utils/timezones'
 
 const props = withDefaults(
   defineProps<{
@@ -37,19 +38,9 @@ const clientValidationError = ref('')
 const isEdit = computed(() => !!props.trip)
 const dialogTitle = computed(() => (isEdit.value ? '編輯旅行手記' : '新增旅行手記'))
 
-const commonTimezones = [
-  'Asia/Taipei',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Asia/Hong_Kong',
-  'Asia/Singapore',
-  'Asia/Bangkok',
-  'Europe/London',
-  'Europe/Paris',
-  'America/New_York',
-  'America/Los_Angeles',
-  'UTC'
-]
+const timezoneOptions = computed(() => {
+  return getTimezoneOptions(startDate.value || undefined)
+})
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -165,12 +156,16 @@ function handleSubmit() {
     return
   }
 
+  const rawTimezone = timezone.value.trim()
+  const normalized = normalizeTimezoneInput(rawTimezone)
+  const finalTimezone = (normalized && normalized.trim()) || rawTimezone || 'Asia/Taipei'
+
   if (isEdit.value && props.trip) {
     const payload: UpdateTripPayload = {
       name: trimmedName,
       start_date: startDate.value,
       end_date: endDate.value,
-      timezone: timezone.value.trim() || 'Asia/Taipei',
+      timezone: finalTimezone,
       description: description.value,
       version: props.trip.version
     }
@@ -180,7 +175,7 @@ function handleSubmit() {
       name: trimmedName,
       start_date: startDate.value,
       end_date: endDate.value,
-      timezone: timezone.value.trim() || 'Asia/Taipei',
+      timezone: finalTimezone,
       description: description.value
     }
     emit('submit', payload)
@@ -303,16 +298,26 @@ onBeforeUnmount(() => {
           <label for="trip-timezone" class="form-label">
             時區
           </label>
-          <select
+          <input
             id="trip-timezone"
             v-model="timezone"
-            class="form-input form-select"
+            type="text"
+            list="trip-timezone-list"
+            class="form-input"
+            placeholder="例如：Asia/Taipei 或 UTC+08:00"
+            autocomplete="off"
             :disabled="loading"
-          >
-            <option v-for="tz in commonTimezones" :key="tz" :value="tz">
-              {{ tz }}
+          />
+          <datalist id="trip-timezone-list">
+            <option
+              v-for="opt in timezoneOptions"
+              :key="opt.value"
+              :value="opt.value"
+              :label="opt.label"
+            >
+              {{ opt.label }}
             </option>
-          </select>
+          </datalist>
         </div>
 
         <div class="form-group">

@@ -32,6 +32,8 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import RecallSearch from './RecallSearch.vue'
 import ConversationView from './ConversationView.vue'
 import SourceDetailModal from './SourceDetailModal.vue'
+import TravelDivider from './TravelDivider.vue'
+import { useTravelMotion } from '../composables/useTravelMotion'
 
 const props = defineProps<{
   user: User
@@ -41,6 +43,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'logout'): void
 }>()
+
+const { isTabWashing, triggerTabWash, handleActionClick } = useTravelMotion()
 
 // Workspace active tab navigation
 type WorkspaceTab = 'trips' | 'search' | 'chat'
@@ -65,7 +69,10 @@ function setTabRef(el: any, index: number) {
 }
 
 function switchTab(tab: WorkspaceTab) {
-  activeTab.value = tab
+  if (activeTab.value !== tab) {
+    activeTab.value = tab
+    triggerTabWash(450)
+  }
 }
 
 async function handleTabKeydown(e: KeyboardEvent, currentIndex: number) {
@@ -612,7 +619,7 @@ function resetFilters() {
           :aria-controls="t.panelId"
           role="tab"
           :tabindex="activeTab === t.id ? 0 : -1"
-          @click="switchTab(t.id)"
+          @click="(e) => { handleActionClick(e); switchTab(t.id); }"
           @keydown="handleTabKeydown($event, index)"
         >
           <svg v-if="t.id === 'trips'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -646,12 +653,15 @@ function resetFilters() {
           type="button"
           class="btn btn-secondary logout-button"
           :disabled="loggingOut || actionInProgress"
-          @click="emit('logout')"
+          @click="(e) => { handleActionClick(e); emit('logout'); }"
         >
           <span v-if="loggingOut" class="spinner-small" aria-hidden="true"></span>
           <span>{{ loggingOut ? '登出中...' : '登出手記' }}</span>
         </button>
       </div>
+
+      <!-- Softened feathered organic boundary with sparse tiny maple leaf accents -->
+      <TravelDivider orientation="vertical" />
     </aside>
 
     <!-- Mobile Top Identity Bar -->
@@ -675,7 +685,7 @@ function resetFilters() {
 
     <!-- Main Content Area: Fluid and Spacious -->
     <main class="workspace-main">
-      <div class="workspace-content-pane">
+      <div class="workspace-content-pane" :class="{ 'tab-wash-active': isTabWashing }">
         <!-- Global Alert Notification Area -->
         <StatusAlert :message="alertMessage" :type="alertType" />
 
@@ -697,7 +707,7 @@ function resetFilters() {
                 type="button"
                 class="btn btn-primary create-trip-btn"
                 :disabled="loadingTrips || actionInProgress"
-                @click="openCreateTripModal"
+                @click="(e) => { handleActionClick(e); openCreateTripModal(); }"
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <line x1="12" y1="5" x2="12" y2="19" />
@@ -1128,6 +1138,7 @@ function resetFilters() {
 
     <!-- Mobile Bottom Navigation Bar (Three functions) -->
     <nav class="mobile-bottom-nav" aria-label="行動快捷功能">
+      <TravelDivider orientation="horizontal" />
       <button
         v-for="t in TABS"
         :key="t.id"
@@ -1135,7 +1146,7 @@ function resetFilters() {
         class="mobile-nav-btn"
         :class="{ 'is-active': activeTab === t.id }"
         :aria-pressed="activeTab === t.id"
-        @click="switchTab(t.id)"
+        @click="(e) => { handleActionClick(e); switchTab(t.id); }"
       >
         <svg v-if="t.id === 'trips'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -1215,7 +1226,8 @@ function resetFilters() {
   min-width: 216px;
   height: 100vh;
   background-color: var(--color-paper);
-  border-right: 1px solid var(--color-border);
+  position: relative;
+  border-right: none;
   display: flex;
   flex-direction: column;
   padding: 1.25rem 0.875rem;
@@ -1290,6 +1302,7 @@ function resetFilters() {
   transition: all 0.15s ease;
   width: 100%;
   text-align: left;
+  position: relative;
 }
 
 .nav-tab-btn:hover {
@@ -1366,6 +1379,7 @@ function resetFilters() {
 }
 
 .workspace-content-pane {
+  position: relative;
   padding: 2rem 2.5rem;
   max-width: 1280px;
   margin: 0 auto;
@@ -1373,6 +1387,86 @@ function resetFilters() {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+/* Tab switch gentle cream ripple/wash <=600ms without layout shift */
+.workspace-content-pane.tab-wash-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: radial-gradient(
+    ellipse at 50% 10%,
+    rgba(241, 223, 210, 0.45) 0%,
+    rgba(246, 241, 231, 0.3) 45%,
+    transparent 75%
+  );
+  animation: gentleCreamWash 450ms cubic-bezier(0.2, 0, 0.2, 1) forwards;
+}
+
+@keyframes gentleCreamWash {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Bounded cream ripple container: clips ripple strictly to target without clipping target's focus ring */
+:deep(.travel-cream-ripple-host) {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Subtle cream ripple on click/actions */
+:deep(.travel-cream-ripple) {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  user-select: none;
+  background: radial-gradient(
+    circle,
+    rgba(241, 223, 210, 0.45) 0%,
+    rgba(246, 241, 231, 0.25) 55%,
+    transparent 75%
+  );
+  transform: scale(0);
+  animation: travelCreamRipple 420ms cubic-bezier(0.2, 0, 0.2, 1) forwards;
+  z-index: 0;
+}
+
+@keyframes travelCreamRipple {
+  0% {
+    transform: scale(0);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Ensure button text and icons sit comfortably above ripple */
+.nav-tab-btn > *:not(.travel-cream-ripple-host),
+.mobile-nav-btn > *:not(.travel-cream-ripple-host),
+.logout-button > *:not(.travel-cream-ripple-host),
+.create-trip-btn > *:not(.travel-cream-ripple-host) {
+  position: relative;
+  z-index: 1;
+}
+
+.logout-button,
+.create-trip-btn {
+  position: relative;
 }
 
 .tabpanel-container,
@@ -2047,7 +2141,7 @@ function resetFilters() {
     right: 0;
     height: 56px;
     background-color: var(--color-paper);
-    border-top: 1px solid var(--color-border);
+    border-top: none;
     z-index: 10;
   }
 
@@ -2063,6 +2157,12 @@ function resetFilters() {
     font-size: 0.6875rem;
     font-weight: 500;
     cursor: pointer;
+    position: relative;
+  }
+
+  .mobile-nav-btn:focus-visible {
+    outline: 2px solid var(--color-maple);
+    outline-offset: -2px;
   }
 
   .mobile-nav-btn.is-active {
@@ -2094,6 +2194,20 @@ function resetFilters() {
 
   .filter-select {
     flex: 1;
+  }
+}
+
+/* Reduced motion suppression */
+@media (prefers-reduced-motion: reduce) {
+  .workspace-content-pane.tab-wash-active::before {
+    animation: none !important;
+    display: none !important;
+  }
+
+  :deep(.travel-cream-ripple-host),
+  :deep(.travel-cream-ripple) {
+    animation: none !important;
+    display: none !important;
   }
 }
 </style>

@@ -9,7 +9,7 @@
 需求：Python 3.12、Node.js 22.12 以上、已啟動的 Docker Desktop（Linux containers）。
 
 ```powershell
-git clone https://github.com/LaimoKarca/TravelMemo.git
+git clone https://github.com/your-username/TravelMemo.git
 cd TravelMemo
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.lock.txt

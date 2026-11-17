@@ -5,7 +5,9 @@ import sys
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-base = sys.argv[1] if len(sys.argv) > 1 else "https://travel.tan-ji.org"
+if len(sys.argv) != 2:
+    raise SystemExit("Usage: python deploy/check-public.py https://travel.example.com")
+base = sys.argv[1]
 
 
 def check(path, expected, method="GET", payload=None, origin=None, headers=None):

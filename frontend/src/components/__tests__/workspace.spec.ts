@@ -414,6 +414,39 @@ describe('TripWorkspace and Travel Components', () => {
     expect(wrapper.emitted('refresh')).toBeTruthy()
   })
 
+  it('TripDialog renders searchable timezone input with datalist and preserves existing timezone on edit', async () => {
+    const wrapper = mount(TripDialog, {
+      props: { visible: true, trip: mockTrips[0] } // mockTrips[0] has timezone: 'Asia/Tokyo'
+    })
+    await flushPromises()
+
+    const tzInput = wrapper.find('input#trip-timezone')
+    expect(tzInput.exists()).toBe(true)
+    expect(tzInput.attributes('list')).toBe('trip-timezone-list')
+    expect((tzInput.element as HTMLInputElement).value).toBe('Asia/Tokyo')
+
+    const datalist = wrapper.find('datalist#trip-timezone-list')
+    expect(datalist.exists()).toBe(true)
+  })
+
+  it('TripDialog allows typing custom UTC offset and emits normalized value on submit', async () => {
+    const wrapper = mount(TripDialog, {
+      props: { visible: true, trip: null }
+    })
+    await flushPromises()
+
+    await wrapper.find('#trip-name-input').setValue('台南古蹟文化行')
+    await wrapper.find('#trip-start-date').setValue('2026-11-20')
+    await wrapper.find('#trip-end-date').setValue('2026-11-22')
+    await wrapper.find('input#trip-timezone').setValue('UTC+8')
+
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(wrapper.emitted('submit')).toBeTruthy()
+    const payload = wrapper.emitted('submit')![0][0] as any
+    expect(payload.timezone).toBeTruthy()
+  })
+
   it('EventDialog preserves entered values on optimistic 409 conflict and offers refresh', async () => {
     const wrapper = mount(EventDialog, {
       props: {

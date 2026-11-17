@@ -64,6 +64,29 @@ class MemoryConversationStore:
                 "created_at": conv["created_at"],
             }
 
+    def set_conversation_title(self, owner_id: str, conversation_id: str, title: str) -> bool:
+        with self.lock:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation or conversation["owner_id"] != owner_id:
+                return False
+            conversation["title"] = title
+            return True
+
+    def get_memory(self, owner_id: str, conversation_id: str) -> dict[str, Any]:
+        with self.lock:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation or conversation["owner_id"] != owner_id:
+                return {}
+            return copy.deepcopy(conversation.get("memory", {}))
+
+    def set_memory(self, owner_id: str, conversation_id: str, state: dict[str, Any]) -> bool:
+        with self.lock:
+            conversation = self.conversations.get(conversation_id)
+            if not conversation or conversation["owner_id"] != owner_id:
+                return False
+            conversation["memory"] = copy.deepcopy(state)
+            return True
+
     def delete_conversation(self, owner_id: str, conversation_id: str) -> bool:
         with self.lock:
             conv = self.conversations.get(conversation_id)
@@ -136,7 +159,7 @@ class MemoryConversationStore:
         self,
         owner_id: str,
         date_str: str,
-        max_daily: int = 50,
+        max_daily: int | None = None,
         max_user_concurrent: int = 1,
         max_global_concurrent: int = 2,
     ) -> tuple[bool, str | None]:
@@ -145,7 +168,7 @@ class MemoryConversationStore:
             usage = self.usage.setdefault(
                 key, {"requests": 0, "input_tokens": 0, "output_tokens": 0}
             )
-            if usage["requests"] >= max_daily:
+            if max_daily is not None and usage["requests"] >= max_daily:
                 return False, f"今日對話請求次數已達上限 ({max_daily} 次)。"
 
             active_user = self.user_active.get(owner_id, 0)
@@ -275,6 +298,30 @@ class Neo4jConversationStore:
                 "created_at": record["created_at"],
             }
 
+    def set_conversation_title(self, owner_id: str, conversation_id: str, title: str) -> bool:
+        with self.driver.session(database=self.database) as session:
+            result = session.run(
+                "MATCH (c:Conversation {id:$id, owner_id:$owner}) SET c.title=$title RETURN c.id AS id",
+                id=conversation_id, owner=owner_id, title=title,
+            ).single()
+            return result is not None
+
+    def get_memory(self, owner_id: str, conversation_id: str) -> dict[str, Any]:
+        with self.driver.session(database=self.database) as session:
+            row = session.run(
+                "MATCH (c:Conversation {id:$id, owner_id:$owner}) RETURN c.context_memory AS memory",
+                id=conversation_id, owner=owner_id,
+            ).single()
+            return json.loads(row["memory"]) if row and row["memory"] else {}
+
+    def set_memory(self, owner_id: str, conversation_id: str, state: dict[str, Any]) -> bool:
+        with self.driver.session(database=self.database) as session:
+            row = session.run(
+                "MATCH (c:Conversation {id:$id, owner_id:$owner}) SET c.context_memory=$memory RETURN c.id AS id",
+                id=conversation_id, owner=owner_id, memory=json.dumps(state, ensure_ascii=False),
+            ).single()
+            return row is not None
+
     def delete_conversation(self, owner_id: str, conversation_id: str) -> bool:
         with self.driver.session(database=self.database) as session:
             record = session.run(
@@ -306,6 +353,7 @@ class Neo4jConversationStore:
             record = session.run(
                 """
                 MATCH (c:Conversation {id: $conversation_id, owner_id: $owner_id})
+                SET c.message_seq = coalesce(c.message_seq, 0) + 1
                 CREATE (m:Message {
                     id: $id,
                     conversation_id: $conversation_id,
@@ -314,7 +362,8 @@ class Neo4jConversationStore:
                     content: $content,
                     status: $status,
                     citations: $citations,
-                    created_at: $created_at
+                    created_at: $created_at,
+                    sequence: c.message_seq
                 })
                 CREATE (c)-[:HAS_MESSAGE]->(m)
                 RETURN m.id AS id
@@ -359,7 +408,7 @@ class Neo4jConversationStore:
                 MATCH (c:Conversation {id: $conversation_id, owner_id: $owner_id})-[:HAS_MESSAGE]->(m:Message)
                 RETURN m.id AS id, m.role AS role, m.content AS content, m.status AS status,
                        m.citations AS citations, m.created_at AS created_at
-                ORDER BY m.created_at ASC
+                ORDER BY coalesce(m.sequence, 0) ASC, m.created_at ASC, m.id ASC
                 """,
                 conversation_id=conversation_id,
                 owner_id=owner_id,
@@ -384,7 +433,7 @@ class Neo4jConversationStore:
         self,
         owner_id: str,
         date_str: str,
-        max_daily: int = 50,
+        max_daily: int | None = None,
         max_user_concurrent: int = 1,
         max_global_concurrent: int = 2,
     ) -> tuple[bool, str | None]:
@@ -405,7 +454,7 @@ class Neo4jConversationStore:
                     ON CREATE SET u.owner_id = $owner_id, u.date = $date,
                                   u.requests = 0, u.input_tokens = 0, u.output_tokens = 0
                     WITH u
-                    WHERE u.requests < $max_daily
+                    WHERE $max_daily IS NULL OR u.requests < $max_daily
                     SET u.requests = u.requests + 1
                     RETURN u.requests AS requests
                     """,

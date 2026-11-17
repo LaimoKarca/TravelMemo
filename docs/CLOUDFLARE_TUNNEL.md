@@ -12,8 +12,8 @@
 3. 取得本專案原始碼，可使用 Git 或下載 GitHub 原始碼 ZIP 後解壓縮。
 4. 依 [Gmail SMTP 教學](GMAIL_SMTP.md)準備寄件帳號與應用程式密碼。
 
-以下假設原始碼根目錄為 `D:\Services\TravelMemo\source`，
-私人設定為 `D:\Services\TravelMemo\.env` 及 `.env.tunnel`。
+以下假設原始碼根目錄為 `C:\Services\TravelMemo\source`，
+私人設定為 `C:\Services\TravelMemo\.env` 及 `.env.tunnel`。
 這些路徑可自行調整；下文 Docker Compose 指令皆從原始碼根目錄執行。
 
 Cloudflare 的公開主機名稱路由需要已加入帳戶的網域。
@@ -40,7 +40,7 @@ Cloudflare 的公開主機名稱路由需要已加入帳戶的網域。
 
 ## 3. 啟動專用 connector
 
-在 `D:\Services\TravelMemo\.env.tunnel` 寫入一行，換成自己的 token：
+在 `C:\Services\TravelMemo\.env.tunnel` 寫入一行，換成自己的 token：
 
 ```dotenv
 TUNNEL_TOKEN=replace-with-your-tunnel-token
@@ -52,13 +52,13 @@ cloudflared 接受的環境變數名稱是 `TUNNEL_TOKEN`。
 參見 [官方 token 參數](https://developers.cloudflare.com/tunnel/reference/run-parameters/)。
 
 ```powershell
-docker pull cloudflare/cloudflared:latest
-$cloudflaredImage = docker image inspect cloudflare/cloudflared:latest --format '{{index .RepoDigests 0}}'
-docker run -d --name travelmemo-tunnel --restart unless-stopped --memory 128m --env-file 'D:\Services\TravelMemo\.env.tunnel' $cloudflaredImage tunnel --no-autoupdate run
+$cloudflaredImage = 'cloudflare/cloudflared:<版本標籤>'
+docker pull $cloudflaredImage
+docker run -d --name travelmemo-tunnel --restart unless-stopped --memory 128m --env-file 'C:\Services\TravelMemo\.env.tunnel' $cloudflaredImage tunnel --no-autoupdate run
 docker logs --tail 30 travelmemo-tunnel
 ```
 
-上述流程會以拉取後解析出的 digest 固定實際映像。日後更新前先記錄舊 digest。
+請先選定要使用的版本標籤並填入指令；更新前記錄目前版本，以便回退。
 若已有同名容器，先確認是否為自己先前建立的 connector，不要重複建立或刪除其他服務。
 
 看到 `Registered tunnel connection`，且 Cloudflare 顯示 Healthy／已連線，表示 connector 已接上 Cloudflare。
@@ -71,7 +71,7 @@ docker logs --tail 30 travelmemo-tunnel
 首次複製 `.env.example` 到私人設定位置，再編輯；已有設定時不要覆蓋：
 
 ```powershell
-Copy-Item .env.example 'D:\Services\TravelMemo\.env'
+Copy-Item .env.example 'C:\Services\TravelMemo\.env'
 ```
 
 至少設定以下項目，SMTP 完整設定請接續 Gmail 教學：
@@ -103,11 +103,11 @@ SMTP_FROM="TravelMemo <your-gmail-account@gmail.com>"
 | Cloudflare route | hostname 設為 travel.example.com |
 
 PUBLIC_URL 與公開 hostname 須一致。Nginx 使用預設站台，不需為換網域另改 server_name。
-正式 Compose 目前只傳入本階段需要的設定，不會把整份 `.env` 都送進 API 容器。
+正式 Compose 只傳入明確列出的必要設定，不會把整份 `.env` 都送進 API 容器。
 
 ## 5. 建置並連接 Docker 網路
 
-先確認 `172.30.80.0/24` 沒有與其他 Docker／VPN 網路衝突。
+先確認 Compose 的 IPAM 子網設定沒有與其他 Docker／VPN 網路衝突。
 本專案固定 connector 為 `.2`、Web 為 `.10`、API 為 `.20`、Neo4j 為 `.30`。
 若需更換網段，須同步調整 Compose 的 subnet 與所有固定 IP、API 的 TRUSTED_PROXY_IPS、
 Nginx 的 allow 及下方 connector IP，不能只改其中一處。
@@ -115,7 +115,7 @@ Nginx 的 allow 及下方 connector IP，不能只改其中一處。
 在原始碼根目錄執行：
 
 ```powershell
-$configFile = 'D:\Services\TravelMemo\.env'
+$configFile = 'C:\Services\TravelMemo\.env'
 $env:RELEASE_ID = 'my-first-deploy'
 docker compose --env-file $configFile -f deploy/compose.prod.yml config --quiet
 docker compose --env-file $configFile -f deploy/compose.prod.yml build
@@ -123,7 +123,8 @@ docker compose --env-file $configFile -f deploy/compose.prod.yml up -d --wait --
 docker compose --env-file $configFile -f deploy/compose.prod.yml ps
 docker exec travelmemo-api-1 python main.py download-model
 docker exec travelmemo-api-1 python main.py rebuild-index
-docker network connect --ip 172.30.80.2 travelmemo-net travelmemo-tunnel
+$connectorIp = '<與 deploy/nginx.conf allow 一致的 connector IP>'
+docker network connect --ip $connectorIp travelmemo-net travelmemo-tunnel
 ```
 
 最後一行只在 connector 尚未加入此網路時執行。可檢查實際位址：
@@ -133,7 +134,7 @@ $networks = docker inspect travelmemo-tunnel --format '{{json .NetworkSettings.N
 $networks.'travelmemo-net'.IPAddress
 ```
 
-應顯示 `172.30.80.2`。共享網路讓 connector 能以容器名稱連到 Web。
+應與你填入的 connector IP 相同。共享網路讓 connector 能以容器名稱連到 Web。
 參見 [Docker network connect](https://docs.docker.com/reference/cli/docker/network/connect/)。
 此 Compose 不對主機公開 Web、API 或 Neo4j port。
 
@@ -178,7 +179,7 @@ python deploy/check-public.py https://travel.example.com
 請實際測試主機重啟後恢復，並依 [備份與還原](BACKUP_RESTORE.md)定期保護資料。
 **不要執行 `docker compose down -v`，這會移除包含旅程資料的資料卷。**
 
-更新、回退及目前部署限制參見 [部署說明](DEPLOYMENT.md)。
+更新、回退及部署方式參見 [部署說明](DEPLOYMENT.md)。
 
 ## 8. 常見問題
 
@@ -186,7 +187,7 @@ python deploy/check-public.py https://travel.example.com
 | --- | --- |
 | No connection detected yet | connector 是否啟動、token 是否有效；查看 connector 日誌及主機對外網路 |
 | Tunnel Healthy，但網站502 | Compose 是否健康、Service URL 是否為 http://travelmemo-web:80、兩容器是否同在 travelmemo-net |
-| 來源 Nginx 回403 | connector 在專案網路是否固定為172.30.80.2，與 nginx allow 一致 |
+| 來源 Nginx 回403 | connector 在專案網路是否固定於指定位置，與 nginx allow 一致 |
 | 登入寫入請求403 | 網址、Compose PUBLIC_URL 及瀏覽器 Origin 是否一致；刷新頁面取得目前 CSRF token |
 | Python檢查被1010擋住，但瀏覽器正常 | 使用隨附 check-public.py，其 User-Agent 會標明專案；不要直接以預設 urllib 結果判定網站故障 |
 | 改SMTP設定仍沒變 | 依 Gmail 教學重建API容器，僅 restart 不會套用新 env file |
