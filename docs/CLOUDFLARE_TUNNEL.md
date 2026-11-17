@@ -123,7 +123,7 @@ docker compose --env-file $configFile -f deploy/compose.prod.yml up -d --wait --
 docker compose --env-file $configFile -f deploy/compose.prod.yml ps
 docker exec travelmemo-api-1 python main.py download-model
 docker exec travelmemo-api-1 python main.py rebuild-index
-$connectorIp = '<與 deploy/nginx.conf allow 一致的 connector IP>'
+$connectorIp = '<與 deploy/nginx.prod.conf allow 一致的 connector IP>'
 docker network connect --ip $connectorIp travelmemo-net travelmemo-tunnel
 ```
 
