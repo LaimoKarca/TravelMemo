@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import JournalNote from './JournalNote.vue'
 import type { Trip, CreateTripPayload, UpdateTripPayload } from '../types/travel'
 import { getTimezoneOptions, normalizeTimezoneInput } from '../utils/timezones'
 
@@ -54,9 +55,9 @@ function resetFormFromProps() {
     description.value = props.trip.description || ''
   } else {
     name.value = ''
-    const today = new Date().toISOString().slice(0, 10)
+    const today = new Date().toLocaleDateString('en-CA')
     startDate.value = today
-    endDate.value = today
+    endDate.value = new Date(new Date(today).getTime() + 86400000).toISOString().slice(0, 10)
     timezone.value = 'Asia/Taipei'
     description.value = ''
   }
@@ -126,6 +127,10 @@ watch(
     resetFormFromProps()
   }
 )
+
+watch(startDate, (start) => {
+  if (start && endDate.value < start) endDate.value = start
+})
 
 function handleSubmit() {
   clientValidationError.value = ''
@@ -320,20 +325,7 @@ onBeforeUnmount(() => {
           </datalist>
         </div>
 
-        <div class="form-group">
-          <label for="trip-description" class="form-label">
-            旅行隨筆／備忘回憶
-          </label>
-          <textarea
-            id="trip-description"
-            v-model="description"
-            class="form-input form-textarea"
-            rows="4"
-            placeholder="記錄這趟旅程的初衷、隨行夥伴、沿途感受或備忘筆記..."
-            maxlength="10000"
-            :disabled="loading"
-          ></textarea>
-        </div>
+        <JournalNote id="trip-description" v-model="description" kind="trip" label="旅行隨筆／備忘回憶" placeholder="記下旅程的初衷、夥伴或沿途感受…" :disabled="loading" />
 
         <footer class="dialog-footer">
           <button

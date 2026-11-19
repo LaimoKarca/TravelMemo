@@ -11,6 +11,7 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from backend.assistant_tools import AssistantTools, is_greeting
 from backend.auth import AuthError, AuthService
 from backend.context_memory import pack_prompt, prepare_memory
 from backend.conversation_store import MemoryConversationStore
@@ -137,6 +138,16 @@ class PhotoCitation(BaseModel):
     url: str = ""
 
 
+class TripCitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    trip_id: str
+    name: str
+    start_date: str
+    end_date: str
+    version: int
+    state: Literal["current", "changed", "deleted"]
+
+
 class Message(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
@@ -147,7 +158,8 @@ class Message(BaseModel):
     created_at: str
     photos: list[dict[str, Any]] = Field(default_factory=list)
     photo_citations: list[PhotoCitation] = Field(default_factory=list)
-    answer_scope: Literal["memory", "image", "mixed"] = "memory"
+    trip_citations: list[TripCitation] = Field(default_factory=list)
+    answer_scope: Literal["memory", "image", "mixed", "general"] = "memory"
 
 
 class MessageListResponse(BaseModel):
@@ -454,9 +466,16 @@ class ConversationService:
                     "photos": photos,
                     "photo_citations": verified_photo_citations,
                     "answer_scope": msg.get("answer_scope", "memory"),
+                    "trip_citations": [self._verify_trip_citation(owner_id, c) for c in msg.get("trip_citations", [])],
                 }
             )
         return result_messages
+
+    def _verify_trip_citation(self, owner_id, citation):
+        current = AssistantTools(self.search_service).repository
+        trip = current.get_trip(owner_id, citation.get("trip_id")) if current else None
+        state = "deleted" if not trip else ("current" if trip.get("version", 1) == citation.get("version") else "changed")
+        return {k: citation.get(k) for k in ("trip_id", "name", "start_date", "end_date", "version")} | {"state": state}
 
     def _check_followup_ambiguity(
         self, owner_id: str, query: str, previous_messages: list[dict[str, Any]]
@@ -554,7 +573,7 @@ class ConversationService:
 
         try:
             # 2. Safety check BEFORE adding message or binding photos
-            if content_val.strip():
+            if content_val.strip() and not is_greeting(content_val):
                 try:
                     decision = check_request(content_val, self.llm.classify_safety)
                 except SafetyUnavailable:
@@ -602,7 +621,7 @@ class ConversationService:
                 if content_val.strip():
                     fallback = " ".join(content_val.split())[:40] or "新對話"
                     try:
-                        title = self.llm.summarize_title(content_val)
+                        title = fallback if is_greeting(content_val) else self.llm.summarize_title(content_val)
                         title = " ".join(title.split())[:40] if isinstance(title, str) else fallback
                     except Exception:  # noqa: BLE001 - optional metadata must not prevent an answer
                         title = fallback
@@ -682,6 +701,14 @@ class ConversationService:
                     evidence_limit=self.evidence_limit,
                     prompt_max_chars=self.prompt_max_chars,
                 )
+
+            if is_greeting(content_val):
+                return self.store.add_message(owner_id, conversation_id, "assistant",
+                    "嗨！今天想翻翻哪段旅程？也可以問我有哪些旅行手記，或傳張照片一起回想。",
+                    status="answered", created_at=self._iso_now(), answer_scope="general")
+            tool_answer = AssistantTools(self.search_service).answer(self, owner_id, conversation_id, content_val, prev_messages)
+            if tool_answer is not None:
+                return tool_answer
 
             # 9. Otherwise: Existing text response flow (fully preserved)
             content = content_val

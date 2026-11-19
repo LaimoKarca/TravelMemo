@@ -31,7 +31,8 @@
 若要在本機開發時攔截信件進行除錯，可執行 `powershell -File deploy/start-dev.ps1 -CaptureMail`；此指令僅在啟動程序中覆寫 SMTP 環境變數導向 Mailpit，停止該程序後不影響 `.env` 設定。
 
 OpenAI 預設模型設定為 `gpt-6-luna`，API Key 保留在 `.env`。
-對話與引用操作見 [回憶搜尋與 AI 對話](RECALL.md)。本版保存文字紀錄，不提供圖片辨識。
+對話與引用操作見 [回憶搜尋與 AI 對話](RECALL.md)。本版支援文字手記及圖片解析，
+圖片保存限制、相簿與看圖搜尋見 [圖片手記](PHOTOS.md)。
 
 `APP_ENV=production` 要求 HTTPS `PUBLIC_URL`、`COOKIE_SECURE=true`、非空允許名單、
 已設定 SMTP 及加密 SMTP。不要將開發 Mailpit 或 Neo4j Browser 暴露到網路。
@@ -58,6 +59,9 @@ Neo4j 密碼透過 `.env` 初始化；既有資料卷不會因改 `.env` 而重�
 - 429：等待限制視窗結束，不需清除資料庫。
 - 登出 403：重新整理取得目前工作階段的 CSRF token。
 - Ready 503：回應只列出資料庫可用性與 SMTP 是否有設定，不保證真實信箱投遞。
+- 對話暫時沒有回答：回原對話查看請求狀態，先確認網路、登入與 API 是否可用；不要因關閉頁面就重新建立相同問題。
+- 潤飾失敗：原文會保留。先確認內容非空且不超過一萬字元，以及 OpenAI 設定與並行服務是否可用。
+- 手機主畫面仍是舊圖示：瀏覽器可能保留舊捷徑快取，可移除該捷徑後重新加入；不需刪除旅程資料。
 
 正式部署請填入自己的信箱、SMTP、網域與 Tunnel token；AI 對話另需 OpenAI Key。
 備份、隔離演練及版本回退見 [備份與還原](BACKUP_RESTORE.md)。

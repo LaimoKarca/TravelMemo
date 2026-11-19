@@ -14,7 +14,7 @@ import {
   createConversation,
   deleteConversation,
   listMessages,
-  sendMessage
+  enqueueMessage, getChatRequest, listChatRequests
 } from '../api/conversation'
 import { listTrips, getTrip } from '../api/travel'
 import { bindPhoto, getPhoto, retryPhoto } from '../api/photos'
@@ -23,7 +23,13 @@ import ConfirmDialog from './ConfirmDialog.vue'
 import PhotoPicker from './PhotoPicker.vue'
 import PhotoViewer from './PhotoViewer.vue'
 
+const props = withDefaults(defineProps<{ accountId?: string }>(), { accountId: 'current' })
+const storageKey = () => `travelmemo.chat.${props.accountId}`
+function rememberConversation(id: string | null) {
+  try { if (id) localStorage.setItem(storageKey(), id); else localStorage.removeItem(storageKey()) } catch { /* Storage can be unavailable in private browsing. */ }
+}
 const emit = defineEmits<{
+  (e: 'open-trip', tripId: string): void
   (e: 'view-citation', citation: Citation): void
   (e: 'jump-trip', payload: { tripId: string; eventId: string }): void
 }>()
@@ -295,6 +301,9 @@ async function handleRetryStagedPhoto(photoId: string) {
 }
 
 onBeforeUnmount(() => {
+  stopRequestPolling()
+  window.removeEventListener('online', reconnectRequest)
+
   if (chatPollTimer) {
     clearTimeout(chatPollTimer)
     chatPollTimer = null
@@ -317,6 +326,11 @@ const messagesContainerRef = ref<HTMLElement | null>(null)
 
 onMounted(async () => {
   await fetchConversations()
+  let saved: string | null = null
+  try { saved = localStorage.getItem(storageKey()) } catch { /* Storage is optional. */ }
+  if (saved && conversations.value.some(c => c.id === saved)) await selectConversation(saved)
+  else rememberConversation(null)
+  window.addEventListener('online', reconnectRequest)
 })
 
 async function fetchConversations() {
@@ -352,7 +366,10 @@ async function selectConversation(id: string) {
     drafts.value['new'] = inputContent.value
   }
 
+  stopRequestPolling()
+  sendingMessage.value = false
   activeConversationId.value = id
+  rememberConversation(id)
   // Restore draft for this conversation
   inputContent.value = drafts.value[id] || ''
   messages.value = []
@@ -368,6 +385,7 @@ async function selectConversation(id: string) {
       return
     }
     messages.value = res.items || []
+    await recoverRequests(id)
     await scrollToBottom()
   } catch (err: any) {
     if (currentGen !== messageLoadGen || activeConversationId.value !== id) {
@@ -382,6 +400,9 @@ async function selectConversation(id: string) {
 }
 
 function handleStartNewConversation() {
+  stopRequestPolling()
+  sendingMessage.value = false
+  rememberConversation(null)
   // Preserve draft of current conversation before resetting to blank
   if (activeConversationId.value) {
     drafts.value[activeConversationId.value] = inputContent.value
@@ -417,6 +438,9 @@ async function handleConfirmDelete() {
 
     // If deleting the active conversation, reset to blank chat
     if (activeConversationId.value === targetId) {
+      stopRequestPolling()
+      rememberConversation(null)
+      sendingMessage.value = false
       messageLoadGen++
       activeConversationId.value = null
       messages.value = []
@@ -432,104 +456,96 @@ async function handleConfirmDelete() {
   }
 }
 
+let requestTimer: ReturnType<typeof setTimeout> | null = null
+let requestGeneration = 0
+let pendingRequest: { conversationId: string; requestId: string } | null = null
+function stopRequestPolling() {
+  requestGeneration++
+  if (requestTimer) clearTimeout(requestTimer)
+  requestTimer = null
+  pendingRequest = null
+}
+function reconnectRequest() {
+  if (pendingRequest) void pollRequest(pendingRequest.conversationId, pendingRequest.requestId, requestGeneration)
+  else if (activeConversationId.value) void recoverRequests(activeConversationId.value)
+}
+async function recoverRequests(id: string) {
+  try {
+    const jobs = await listChatRequests(id)
+    if (activeConversationId.value !== id) return
+    const pending = jobs.items.find(j => j.status === 'queued' || j.status === 'running')
+    if (pending) { sendingMessage.value = true; pendingRequest = { conversationId: id, requestId: pending.id }; void pollRequest(id, pending.id, requestGeneration) }
+  } catch { /* History is still available; reconnect will retry request discovery. */ }
+}
+async function pollRequest(id: string, rid: string, generation: number) {
+  if (generation !== requestGeneration || activeConversationId.value !== id) return
+  if (requestTimer) clearTimeout(requestTimer)
+  try {
+    const job = await getChatRequest(id, rid)
+    const history = await listMessages(id)
+    if (generation !== requestGeneration || activeConversationId.value !== id) return
+    const optimistic = messages.value.find(m => m.id === 'pending-' + rid)
+    messages.value = history.items || []
+    if (optimistic && !messages.value.some(m => m.role === 'user' && m.content === optimistic.content && m.created_at >= optimistic.created_at) && (job.status === 'queued' || job.status === 'running')) messages.value.push(optimistic)
+    if (job.message && !messages.value.some(m => m.id === job.message!.id)) messages.value.push(job.message)
+    if (job.status === 'completed' || job.status === 'failed') {
+      sendingMessage.value = false
+      pendingRequest = null
+      if (job.status === 'failed') errorMessage.value = job.error || '這次回覆未完成，請重新發問。'
+      await reloadConversationsPreservingSelection()
+      await scrollToBottom()
+      return
+    }
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+      if (generation === requestGeneration) { stopRequestPolling(); sendingMessage.value = false; errorMessage.value = err.detail }
+      return
+    }
+    // An interrupted connection does not cancel work or create another request.
+  }
+  if (generation === requestGeneration && activeConversationId.value === id) requestTimer = setTimeout(() => void pollRequest(id, rid, generation), navigator.onLine ? 1500 : 5000)
+}
 async function handleSendMessage() {
   const content = inputContent.value.trim()
-  if ((!content && stagedChatPhotos.value.length === 0) || sendingMessage.value || hasUnreadyStagedPhotos.value) return
-
-  const sendGen = messageLoadGen
+  if ((!content && !stagedChatPhotos.value.length) || sendingMessage.value || hasUnreadyStagedPhotos.value) return
+  const photos = [...stagedChatPhotos.value]
+  const generation = requestGeneration
+  const loadGeneration = messageLoadGen
   let targetId = activeConversationId.value
-
-  const stagedCopies = [...stagedChatPhotos.value]
-  const photoIds = stagedCopies.map((p) => p.id)
-
-  // Clear staged photos
-  stagedChatPhotos.value = []
-  chatPhotoPickerRef.value?.clear()
-
-  // Optimistically append user message
-  const tempUserMessage: Message = {
-    id: 'temp-' + Date.now(),
-    role: 'user',
-    content,
-    status: 'answered',
-    citations: [],
-    photos: stagedCopies,
-    created_at: new Date().toISOString()
-  }
-
-  // Clear input and current draft
-  inputContent.value = ''
-  if (targetId) {
-    delete drafts.value[targetId]
-  } else {
-    delete drafts.value['new']
-  }
-
-  messages.value.push(tempUserMessage)
   sendingMessage.value = true
   errorMessage.value = ''
-
-  scrollToBottom()
-
   try {
-    // On first send in blank chat, lazily create conversation
     if (!targetId) {
-      try {
-        const created = await createConversation({})
-        // Check if user navigated away or reset while create was in flight
-        if (sendGen !== messageLoadGen) {
-          // Never delete ambiguous potentially persisted data: retain created conversation
-          conversations.value.unshift(created)
-          const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
-          if (tempIdx !== -1) {
-            messages.value.splice(tempIdx, 1)
-          }
-          return
-        }
-        targetId = created.id
-        activeConversationId.value = created.id
-        conversations.value.unshift(created)
-      } catch (err: any) {
-        const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
-        if (tempIdx !== -1) {
-          messages.value.splice(tempIdx, 1)
-        }
-        inputContent.value = content
-        stagedChatPhotos.value = stagedCopies
-        errorMessage.value = err instanceof ApiError ? err.detail : '建立新對話失敗，請稍後再試。'
-        return
-      }
+      const created = await createConversation({})
+      conversations.value.unshift(created)
+      targetId = created.id
+      if (loadGeneration === messageLoadGen) { activeConversationId.value = targetId; rememberConversation(targetId) }
+      else { drafts.value[targetId] = content; return }
     }
-
-    try {
-      const reply = await sendMessage(targetId, {
-        content,
-        photo_ids: photoIds.length > 0 ? photoIds : undefined
-      })
-      // Only append reply if still matching generation & active conversation
-      if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
-        messages.value.push(reply)
-        await scrollToBottom()
-      }
-      // Reload conversation list without changing active selection to pick up backend auto-generated title
-      await reloadConversationsPreservingSelection()
-    } catch (err: any) {
-      // Failed send: remove optimistic message and restore draft
-      const tempIdx = messages.value.findIndex((m) => m.id === tempUserMessage.id)
-      if (tempIdx !== -1) {
-        messages.value.splice(tempIdx, 1)
-      }
-
-      if (sendGen === messageLoadGen && activeConversationId.value === targetId) {
-        inputContent.value = content
-        stagedChatPhotos.value = stagedCopies
-        errorMessage.value = err instanceof ApiError ? err.detail : '發送訊息失敗，請稍後再試。'
-      } else {
-        drafts.value[targetId] = content
-      }
+    const rid = crypto.randomUUID()
+    const payload = { content, ...(photos.length ? { photo_ids: photos.map(p => p.id) } : {}) }
+    // Repeat only this exact idempotent request if its acknowledgement is lost.
+    let accepted = false
+    for (let attempt = 0; attempt < 2 && !accepted; attempt++) {
+      try { await enqueueMessage(targetId, rid, payload); accepted = true }
+      catch (err) { if (err instanceof ApiError || attempt === 1) throw err }
     }
-  } finally {
-    sendingMessage.value = false
+    if (generation !== requestGeneration || activeConversationId.value !== targetId) return
+    inputContent.value = ''
+    stagedChatPhotos.value = []
+    chatPhotoPickerRef.value?.clear()
+    delete drafts.value[targetId]
+    delete drafts.value['new']
+    pendingRequest = { conversationId: targetId, requestId: rid }
+    messages.value.push({ id: 'pending-' + rid, role: 'user', content, status: 'answered', citations: [], photos, created_at: new Date().toISOString() })
+    await scrollToBottom()
+    void pollRequest(targetId, rid, generation)
+  } catch (err) {
+    if (generation === requestGeneration) {
+      sendingMessage.value = false
+      errorMessage.value = err instanceof ApiError ? err.detail : '連線中斷；已送出的問題會繼續處理，重新連線後可接回回覆。'
+      if (targetId) await recoverRequests(targetId)
+    }
   }
 }
 
@@ -709,14 +725,14 @@ function handleCitationClick(citation: Citation) {
                 {{ msg.role === 'user' ? '旅人' : '手記助理' }}
               </span>
               <span
-                v-if="msg.role === 'assistant' && msg.answer_scope"
+                v-if="msg.role === 'assistant' && msg.answer_scope && msg.answer_scope !== 'general'"
                 class="answer-scope-pill"
                 :class="'scope-' + msg.answer_scope"
               >
                 {{ getAnswerScopeLabel(msg.answer_scope) }}
               </span>
               <span
-                v-if="msg.role === 'assistant'"
+                v-if="msg.role === 'assistant' && msg.answer_scope !== 'general'"
                 class="message-status-pill"
                 :class="getStatusBadge(msg.status).className"
               >
@@ -800,6 +816,9 @@ function handleCitationClick(citation: Citation) {
               </div>
             </div>
 
+            <div v-if="msg.trip_citations?.length" class="trip-citations">
+              <button v-for="trip in msg.trip_citations" :key="trip.trip_id" type="button" class="trip-source-link" :disabled="trip.state === 'deleted'" @click="emit('open-trip', trip.trip_id)">{{ trip.name }} <small>{{ trip.start_date }} — {{ trip.end_date }}{{ trip.state === 'changed' ? '・已更新' : trip.state === 'deleted' ? '・已刪除' : '' }}</small></button>
+            </div>
             <!-- Photo Citations -->
             <div
               v-if="msg.role === 'assistant' && msg.photo_citations && msg.photo_citations.length > 0"
@@ -875,6 +894,30 @@ function handleCitationClick(citation: Citation) {
         <!-- Single Composer on page -->
         <footer class="chat-input-bar">
           <form class="chat-form" @submit.prevent="handleSendMessage">
+            <div class="composer-picker-row">
+              <PhotoPicker
+                ref="chatPhotoPickerRef"
+                v-model:photos="stagedChatPhotos"
+                :icon-only="true"
+                :compact="true"
+                :multiple="true"
+                :max-photos="4"
+                button-text="選取照片"
+                camera-button-text="拍照"
+                @retry="handleRetryStagedPhoto"
+              />
+
+              <div v-if="hasPendingStagedPhotos" class="reading-indicator" role="status" aria-live="polite">
+                <div class="page-spinner-sm" aria-hidden="true"></div>
+                <span class="reading-text">正在識別照片內容...</span>
+              </div>
+
+              <div v-else-if="hasFailedOrBlockedStagedPhotos" class="staged-alert-hint" role="alert">
+                <span class="alert-icon" aria-hidden="true">⚠️</span>
+                <span>照片未就緒，請重試或移除無法識別的照片</span>
+              </div>
+            </div>
+
             <label for="chat-message-input" class="sr-only">輸入對話訊息</label>
             <textarea
               id="chat-message-input"
@@ -899,28 +942,6 @@ function handleCitationClick(citation: Citation) {
               <span>{{ sendingMessage ? '回覆中...' : '發送' }}</span>
             </button>
 
-            <div class="composer-picker-row">
-              <PhotoPicker
-                ref="chatPhotoPickerRef"
-                v-model:photos="stagedChatPhotos"
-                :compact="true"
-                :multiple="true"
-                :max-photos="4"
-                button-text="選取照片"
-                camera-button-text="拍照"
-                @retry="handleRetryStagedPhoto"
-              />
-
-              <div v-if="hasPendingStagedPhotos" class="reading-indicator" role="status" aria-live="polite">
-                <div class="page-spinner-sm" aria-hidden="true"></div>
-                <span class="reading-text">正在識別照片內容...</span>
-              </div>
-
-              <div v-else-if="hasFailedOrBlockedStagedPhotos" class="staged-alert-hint" role="alert">
-                <span class="alert-icon" aria-hidden="true">⚠️</span>
-                <span>照片未就緒，請重試或移除無法識別的照片</span>
-              </div>
-            </div>
           </form>
         </footer>
       </div>
@@ -1018,6 +1039,10 @@ function handleCitationClick(citation: Citation) {
 </template>
 
 <style scoped>
+.trip-citations { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
+.trip-source-link { background: none; border: 0; border-bottom: 1px solid var(--color-maple-border); color: var(--color-maple); cursor: pointer; padding: .35rem 0; text-align: left; }
+.trip-source-link small { color: var(--color-subtle); display: block; }
+
 .conversation-view-section {
   --color-pale-accent: var(--color-maple-subtle);
   --color-amber-pale: var(--color-amber-subtle);
@@ -1948,4 +1973,13 @@ function handleCitationClick(citation: Citation) {
     gap: 1.25rem;
   }
 }
+
+.chat-form { grid-template-columns: 44px minmax(0, 1fr) auto; position: relative; }
+.chat-textarea { grid-column: 2; grid-row: 1; }
+.send-btn { grid-column: 3; grid-row: 1; }
+.composer-picker-row { grid-column: 1; grid-row: 1; width: 44px; align-self: center; }
+.composer-picker-row :deep(.staged-previews-grid) { position: absolute; bottom: 100%; left: 0; display: flex; margin-bottom: .65rem; }
+.chat-input-bar:has(.staged-preview-item) { padding-top: 100px; }
+.composer-picker-row .reading-indicator, .composer-picker-row .staged-alert-hint { position: absolute; bottom: calc(100% + 5px); left: 0; font-size: .75rem; }
+@media (max-width: 560px) { .send-btn { padding: .4rem .65rem; } .send-btn span { display: none; } }
 </style>

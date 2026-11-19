@@ -37,6 +37,7 @@ import {
 import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import StatusAlert from './StatusAlert.vue'
+import AppIcon from './AppIcon.vue'
 import TripDialog from './TripDialog.vue'
 import EventDialog from './EventDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -159,6 +160,26 @@ function clearAlert() {
 
 // Data state
 const trips = ref<Trip[]>([])
+const tripQuery = ref('')
+const tripPeriod = ref('all')
+const tripYear = ref('')
+const tripYears = computed(() => [...new Set(trips.value.map(t => t.start_date.slice(0, 4)))].sort().reverse())
+const visibleTrips = computed(() => {
+  const today = new Date().toLocaleDateString('en-CA')
+  const q = tripQuery.value.trim().toLocaleLowerCase()
+  return trips.value.filter(t => (!q || `${t.name} ${t.description || ''} ${t.timezone}`.toLocaleLowerCase().includes(q))
+    && (!tripYear.value || t.start_date.startsWith(tripYear.value))
+    && (tripPeriod.value === 'all' || (tripPeriod.value === 'upcoming' ? t.start_date > today : tripPeriod.value === 'past' ? t.end_date < today : t.start_date <= today && t.end_date >= today)))
+    .sort((a, b) => b.start_date.localeCompare(a.start_date) || b.id.localeCompare(a.id))
+})
+const coverPickerRef = ref<any>(null)
+async function handleCustomCover(photo: PhotoDTO) {
+  if (!currentTrip.value) return
+  await handleTripPhotoUploaded(photo)
+  await handleSetCover(photo.id)
+  coverPickerRef.value?.clear()
+}
+
 const activeTripId = ref<string | null>(null)
 const currentTrip = ref<Trip | null>(null)
 const currentEvents = ref<Event[]>([])
@@ -392,7 +413,7 @@ async function handleTripPhotoUploaded(photo: PhotoDTO) {
       currentTripPhotos.value.push(photo)
       showAlert('已新增照片至旅程相簿。', 'success')
       // Clear staged preview after successful bind (without deleting bound photo)
-      // so duplicate thumbnail does not appear in picker and does not hold against 20-upload cap
+      // Avoid showing the same image in both the picker and album.
       tripPhotoPickerRef.value?.removePhoto(photo.id)
       if (tripPhotoPickerRef.value?.stagedPhotos?.length === 0) {
         tripPhotoPickerRef.value?.clear()
@@ -899,10 +920,16 @@ function resetFilters() {
               </button>
             </div>
 
+            <form v-if="trips.length" class="trip-library-tools" role="search" @submit.prevent>
+              <div class="trip-query"><AppIcon name="search" /><input v-model="tripQuery" class="form-input" aria-label="搜尋旅行手記" placeholder="搜尋手記…" type="search" /></div>
+              <select v-model="tripPeriod" class="form-input" aria-label="篩選旅程狀態"><option value="all">全部旅程</option><option value="upcoming">即將出發</option><option value="current">旅行中</option><option value="past">過往旅程</option></select>
+              <select v-model="tripYear" class="form-input" aria-label="篩選旅程年份"><option value="">所有年份</option><option v-for="year in tripYears" :key="year">{{ year }}</option></select>
+            </form>
+            <p v-if="trips.length && !visibleTrips.length" class="empty-filtered-trips">沒有符合的手記。</p>
             <!-- Trips Grid with Restrained Route Mini-Art per brief -->
-            <div v-else class="trip-cards-grid">
+            <div v-if="visibleTrips.length" class="trip-cards-grid">
               <article
-                v-for="trip in trips"
+                v-for="trip in visibleTrips"
                 :key="trip.id"
                 class="trip-card"
                 tabindex="0"
@@ -1013,8 +1040,9 @@ function resetFilters() {
                     class="btn btn-secondary"
                     :disabled="actionInProgress"
                     @click="selectTrip(currentTrip.id)"
+                    aria-label="重新整理手記" title="重新整理手記"
                   >
-                    重新整理
+                    <AppIcon name="refresh" />
                   </button>
                   <button
                     type="button"
@@ -1057,6 +1085,7 @@ function resetFilters() {
                   </div>
                 </div>
 
+                <div class="custom-cover-action"><span>封面</span><PhotoPicker ref="coverPickerRef" :icon-only="true" :multiple="false" :max-photos="1" :compact="true" @upload-complete="handleCustomCover" /></div>
                 <p v-if="currentTrip.description" class="banner-description">
                   {{ currentTrip.description }}
                 </p>
@@ -1064,12 +1093,9 @@ function resetFilters() {
             </div>
 
             <!-- Trip Photo Gallery Section -->
-            <div class="trip-gallery-block" role="region" aria-label="旅程相簿">
+            <details :key="currentTrip.id" class="trip-gallery-block" aria-label="旅程相簿">
+              <summary class="album-toggle"><span>旅程相簿 <small>{{ currentTripPhotos.length }}</small></span><AppIcon name="chevron" /></summary>
               <div class="gallery-header-row">
-                <div class="gallery-title-group">
-                  <h3 class="gallery-title">旅程相簿</h3>
-                  <span class="gallery-count-pill">{{ currentTripPhotos.length }} 張照片</span>
-                </div>
                 <PhotoPicker
                   ref="tripPhotoPickerRef"
                   :compact="true"
@@ -1096,7 +1122,7 @@ function resetFilters() {
                 @update-caption="handleUpdateCaption"
                 @refresh="currentTrip && fetchTripPhotos(currentTrip.id)"
               />
-            </div>
+            </details>
 
             <!-- Flattened Filter Bar: City & Category Filtering -->
             <div class="filter-bar" role="region" aria-label="旅途回憶篩選">
@@ -1345,6 +1371,8 @@ function resetFilters() {
           tabindex="0"
         >
           <ConversationView
+            :account-id="String(user.id)"
+            @open-trip="async (id) => { activeTab = 'trips'; await selectTrip(id) }"
             @view-citation="handleViewCitation"
             @jump-trip="handleJumpToTrip"
           />
@@ -1433,6 +1461,18 @@ function resetFilters() {
 </template>
 
 <style scoped>
+.trip-library-tools { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.25rem 0; }
+.trip-query { display: flex; align-items: center; flex: 1 1 240px; position: relative; }
+.trip-query svg { position: absolute; left: .8rem; color: var(--color-subtle); }
+.trip-query input { padding-left: 2.6rem; width: 100%; }
+.trip-library-tools select { width: auto; flex: 0 1 150px; }
+.album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .75rem 0; color: var(--color-ink-secondary); list-style: none; }
+.album-toggle::-webkit-details-marker { display: none; }
+.album-toggle small { color: var(--color-subtle); margin-left: .4rem; }
+details[open] > .album-toggle svg { transform: rotate(180deg); }
+.custom-cover-action { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--color-subtle); }
+.empty-filtered-trips { padding: 2rem 0; color: var(--color-subtle); }
+
 /* Full-viewport Workspace Architecture */
 .workspace-viewport {
   display: flex;

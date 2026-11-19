@@ -1,4 +1,15 @@
+* { scrollbar-color: #c7ab92 #f6f1e7; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: var(--color-canvas); }
+::-webkit-scrollbar-thumb { background: #c7ab92; border: 2px solid var(--color-canvas); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-maple); }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 44px; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-maple); cursor: pointer; padding: .6rem; }
+.icon-button:hover { background: var(--color-maple-subtle); }
+.icon-button:disabled { opacity: .45; cursor: default; }
+.icon-button:focus-visible { outline: 2px solid var(--color-maple); outline-offset: 2px; }
 :root {
+  scrollbar-color: #c7ab92 #f6f1e7;
+  scrollbar-width: thin;
   /* Autumn Cream & Maple Design Tokens per autumn-refresh-brief */
   --color-canvas: #F6F1E7;
   --color-paper: #FBF8F1;

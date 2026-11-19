@@ -40,6 +40,7 @@ def create_app(
     owned = store is None
     store = store if store is not None else Neo4jStore(settings)
     auth = AuthService(settings, store, sender or smtp_sender(settings), clock)
+    from backend.chat_jobs import ChatJobService, create_chat_job_router
     from backend.conversation import ConversationService, create_conversation_router
     from backend.conversation_store import MemoryConversationStore, Neo4jConversationStore
     from backend.photo_analysis import PhotoAnalysisWorker
@@ -50,6 +51,7 @@ def create_app(
     from backend.search import create_search_router
     from backend.travel import create_travel_router
     from backend.travel_store import MemoryTravelRepository, Neo4jTravelRepository
+    from backend.writing import WritingService, create_writing_router
 
     if travel_repository is None:
         travel_repository = (
@@ -77,6 +79,7 @@ def create_app(
     )
     conversations.photo_service = photo_service
     conversations.photo_analyzer = photo_worker.analyzer
+    chat_jobs = ChatJobService(conversations)
 
     async def cleanup():
         while True:
@@ -98,12 +101,15 @@ def create_app(
         await asyncio.to_thread(conversation_store.initialize)
         await asyncio.to_thread(photo_service.initialize)
         await asyncio.to_thread(photo_search.initialize)
+        await asyncio.to_thread(chat_jobs.initialize)
+        await chat_jobs.start()
         if owned:
             tasks.append(asyncio.create_task(search_service.run_worker()))
             tasks.append(asyncio.create_task(photo_worker.run_worker()))
         try:
             yield
         finally:
+            await chat_jobs.stop()
             for task in tasks:
                 task.cancel()
             for task in tasks:
@@ -123,6 +129,9 @@ def create_app(
         redoc_url=None,
     )
     app.state.search = search_service
+    app.state.chat_jobs = chat_jobs
+    app.include_router(create_chat_job_router(auth, chat_jobs))
+    app.include_router(create_writing_router(auth, WritingService(settings)))
     app.state.conversations = conversations
     app.state.travel = travel_repository
     app.state.photos = photo_service

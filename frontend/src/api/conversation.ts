@@ -1,4 +1,15 @@
 import { request } from './auth'
+import type { ChatRequest } from '../types/conversation'
+
+export function enqueueMessage(conversationId: string, requestId: string, payload: SendMessagePayload): Promise<ChatRequest> {
+  return request(`/conversations/${encodeURIComponent(conversationId)}/requests`, { method: 'POST', body: JSON.stringify({ ...payload, request_id: requestId }) })
+}
+export function getChatRequest(conversationId: string, requestId: string): Promise<ChatRequest> {
+  return request(`/conversations/${encodeURIComponent(conversationId)}/requests/${encodeURIComponent(requestId)}`)
+}
+export function listChatRequests(conversationId: string): Promise<{ items: ChatRequest[] }> {
+  return request(`/conversations/${encodeURIComponent(conversationId)}/requests`)
+}
 import type {
   ConversationListResponse,
   ConversationSummary,

@@ -51,6 +51,15 @@ const mockMessages: Message[] = [
 describe('ConversationView', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    localStorage.clear()
+    vi.spyOn(convApi, 'listChatRequests').mockResolvedValue({ items: [] })
+    let reply: Message | null = null
+    vi.spyOn(convApi, 'enqueueMessage').mockImplementation(async (cid, rid, payload) => {
+      reply = await convApi.sendMessage(cid, payload)
+      return { id: rid, conversation_id: cid, status: 'completed', message: reply, error: null }
+    })
+    vi.spyOn(convApi, 'getChatRequest').mockImplementation(async (cid, rid) => ({ id: rid, conversation_id: cid, status: 'completed', message: reply, error: null }))
+
     vi.spyOn(convApi, 'listConversations').mockResolvedValue({ items: [...mockConversations] })
     vi.spyOn(convApi, 'listMessages').mockResolvedValue({ items: [...mockMessages] })
     vi.spyOn(convApi, 'sendMessage').mockResolvedValue({
@@ -147,6 +156,7 @@ describe('ConversationView', () => {
   })
 
   it('on first send in blank chat lazily creates conversation then sends message and reloads list', async () => {
+    vi.spyOn(convApi, 'listMessages').mockResolvedValue({ items: [{ id: 'server-user', role: 'user', content: '我有去過宇治嗎？', status: 'answered', citations: [], created_at: '' }] })
     const createSpy = vi.spyOn(convApi, 'createConversation').mockResolvedValue({
       id: 'c-lazy-1',
       title: '新對話',

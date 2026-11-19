@@ -72,6 +72,15 @@ const mockTrips: Trip[] = [
 describe('Media Frontend Integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    localStorage.clear()
+    vi.spyOn(convApi, 'listChatRequests').mockResolvedValue({ items: [] })
+    let reply: Message | null = null
+    vi.spyOn(convApi, 'enqueueMessage').mockImplementation(async (cid, rid, payload) => {
+      reply = await convApi.sendMessage(cid, payload)
+      return { id: rid, conversation_id: cid, status: 'completed', message: reply, error: null }
+    })
+    vi.spyOn(convApi, 'getChatRequest').mockImplementation(async (cid, rid) => ({ id: rid, conversation_id: cid, status: 'completed', message: reply, error: null }))
+
     vi.spyOn(convApi, 'listConversations').mockResolvedValue({
       items: [{ id: 'conv-1', title: '嵐山照片詢問', created_at: '2026-11-20T10:00:00Z' }]
     })

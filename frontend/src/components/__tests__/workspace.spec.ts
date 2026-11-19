@@ -156,7 +156,7 @@ describe('TripWorkspace and Travel Components', () => {
     const tripCards = wrapper.findAll('.trip-card')
     expect(tripCards.length).toBe(2)
 
-    await tripCards[0].trigger('click')
+    await wrapper.find('[aria-label="檢視手記：京都秋楓巡禮"]').trigger('click')
     await flushPromises()
 
     // Now in detail timeline view

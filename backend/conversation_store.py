@@ -2,9 +2,17 @@
 
 import copy
 import json
+from contextvars import ContextVar
 from threading import RLock
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
+
+CURRENT_CHAT_REQUEST: ContextVar[str | None] = ContextVar("chat_request", default=None)
+
+
+def _message_id(owner: str, conversation: str, role: str) -> str:
+    request_id = CURRENT_CHAT_REQUEST.get()
+    return str(uuid5(NAMESPACE_URL, f"travelmemo:{owner}:{conversation}:{request_id}:{role}")) if request_id else str(uuid4())
 
 
 class MemoryConversationStore:
@@ -94,6 +102,10 @@ class MemoryConversationStore:
                 return False
             del self.conversations[conversation_id]
             self.messages.pop(conversation_id, None)
+            if hasattr(self, "chat_jobs"):
+                for key in list(self.chat_jobs):
+                    if key[:2] == (owner_id, conversation_id):
+                        self.chat_jobs.pop(key, None)
             return True
 
     def add_message(
@@ -108,12 +120,16 @@ class MemoryConversationStore:
         photo_ids: list[str] | None = None,
         photo_citations: list[dict[str, Any]] | None = None,
         answer_scope: str = "memory",
+        trip_citations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
         with self.lock:
             conv = self.conversations.get(conversation_id)
             if not conv or conv["owner_id"] != owner_id:
                 return None
-            msg_id = str(uuid4())
+            msg_id = _message_id(owner_id, conversation_id, role)
+            existing = next((m for m in self.messages.get(conversation_id, []) if m["id"] == msg_id), None)
+            if existing:
+                return copy.deepcopy(existing)
             msg = {
                 "id": msg_id,
                 "conversation_id": conversation_id,
@@ -126,6 +142,8 @@ class MemoryConversationStore:
                 "photo_ids": copy.deepcopy(photo_ids or []),
                 "photo_citations": copy.deepcopy(photo_citations or []),
                 "answer_scope": answer_scope or "memory",
+                "trip_citations": copy.deepcopy(trip_citations or []),
+                "request_id": CURRENT_CHAT_REQUEST.get(),
             }
             self.messages.setdefault(conversation_id, []).append(msg)
             return {
@@ -138,6 +156,8 @@ class MemoryConversationStore:
                 "photo_ids": copy.deepcopy(msg["photo_ids"]),
                 "photo_citations": copy.deepcopy(msg["photo_citations"]),
                 "answer_scope": msg["answer_scope"],
+                "trip_citations": copy.deepcopy(msg["trip_citations"]),
+                "request_id": msg.get("request_id"),
             }
 
     def get_messages(
@@ -163,6 +183,8 @@ class MemoryConversationStore:
                 "photo_ids": m.get("photo_ids", []),
                 "photo_citations": m.get("photo_citations", []),
                 "answer_scope": m.get("answer_scope", "memory"),
+                "trip_citations": m.get("trip_citations", []),
+                "request_id": m.get("request_id"),
             }
             for m in msgs
         ]
@@ -340,7 +362,8 @@ class Neo4jConversationStore:
                 """
                 MATCH (c:Conversation {id: $id, owner_id: $owner_id})
                 OPTIONAL MATCH (c)-[:HAS_MESSAGE]->(m:Message)
-                DETACH DELETE c, m
+                OPTIONAL MATCH (c)-[:HAS_REQUEST]->(j:ChatRequest)
+                DETACH DELETE c, m, j
                 RETURN count(c) AS deleted
                 """,
                 id=conversation_id,
@@ -360,8 +383,9 @@ class Neo4jConversationStore:
         photo_ids: list[str] | None = None,
         photo_citations: list[dict[str, Any]] | None = None,
         answer_scope: str = "memory",
+        trip_citations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any] | None:
-        msg_id = str(uuid4())
+        msg_id = _message_id(owner_id, conversation_id, role)
         created_at_val = created_at or ""
         citations_json = json.dumps(citations or [])
         photo_ids_json = json.dumps(photo_ids or [])
@@ -372,7 +396,8 @@ class Neo4jConversationStore:
                 """
                 MATCH (c:Conversation {id: $conversation_id, owner_id: $owner_id})
                 SET c.message_seq = coalesce(c.message_seq, 0) + 1
-                CREATE (m:Message {
+                MERGE (m:Message {id: $id})
+                ON CREATE SET m += {
                     id: $id,
                     conversation_id: $conversation_id,
                     owner_id: $owner_id,
@@ -384,9 +409,11 @@ class Neo4jConversationStore:
                     sequence: c.message_seq,
                     photo_ids: $photo_ids,
                     photo_citations: $photo_citations,
-                    answer_scope: $answer_scope
-                })
-                CREATE (c)-[:HAS_MESSAGE]->(m)
+                    answer_scope: $answer_scope,
+                    trip_citations: $trip_citations,
+                    request_id: $request_id
+                }
+                MERGE (c)-[:HAS_MESSAGE]->(m)
                 RETURN m.id AS id
                 """,
                 id=msg_id,
@@ -400,6 +427,8 @@ class Neo4jConversationStore:
                 photo_ids=photo_ids_json,
                 photo_citations=photo_citations_json,
                 answer_scope=answer_scope_val,
+                trip_citations=json.dumps(trip_citations or []),
+                request_id=CURRENT_CHAT_REQUEST.get(),
             ).single()
             if not record:
                 return None
@@ -413,6 +442,8 @@ class Neo4jConversationStore:
                 "photo_ids": copy.deepcopy(photo_ids or []),
                 "photo_citations": copy.deepcopy(photo_citations or []),
                 "answer_scope": answer_scope_val,
+                "trip_citations": copy.deepcopy(trip_citations or []),
+                "request_id": CURRENT_CHAT_REQUEST.get(),
             }
 
     def get_messages(
@@ -436,7 +467,8 @@ class Neo4jConversationStore:
                 RETURN m.id AS id, m.role AS role, m.content AS content, m.status AS status,
                        m.citations AS citations, m.created_at AS created_at,
                        m.photo_ids AS photo_ids, m.photo_citations AS photo_citations,
-                       m.answer_scope AS answer_scope
+                       m.answer_scope AS answer_scope, m.trip_citations AS trip_citations,
+                       m.request_id AS request_id
                 ORDER BY coalesce(m.sequence, 0) ASC, m.created_at ASC, m.id ASC
                 """,
                 conversation_id=conversation_id,
@@ -462,6 +494,8 @@ class Neo4jConversationStore:
                         "photo_ids": parsed_photo_ids,
                         "photo_citations": parsed_photo_citations,
                         "answer_scope": answer_scope,
+                        "trip_citations": json.loads(r.get("trip_citations") or "[]"),
+                        "request_id": r.get("request_id"),
                     }
                 )
             return messages

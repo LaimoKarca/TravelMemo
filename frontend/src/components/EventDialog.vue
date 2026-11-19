@@ -3,6 +3,7 @@ import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { Trip, Event, Place, CreateEventPayload, UpdateEventPayload } from '../types/travel'
 import type { PhotoDTO } from '../types/photo'
 import { listPhotos, bindPhoto, deletePhoto, retryPhoto, updatePhoto } from '../api/photos'
+import JournalNote from './JournalNote.vue'
 import PhotoGallery from './PhotoGallery.vue'
 import PhotoPicker from './PhotoPicker.vue'
 
@@ -560,21 +561,7 @@ onBeforeUnmount(() => {
           </div>
         </fieldset>
 
-        <!-- Notes section -->
-        <div class="form-group">
-          <label for="event-notes" class="form-label">
-            旅途隨筆與心得備忘
-          </label>
-          <textarea
-            id="event-notes"
-            v-model="notes"
-            class="form-input form-textarea"
-            rows="3"
-            placeholder="記錄交通搭乘體驗、美味餐點、值得留存的瞬間或旅途感受..."
-            maxlength="20000"
-            :disabled="loading"
-          ></textarea>
-        </div>
+        <JournalNote id="event-notes" v-model="notes" kind="event" label="旅途隨筆與心得備忘" placeholder="留下餐點、沿途風景或旅途感受…" :disabled="loading" :maxlength="20000" />
 
         <!-- Event Photos Section -->
         <fieldset class="form-fieldset">
@@ -741,9 +728,11 @@ onBeforeUnmount(() => {
 }
 
 .form-fieldset {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 1rem;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  border-radius: 0;
+  padding: 1rem 0 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.875rem;

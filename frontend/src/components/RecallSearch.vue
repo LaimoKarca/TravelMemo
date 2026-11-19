@@ -168,6 +168,8 @@ function getVectorStatusLabel(status: string): string {
           </div>
         </div>
 
+        <PhotoPicker ref="searchPhotoPickerRef" v-model:photos="searchPhotos" :icon-only="true" :compact="true" :multiple="true" :max-photos="4" />
+
         <!-- Readily available trip selector in main search bar -->
         <div class="trip-selector-wrap">
           <label for="filter-trip" class="sr-only">指定旅程</label>
@@ -203,20 +205,6 @@ function getVectorStatusLabel(status: string): string {
           </svg>
           <span>{{ loading ? '搜尋中...' : '搜尋' }}</span>
         </button>
-      </div>
-
-      <!-- Image search picker row -->
-      <div class="search-photos-picker-bar">
-        <span class="search-picker-label">以圖搜尋（選填）：</span>
-        <PhotoPicker
-          ref="searchPhotoPickerRef"
-          v-model:photos="searchPhotos"
-          :compact="true"
-          :multiple="true"
-          :max-photos="4"
-          button-text="選取搜尋照片"
-          camera-button-text="拍照搜尋"
-        />
       </div>
 
       <!-- Collapsible Additional Filters Grid (v-show preserves DOM access for tests/a11y) -->
@@ -478,6 +466,12 @@ function getVectorStatusLabel(status: string): string {
 </template>
 
 <style scoped>
+.main-query-row { position: relative; }
+.main-query-row :deep(.photo-source-options) { top: calc(100% + .4rem); bottom: auto; }
+.main-query-row :deep(.is-icon-only) { width: 44px; flex: 0 0 44px; }
+.main-query-row :deep(.staged-previews-grid) { position: absolute; left: 0; top: 100%; display: flex; margin-top: .5rem; }
+.main-query-row:has(.staged-preview-item) { margin-bottom: 100px; }
+
 .recall-search-section {
   display: flex;
   flex-direction: column;
@@ -1090,5 +1084,14 @@ function getVectorStatusLabel(status: string): string {
   .source-card-footer .btn {
     flex: 1;
   }
+}
+@media (max-width: 768px) {
+  .main-query-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: center; }
+  .main-query-row .query-input-wrap { grid-column: 1 / 4; grid-row: 1; min-width: 0; width: 100%; }
+  .main-query-row :deep(.photo-picker-container) { grid-column: 4; grid-row: 1; justify-self: end; }
+  .main-query-row :deep(.photo-source-options) { left: auto; right: 0; }
+  .main-query-row .trip-selector-wrap { grid-column: 1 / -1; grid-row: 2; }
+  .main-query-row .filter-toggle-btn { grid-column: 1 / 3; grid-row: 3; }
+  .main-query-row .search-submit-btn { grid-column: 3 / 5; grid-row: 3; }
 }
 </style>

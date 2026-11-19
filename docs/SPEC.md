@@ -1,6 +1,4 @@
-# TravelMemo SPEC v0.1
-
-依專案架構與規格分階段實作。
+# TravelMemo 系統規格
 
 ## 產品與環境
 
@@ -19,13 +17,15 @@ User OWNS Trip HAS_EVENT Event；Event AT Place、HAS_CATEGORY Category，
 同一使用者同一旅程的相鄰 Event 以有向 NEXT 相連。
 同地重訪保留不同 Event ID，Place 以獨立 ID 選取，不按同名自動合併。
 Trip 含名稱、日期範圍、時區與描述。Event 含日期、選填時間、地點、城市、類別、地址、心得。
+開始日期不得晚於結束日期，支援同日旅程；新增表單預設結束日期為隔日，並修正隨開始日期改變而過早的結束日。
+手記列表提供關鍵字、年份與旅程狀態篩選，開始日期由近到遠排列。
 時區預設 Asia/Taipei，可搜尋世界國家與城市的 IANA 時區，或自訂 UTC-12:00 至 UTC+14:00 固定偏移。
 依日期排列，同日以使用者確認順序為準；不造時間。NEXT 可跨日並保留日期脈絡，
 只表示下一筆已記錄活動。插入刪除重排在交易內重接 NEXT，防循環與跨使用者/旅程連結。
 八小時 trail 清洗僅屬 benchmark。編輯採版本檢查，衝突返回 409。
 
 API `/api/v1`：auth/request-code、verify-code、logout、me；trips 與 events CRUD、
-trips/{id}/event-order；search；conversations 與 messages；usage/me；health/live、ready。
+trips/{id}/event-order；search；conversations、messages 與 requests；writing/polish；usage/me；health/live、ready。
 前後端使用同網域。搜尋回傳事件、名次、理由及關係證據；對話回傳回答、引用與
 answered/insufficient_evidence/needs_clarification/unavailable 狀態。
 
@@ -45,6 +45,10 @@ OpenAI 官方 Python SDK Responses API，預設 gpt-6-luna（依使用者後續�
 歷史引用修改/刪除可辨識，追問重取資料；紀錄不是指令。API 失敗不影響紀錄管理與搜尋。
 不設每日次數上限、不在介面顯示用量；保留每人同時一筆、全站兩筆的並行保護。
 直接輸入首則問題建立對話，由模型產生標題；歷史對話可收合。
+以持久請求識別碼排隊處理並輪詢結果，關閉頁面或斷線後可回到原對話接續；程序重啟恢復未完成工作，
+重送相同請求不重複建立訊息。這不保證外部模型只計費一次。
+模型可從固定唯讀工具查找本人旅程、事件及圖片。尚未新增足跡的手記可被查詢，旅程層級回答使用獨立來源引用。
+一般招呼自然回覆，個別到訪事實仍要求 Event 證據。
 安全流程採正規化、明確攻擊規則及結構化模型分類；失敗不放行，通過後才寫入訊息與查詢資料。
 上下文採近期原文、較舊內容分批滾動摘要與完整 JSON 提示大小上限；摘要只作話題記憶，不作旅程證據。
 實作與設定見 [後端處理流程](BACKEND.md)。
@@ -56,5 +60,9 @@ Docker Compose 與 Tunnel 提供自行部署入口，資料保存在獨立持久
 
 圖片以壓縮檔保存於私人資料卷，Neo4j 保存附件、解析與搜尋資料；支援旅程相簿、事件附圖、
 圖片理解後的文字檢索及聊天附圖。個人經歷仍需事件來源，不能由圖片推定到訪日期或順序。
+旅程相簿預設收合，可上傳自訂封面；不設二十張的相簿數量上限，保留檔案及儲存空間限制。
+搜尋列與聊天輸入區以圖片圖示開啟拍照／圖庫選單；足跡頁保留兩個直接入口。
+旅行描述與足跡心得可按需 AI 潤飾，先預覽、套用或復原原文，再由使用者儲存；不得補造經歷。
+前端提供手機主畫面圖示與 manifest，沒有離線私人資料快取；資料讀寫與 AI 使用仍需網路。
 地圖、分享共編、個人 Key、公開註冊及完整研究管理介面延後。
 參考資料位於 docs/reference；既有研究參考：https://github.com/LaimoKarca/fuzzy-travel-recall-benchmark 。

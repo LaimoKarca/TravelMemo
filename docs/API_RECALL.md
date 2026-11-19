@@ -5,7 +5,7 @@
 
 ## 認證與錯誤
 
-擁有者從工作階段決定，不接受前端指定。POST、PUT、DELETE 使用 X-CSRF-Token；
+擁有者從工作階段決定，不接受前端指定。POST、PUT、PATCH、DELETE 使用 X-CSRF-Token；
 登入寄碼及驗碼按既有登入契約處理。跨帳號資源404，登入失效401，CSRF失敗403，
 編輯版本衝突409，輸入無效422，並行或頻率限制429，資料庫不可用503。
 
@@ -27,14 +27,16 @@ Python 入口固定單一 API process，模型共用並限制編碼並行；不�
 }
 ```
 
-除 query 外皆可省略；limit 為1至50。日期必須有效且起點不晚於終點，空白查詢不接受。
+另可傳入 `photo_ids`，最多四張本人已完成解析的圖片。`query` 與 `photo_ids` 至少提供一項；
+純空白且沒有圖片的查詢不接受。其他欄位皆可省略；limit 為1至50。日期必須有效且起點不晚於終點。
 
-回應為 `{items, clarification, vector_status}`：
+回應為 `{items, photo_items, clarification, vector_status}`：
 
 - items 每筆包含既有 Event 欄位、score、reasons，以及選填 relation。
 - relation 為 `{anchor_id,direction,anchor_date,target_date}`，direction 是 next 或 prev。
 - clarification 非空時，需先確認使用者的相鄰語意。
 - vector_status 顯示向量可用性；無法使用模型時仍回傳 BM25 結果。
+- photo_items 為圖片來源結果，每筆含 photo、score、reasons 與選填 event；只在相簿中的照片可沒有事件。
 
 `GET /events/{id}` 取得目前本人事件，額外提供 trip_name。前端來源視窗必須重新讀取，
 不可將先前搜尋快照當成目前紀錄。來源跳轉使用 trip_id 與 event_id。
@@ -48,14 +50,33 @@ Python 入口固定單一 API process，模型共用並限制編碼並行；不�
 | DELETE /conversations/{id} | 無 | 204 |
 | GET /conversations/{id}/messages | 無 | {items:[訊息]} |
 | POST /conversations/{id}/messages | {content,photo_ids?}，文字或圖片至少一項 | 助理訊息 |
+| POST /conversations/{id}/requests | {request_id,content,photo_ids?,review_photo_id?} | 請求狀態，202 |
+| GET /conversations/{id}/requests | 無 | {items:[近期請求狀態]} |
+| GET /conversations/{id}/requests/{request_id} | 無 | 單筆請求狀態 |
+
+前端使用 `/requests` 保存問題並輪詢回答；同步 `/messages` 保留相容介面。
+`request_id` 是用戶端產生的 UUID，同一對話重送相同識別碼與內容不建立重複工作；
+同一識別碼配不同問題或附件回傳409。`content` 與 `photo_ids` 至少一項，照片最多四張。
+選填的 `review_photo_id` 只供明確指定重新查看圖片，不允許任意取得其他帳號的圖。
+
+請求狀態為 `{id,conversation_id,status,created_at,updated_at,message,error}`。
+status 是 queued、running、completed 或 failed；message 在回答保存後提供目前重新驗證的助理訊息，error 只提供可顯示的錯誤說明。
+排隊或執行中的請求可在重新開啟原對話後取得；登入失效時須先重新登入。
+請求已被接受後的處理失敗反映於狀態，不再透過原本的 POST 連線回傳同步錯誤。
+completed 不代表回答一定有足夠證據，仍須檢查 message.status。
 
 訊息結構為 `{id,role,content,status,citations,created_at}`。
-另提供 `photos`、`photo_citations` 與 `answer_scope`，舊訊息預設為空圖片清單及 memory。
-`answer_scope` 是 image、memory 或 mixed；圖片描述可引用照片，私人經歷仍須事件引用。
+另提供 `photos`、`photo_citations`、`trip_citations` 與 `answer_scope`，舊訊息預設為空來源清單及 memory。
+`answer_scope` 是 image、memory、mixed 或 general；圖片描述可引用照片，個別到訪經歷仍須事件引用。
+general 用於一般招呼等沒有旅程事實的回答，不顯示旅程證據標籤。
 role 是 user 或 assistant；status 是 answered、insufficient_evidence、needs_clarification 或 unavailable。
 citations 每筆為 `{event_id,trip_id,date,place_name,version,state}`，
 state 是 current、changed 或 deleted。關係引用可額外保存 relation 證據；
 讀歷史會重新核對事件版本及原本的相鄰關係，行程重排也可標示已變更。
+
+trip_citations 每筆為 `{trip_id,name,start_date,end_date,version,state}`；
+用於手記名稱、日期與描述等旅程層級事實，不證明個別到訪或先後順序。
+尚未新增事件的旅程可以被唯讀工具找到，不能因此補造足跡。
 
 回答完成前必須重新驗證引用在本次證據內、仍屬本人且版本未變；
 關係問題也重新驗證實際 NEXT／反向鄰接。任一引用無效時不保留原本有把握的回答。
@@ -79,5 +100,6 @@ ANN 內先套用擁有者與有效索引狀態，以及支援的旅程／日期�
 ## 前端狀態
 
 非同步載入須綁定請求識別碼與目前資源；切換、刪除或重設後不得讓過期回應覆寫畫面。
-拒絕的訊息必須移除樂觀顯示並保留草稿。401 會清除過期工作階段，
+尚未被 API 接受的問題失敗時保留草稿；已接受的請求依狀態恢復，不以網路錯誤推定工作已取消。
+401 會清除過期工作階段，
 但驗證碼錯誤的401仍留在驗碼表單。頁面支援窄螢幕、可見焦點與鍵盤分頁切換。

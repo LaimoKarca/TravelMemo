@@ -10,7 +10,9 @@ export type MessageStatus =
 
 export type CitationState = 'current' | 'changed' | 'deleted'
 
-export type AnswerScope = 'memory' | 'image' | 'mixed'
+export type AnswerScope = 'memory' | 'image' | 'mixed' | 'general'
+export interface TripCitation { trip_id: string; name: string; start_date: string; end_date: string; version: number; state: CitationState }
+export interface ChatRequest { id: string; conversation_id: string; status: 'queued' | 'running' | 'completed' | 'failed'; message: Message | null; error: string | null }
 
 export interface PhotoCitation {
   photo_id: string
@@ -46,6 +48,7 @@ export interface Message {
   photos?: PhotoDTO[]
   photo_citations?: PhotoCitation[]
   answer_scope?: AnswerScope
+  trip_citations?: TripCitation[]
 }
 
 export interface ConversationSummary {

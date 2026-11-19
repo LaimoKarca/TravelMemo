@@ -3,6 +3,7 @@ import { ref, watch, onBeforeUnmount } from 'vue'
 import type { PhotoDTO } from '../types/photo'
 import { uploadPhoto, retryPhoto, getPhoto } from '../api/photos'
 import { ApiError } from '../api/auth'
+import AppIcon from './AppIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -15,10 +16,11 @@ const props = withDefaults(
     buttonText?: string
     cameraButtonText?: string
     compact?: boolean
+    iconOnly?: boolean
   }>(),
   {
     multiple: true,
-    maxPhotos: 20,
+    maxPhotos: Number.MAX_SAFE_INTEGER,
     disabled: false,
     initialPhotos: () => [],
     autoUpload: true,
@@ -38,6 +40,12 @@ const emit = defineEmits<{
 
 const cameraInputRef = ref<HTMLInputElement | null>(null)
 const galleryInputRef = ref<HTMLInputElement | null>(null)
+const menuRef = ref<HTMLDetailsElement | null>(null)
+function choosePhoto(camera: boolean) {
+  if (menuRef.value) menuRef.value.open = false
+  if (camera) triggerCamera()
+  else triggerGallery()
+}
 
 const stagedPhotos = ref<PhotoDTO[]>([...(props.photos ?? props.initialPhotos)])
 const isUploading = ref(false)
@@ -190,7 +198,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="photo-picker-container" :class="{ 'is-compact': compact }">
+  <div class="photo-picker-container" :class="{ 'is-compact': compact, 'is-icon-only': iconOnly }">
     <!-- Hidden File Inputs (Hidden from tab order & a11y tree since action buttons provide entry) -->
     <input
       ref="cameraInputRef"
@@ -217,7 +225,12 @@ defineExpose({
 
     <!-- Action Buttons -->
     <div class="picker-buttons-row">
+      <details v-if="iconOnly" ref="menuRef" class="photo-source-menu" @keydown.esc.prevent="menuRef && (menuRef.open = false)">
+        <summary class="icon-button" aria-label="加入圖片" title="加入圖片" :aria-disabled="disabled || isUploading" @click="(disabled || isUploading) && $event.preventDefault()"><AppIcon name="image" /></summary>
+        <div class="photo-source-options"><button type="button" @click="choosePhoto(true)">拍照</button><button type="button" @click="choosePhoto(false)">從圖庫選取</button></div>
+      </details>
       <button
+        v-if="!iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
         :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos"
@@ -231,6 +244,7 @@ defineExpose({
       </button>
 
       <button
+        v-if="!iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
         :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos"
@@ -249,7 +263,7 @@ defineExpose({
         <span>{{ uploadProgressText }}</span>
       </span>
 
-      <span v-else-if="maxPhotos >= 1" class="picker-count-hint">
+      <span v-else-if="!iconOnly && maxPhotos <= 100" class="picker-count-hint">
         ({{ stagedPhotos.length }}/{{ maxPhotos }})
       </span>
     </div>
@@ -325,6 +339,14 @@ defineExpose({
 </template>
 
 <style scoped>
+.photo-source-menu { position: relative; }
+.photo-source-menu summary { list-style: none; }
+.photo-source-menu summary::-webkit-details-marker { display: none; }
+.photo-source-options { position: absolute; bottom: calc(100% + .4rem); left: 0; min-width: 150px; padding: .35rem; z-index: 20; background: var(--color-paper); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: 0 8px 24px #453a3215; }
+.photo-source-options button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: .65rem; color: var(--color-ink); cursor: pointer; border-radius: var(--radius-sm); }
+.photo-source-options button:hover { background: var(--color-maple-subtle); }
+.is-icon-only .picker-buttons-row { gap: 0; }
+.is-icon-only .staged-previews-grid { min-width: 150px; }
 .photo-picker-container {
   display: flex;
   flex-direction: column;
