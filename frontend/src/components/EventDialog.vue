@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import type { Trip, Event, Place, CreateEventPayload, UpdateEventPayload } from '../types/travel'
+import type { Trip, Event, CreateEventPayload, UpdateEventPayload } from '../types/travel'
 import type { PhotoDTO } from '../types/photo'
 import { listPhotos, bindPhoto, deletePhoto, retryPhoto, updatePhoto } from '../api/photos'
 import JournalNote from './JournalNote.vue'
@@ -13,14 +13,12 @@ const props = withDefaults(
     trip: Trip
     event?: Event | null
     categories?: string[]
-    places?: Place[]
     loading?: boolean
     errorMessage?: string
     hasConflict?: boolean
   }>(),
   {
     event: null,
-    places: () => [],
     loading: false,
     errorMessage: '',
     hasConflict: false
@@ -36,9 +34,7 @@ const emit = defineEmits<{
 const dialogRef = ref<HTMLElement | null>(null)
 const launcherRef = ref<HTMLElement | null>(null)
 
-// Place selection mode: 'existing' | 'new'
-const placeMode = ref<'existing' | 'new'>('new')
-const selectedPlaceId = ref<string | null>(null)
+const moreDetails = ref(false)
 
 const placeName = ref('')
 const city = ref('')
@@ -135,32 +131,11 @@ function handleCancel() {
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-function onSelectExistingPlace(event: globalThis.Event) {
-  const target = event.target as HTMLSelectElement
-  const chosenId = target.value
-  if (!chosenId) {
-    selectedPlaceId.value = null
-    return
-  }
-  const found = props.places.find((p) => p.id === chosenId)
-  if (found) {
-    selectedPlaceId.value = found.id
-    placeName.value = found.name
-    city.value = found.city || ''
-    address.value = found.address || ''
-  }
-}
-
-function switchToNewPlace() {
-  placeMode.value = 'new'
-  selectedPlaceId.value = null
-}
-
 function resetFormFromProps() {
   clientValidationError.value = ''
+  addingCategory.value = false
+  moreDetails.value = !!(props.event && (props.event.city || props.event.address || props.event.time))
   if (props.event) {
-    selectedPlaceId.value = props.event.place_id || null
-    placeMode.value = props.event.place_id ? 'existing' : 'new'
     placeName.value = props.event.place_name
     city.value = props.event.city || ''
     address.value = props.event.address || ''
@@ -169,8 +144,6 @@ function resetFormFromProps() {
     eventTime.value = props.event.time || ''
     notes.value = props.event.notes || ''
   } else {
-    selectedPlaceId.value = null
-    placeMode.value = 'new'
     placeName.value = ''
     city.value = ''
     address.value = ''
@@ -304,7 +277,9 @@ function handleSubmit() {
   }
 
   const normalizedTime = eventTime.value ? eventTime.value : null
-  const placeIdToSubmit = placeMode.value === 'existing' && selectedPlaceId.value ? selectedPlaceId.value : null
+  const old = props.event
+  const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '') && trimmedAddress === (old.address || '')
+  const placeIdToSubmit = unchangedPlace ? old.place_id : null
 
   if (isEdit.value && props.event) {
     const payload: UpdateEventPayload = {
@@ -399,175 +374,42 @@ onBeforeUnmount(() => {
       </div>
 
       <form class="dialog-form" @submit.prevent="handleSubmit">
-        <!-- Place selection & reuse section -->
-        <fieldset class="form-fieldset">
-          <legend class="fieldset-legend">地點資料</legend>
-
-          <!-- Toggle buttons for Existing vs New Place if places are available -->
-          <div v-if="!isEdit && places && places.length > 0" class="place-mode-switch">
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ 'is-active': placeMode === 'existing' }"
-              @click="placeMode = 'existing'"
-            >
-              選擇已有地點 ({{ places.length }})
-            </button>
-            <button
-              type="button"
-              class="mode-chip"
-              :class="{ 'is-active': placeMode === 'new' }"
-              @click="switchToNewPlace"
-            >
-              記錄新地點
-            </button>
+        <div class="form-group">
+          <label for="event-place-name" class="form-label">地點名稱 <span class="required-star">*</span></label>
+          <input id="event-place-name" v-model="placeName" class="form-input" placeholder="這一站去了哪裡？" maxlength="200" required :disabled="loading" />
+        </div>
+        <div class="form-row essential-row">
+          <div class="form-group flex-1">
+            <label for="event-date" class="form-label">日期 <span class="required-star">*</span></label>
+            <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip.start_date" :max="trip.end_date" required :disabled="loading" />
           </div>
-
-          <!-- Existing place dropdown -->
-          <div v-if="!isEdit && placeMode === 'existing' && places && places.length > 0" class="form-group">
-            <label for="existing-place-select" class="form-label">
-              選擇旅途中的既有地點
-            </label>
-            <select
-              id="existing-place-select"
-              class="form-input form-select"
-              :value="selectedPlaceId || ''"
-              :disabled="loading"
-              @change="onSelectExistingPlace"
-            >
-              <option value="">-- 請選擇既有地點 --</option>
-              <option v-for="p in places" :key="p.id" :value="p.id">
-                {{ p.name }} {{ p.city ? `(${p.city})` : '' }}
-              </option>
-            </select>
+          <div class="form-group flex-1">
+            <div class="category-label"><label for="event-category" class="form-label">分類 <span class="required-star">*</span></label><button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 標籤</button></div>
+            <select id="event-category" v-model="category" class="form-input" :disabled="loading" required aria-label="回憶分類"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
           </div>
-
-          <div class="form-group">
-            <label for="event-place-name" class="form-label">
-              地點名稱 <span class="required-star">*</span>
-            </label>
-            <input
-              id="event-place-name"
-              v-model="placeName"
-              type="text"
-              class="form-input"
-              placeholder="例如：清水寺、築地場外市場、台東鐵花村"
-              maxlength="200"
-              required
-              :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
-            />
-          </div>
-
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label for="event-city" class="form-label">
-                城市 / 地區
-              </label>
-              <input
-                id="event-city"
-                v-model="city"
-                type="text"
-                class="form-input"
-                placeholder="例如：京都市、台東市"
-                maxlength="200"
-                :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
-              />
+        </div>
+        <div v-if="addingCategory" class="category-select-row">
+          <input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" />
+          <button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button>
+        </div>
+        <details class="more-details" :open="moreDetails" @toggle="moreDetails = ($event.target as HTMLDetailsElement).open">
+          <summary>更多細節</summary>
+          <div class="detail-fields">
+            <div class="form-row">
+              <div class="form-group flex-1"><label for="event-city" class="form-label">城市／地區</label><input id="event-city" v-model="city" class="form-input" maxlength="200" :disabled="loading" /></div>
+              <div class="form-group flex-1"><label for="event-time" class="form-label">抵達時間</label><input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" /></div>
             </div>
-
-            <div class="form-group flex-2">
-              <label for="event-address" class="form-label">
-                詳細地址
-              </label>
-              <input
-                id="event-address"
-                v-model="address"
-                type="text"
-                class="form-input"
-                placeholder="例如：東山區清水1丁目294"
-                maxlength="1000"
-                :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
-              />
-            </div>
+            <div class="form-group"><label for="event-address" class="form-label">地址</label><input id="event-address" v-model="address" class="form-input" maxlength="1000" :disabled="loading" /></div>
           </div>
-
-          <div v-if="!isEdit && placeMode === 'existing' && selectedPlaceId" class="place-bound-hint">
-            <span>使用既有地點資料。如欲建立獨立新地點，請點擊</span>
-            <button type="button" class="inline-link-btn" @click="switchToNewPlace">
-              改為自訂新地點
-            </button>
-          </div>
-        </fieldset>
-
-        <!-- Category & Timing section -->
-        <fieldset class="form-fieldset">
-          <legend class="fieldset-legend">回憶分類與停留時間</legend>
-
-          <div class="form-group">
-            <label class="form-label">
-              回憶分類 <span class="required-star">*</span>
-            </label>
-            <div class="category-select-row">
-              <select id="event-category" v-model="category" class="form-input" :disabled="loading" required aria-label="回憶分類"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
-              <button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 新增標籤</button>
-            </div>
-            <div v-if="addingCategory" class="category-select-row">
-              <input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" />
-              <button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label for="event-date" class="form-label">
-                造訪日期 <span class="required-star">*</span>
-              </label>
-              <input
-                id="event-date"
-                v-model="eventDate"
-                type="date"
-                class="form-input"
-                :min="trip.start_date"
-                :max="trip.end_date"
-                required
-                :disabled="loading"
-              />
-              <span class="field-hint">旅程期間：{{ trip.start_date }} ~ {{ trip.end_date }}</span>
-            </div>
-
-            <div class="form-group flex-1">
-              <div class="label-with-clear">
-                <label for="event-time" class="form-label">
-                  抵達時間（選填）
-                </label>
-                <button
-                  v-if="eventTime"
-                  type="button"
-                  class="clear-time-btn"
-                  @click="eventTime = ''"
-                >
-                  清除時間
-                </button>
-              </div>
-              <input
-                id="event-time"
-                v-model="eventTime"
-                type="time"
-                class="form-input"
-                :disabled="loading"
-              />
-              <span class="field-hint">{{ eventTime ? '已指定抵達時間' : '未指定時間（以足跡順序記錄）' }}</span>
-            </div>
-          </div>
-        </fieldset>
-
-        <JournalNote id="event-notes" v-model="notes" kind="event" label="旅途隨筆與心得備忘" placeholder="留下餐點、沿途風景或旅途感受…" :disabled="loading" :maxlength="20000" />
+        </details>
+        <JournalNote id="event-notes" v-model="notes" kind="event" label="旅途隨筆" placeholder="留下餐點、沿途風景或旅途感受…" :disabled="loading" :maxlength="20000" />
 
         <section class="event-photo-section" aria-label="足跡相片">
           <div class="event-photo-heading"><h4>足跡相片</h4>
             <PhotoPicker v-if="isEdit && event" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
             <PhotoPicker v-else v-model:photos="stagedPhotos" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
           </div>
-          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" @update-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
+          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" @update-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
         </section>
 
         <footer class="dialog-footer">
@@ -594,6 +436,13 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.category-label { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
+.category-label .add-tag-button { padding: 0; font-size: .8rem; }
+.more-details summary { color: var(--color-subtle); font-size: .85rem; cursor: pointer; padding: .2rem 0; }
+.detail-fields { display: flex; flex-direction: column; gap: .8rem; padding-top: .8rem; }
+.essential-row > .form-group { min-width: 0; }
+@media(min-width: 1024px) { .dialog-card { max-width: 40rem !important; } }
+
 .event-photo-heading { display: flex; align-items: center; gap: .75rem; margin-bottom: .8rem; }
 .event-photo-heading { display: grid; grid-template-columns: auto minmax(0, 1fr); }
 .event-photo-heading :deep(.photo-picker-container) { display: contents; }

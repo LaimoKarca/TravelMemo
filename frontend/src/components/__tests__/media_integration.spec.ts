@@ -121,7 +121,7 @@ describe('Media Frontend Integration', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('根據您上傳的照片，這是京都嵐山的渡月橋。')
-    expect(wrapper.text()).toContain('照片依據')
+    expect(wrapper.find('.answer-scope-pill').exists()).toBe(false)
     expect(wrapper.text()).toContain('引用手記照片：')
     expect(wrapper.text()).toContain('嵐山渡月橋')
 

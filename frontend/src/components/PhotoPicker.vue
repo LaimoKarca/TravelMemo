@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import type { PhotoDTO } from '../types/photo'
 import { uploadPhoto, retryPhoto, getPhoto } from '../api/photos'
 import { ApiError } from '../api/auth'
@@ -41,6 +41,27 @@ const emit = defineEmits<{
 const cameraInputRef = ref<HTMLInputElement | null>(null)
 const galleryInputRef = ref<HTMLInputElement | null>(null)
 const menuRef = ref<HTMLDetailsElement | null>(null)
+function closeOutside(event: Event) {
+  if (menuRef.value?.open && event.target instanceof Node && !menuRef.value.contains(event.target)) menuRef.value.open = false
+}
+function closeEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape' && menuRef.value?.open) {
+    event.preventDefault()
+    event.stopPropagation()
+    menuRef.value.open = false
+    menuRef.value.querySelector('summary')?.focus()
+  }
+}
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOutside)
+  document.addEventListener('focusin', closeOutside)
+  document.addEventListener('keydown', closeEscape, true)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', closeOutside)
+  document.removeEventListener('focusin', closeOutside)
+  document.removeEventListener('keydown', closeEscape, true)
+})
 function choosePhoto(camera: boolean) {
   if (menuRef.value) menuRef.value.open = false
   if (camera) triggerCamera()

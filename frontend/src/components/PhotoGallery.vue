@@ -14,6 +14,7 @@ const props = withDefaults(
     canDelete?: boolean
     canEditCaption?: boolean
     emptyText?: string
+    compactEmpty?: boolean
   }>(),
   {
     coverPhotoId: null,
@@ -184,6 +185,7 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Empty state -->
+    <p v-else-if="photos.length === 0 && compactEmpty" class="compact-empty">尚無照片</p>
     <div v-else-if="photos.length === 0" class="gallery-empty">
       <div class="empty-icon-sm" aria-hidden="true">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -359,6 +361,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.compact-empty { margin: .25rem 0; font-size: .8rem; color: var(--color-subtle); }
 .photo-gallery-root {
   width: 100%;
 }

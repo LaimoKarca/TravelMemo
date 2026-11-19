@@ -576,7 +576,7 @@ function getCitationStateBadge(state: Citation['state']): { text: string; classN
     case 'current':
       return { text: '最新版本', className: 'cite-current' }
     case 'changed':
-      return { text: '手記已修訂', className: 'cite-changed' }
+      return { text: '已更新', className: 'cite-changed' }
     case 'deleted':
       return { text: '足跡已刪除', className: 'cite-deleted' }
     default:
@@ -724,20 +724,6 @@ function handleCitationClick(citation: Citation) {
               <span class="message-role-label">
                 {{ msg.role === 'user' ? '旅人' : '手記助理' }}
               </span>
-              <span
-                v-if="msg.role === 'assistant' && msg.answer_scope && msg.answer_scope !== 'general'"
-                class="answer-scope-pill"
-                :class="'scope-' + msg.answer_scope"
-              >
-                {{ getAnswerScopeLabel(msg.answer_scope) }}
-              </span>
-              <span
-                v-if="msg.role === 'assistant' && msg.answer_scope !== 'general'"
-                class="message-status-pill"
-                :class="getStatusBadge(msg.status).className"
-              >
-                {{ getStatusBadge(msg.status).text }}
-              </span>
             </header>
 
             <!-- Natural text in open stream -->
@@ -793,25 +779,9 @@ function handleCitationClick(citation: Citation) {
                   class="citation-card citation-row"
                   :class="{ 'is-deleted': cite.state === 'deleted' }"
                 >
-                  <span class="cite-bullet" aria-hidden="true">—</span>
-                  <span class="cite-place-name">{{ cite.place_name }}</span>
-                  <span class="cite-date">({{ cite.date }})</span>
-                  <span
-                    class="cite-state-pill"
-                    :class="getCitationStateBadge(cite.state).className"
-                  >
-                    {{ getCitationStateBadge(cite.state).text }}
-                  </span>
-
-                  <button
-                    v-if="cite.state !== 'deleted'"
-                    type="button"
-                    class="btn-cite-inspect"
-                    @click="handleCitationClick(cite)"
-                  >
-                    檢視足跡
-                  </button>
-                  <span v-else class="cite-deleted-tip">已刪除不可檢視</span>
+                  <button v-if="cite.state !== 'deleted'" type="button" class="source-link" @click="handleCitationClick(cite)">{{ cite.place_name }} <span class="cite-date">{{ cite.date }}</span></button>
+                  <span v-else class="deleted-source">{{ cite.place_name }} <span class="cite-date">{{ cite.date }}</span></span>
+                  <small v-if="cite.state !== 'current'" class="source-note">{{ cite.state === 'changed' ? '已更新' : '已刪除' }}</small>
                 </div>
               </div>
             </div>
@@ -845,7 +815,7 @@ function handleCitationClick(citation: Citation) {
                   <div class="cite-photo-info">
                     <span class="cite-photo-caption">{{ pCite.caption || '手記照片' }}</span>
                     <span
-                      class="cite-state-pill"
+                      v-if="pCite.state !== 'current'" class="source-note"
                       :class="getCitationStateBadge(pCite.state).className"
                     >
                       {{ getCitationStateBadge(pCite.state).text }}
@@ -1039,6 +1009,10 @@ function handleCitationClick(citation: Citation) {
 </template>
 
 <style scoped>
+.source-link { border: 0; background: none; padding: .2rem 0; color: var(--color-maple); cursor: pointer; text-align: left; font: inherit; font-size: .85rem; text-decoration: underline; text-decoration-color: var(--color-maple-border); text-underline-offset: 3px; }
+.source-note { color: var(--color-subtle); font-size: .75rem; }
+.deleted-source { color: var(--color-subtle); text-decoration: line-through; font-size: .85rem; }
+
 .trip-citations { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .6rem; }
 .trip-source-link { background: none; border: 0; border-bottom: 1px solid var(--color-maple-border); color: var(--color-maple); cursor: pointer; padding: .35rem 0; text-align: left; }
 .trip-source-link small { color: var(--color-subtle); display: block; }

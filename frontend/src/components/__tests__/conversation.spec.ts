@@ -108,14 +108,14 @@ describe('ConversationView', () => {
     // Messages
     expect(wrapper.text()).toContain('我上次在京都有去嵐山嗎？')
     expect(wrapper.text()).toContain('是的，您在 2026-11-21 走訪了嵐山天龍寺')
-    expect(wrapper.text()).toContain('已依手記回答')
+    expect(wrapper.find('.message-status-pill').exists()).toBe(false)
 
     // Citations
     expect(wrapper.text()).toContain('嵐山天龍寺')
-    expect(wrapper.text()).toContain('最新版本')
+    expect(wrapper.text()).not.toContain('最新版本')
     expect(wrapper.text()).toContain('已註銷的咖啡店')
-    expect(wrapper.text()).toContain('足跡已刪除')
-    expect(wrapper.text()).toContain('已刪除不可檢視')
+    expect(wrapper.text()).toContain('已刪除')
+    expect(wrapper.findAll('.source-link')).toHaveLength(1)
   })
 
   it('clicking current citation emits view-citation', async () => {
@@ -126,7 +126,7 @@ describe('ConversationView', () => {
     await wrapper.find('.conversation-item').trigger('click')
     await flushPromises()
 
-    const inspectBtn = wrapper.find('button.btn-cite-inspect')
+    const inspectBtn = wrapper.find('button.source-link')
     expect(inspectBtn.exists()).toBe(true)
     await inspectBtn.trigger('click')
 

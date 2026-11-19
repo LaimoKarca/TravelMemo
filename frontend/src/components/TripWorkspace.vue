@@ -4,7 +4,6 @@ import type { User } from '../types/auth'
 import type {
   Trip,
   Event,
-  Place,
   CreateTripPayload,
   UpdateTripPayload,
   CreateEventPayload,
@@ -18,7 +17,6 @@ import {
   getTrip,
   updateTrip,
   deleteTrip,
-  listPlaces,
   createEvent,
   updateEvent,
   deleteEvent,
@@ -184,7 +182,6 @@ const activeTripId = ref<string | null>(null)
 const currentTrip = ref<Trip | null>(null)
 const currentEvents = ref<Event[]>([])
 const nextEdges = ref<Array<{ from_id: string; to_id: string }>>([])
-const reusablePlaces = ref<Place[]>([])
 
 // Photo state
 const currentTripPhotos = ref<PhotoDTO[]>([])
@@ -340,7 +337,6 @@ function canMoveDownInDay(event: Event): boolean {
 // Fetch all trips on mount
 onMounted(async () => {
   await fetchTrips()
-  await fetchPlaces()
 })
 
 async function fetchTrips() {
@@ -353,15 +349,6 @@ async function fetchTrips() {
     showAlert(err instanceof ApiError ? err.detail : '載入旅程清單失敗，請稍後再試。', 'error')
   } finally {
     loadingTrips.value = false
-  }
-}
-
-async function fetchPlaces() {
-  try {
-    const res = await listPlaces()
-    reusablePlaces.value = res.items || []
-  } catch {
-    // Non-blocking for places list
   }
 }
 
@@ -629,8 +616,7 @@ async function handleEventSubmit(
       showAlert(`已更新旅行足跡「${updated.place_name}」`, 'success')
       showEventModal.value = false
       await selectTrip(currentTrip.value.id)
-      await fetchPlaces()
-    } else {
+        } else {
       const created = await createEvent(currentTrip.value.id, payload as CreateEventPayload)
       if (stagedPhotoIds && stagedPhotoIds.length > 0) {
         for (const pId of stagedPhotoIds) {
@@ -644,8 +630,7 @@ async function handleEventSubmit(
       showAlert(`已記錄旅行足跡「${created.place_name}」`, 'success')
       showEventModal.value = false
       await selectTrip(currentTrip.value.id)
-      await fetchPlaces()
-    }
+        }
   } catch (err: any) {
     if (err instanceof ApiError && err.status === 409) {
       eventModalConflict.value = true
@@ -1420,7 +1405,6 @@ function resetFilters() {
       :visible="showEventModal"
       :trip="currentTrip"
       :event="editingEvent"
-      :places="reusablePlaces"
       :categories="uniqueCategories"
       :loading="actionInProgress"
       :error-message="eventModalError"

@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import TripDialog from '../TripDialog.vue'
 import JournalNote from '../JournalNote.vue'
 import PhotoPicker from '../PhotoPicker.vue'
+import EventDialog from '../EventDialog.vue'
 import ConversationView from '../ConversationView.vue'
 import * as auth from '../../api/auth'
 import * as api from '../../api/conversation'
@@ -10,6 +11,34 @@ import * as api from '../../api/conversation'
 describe('Journal editing and resumable chat', () => {
   beforeEach(() => { vi.restoreAllMocks(); localStorage.clear() })
   afterEach(() => { vi.useRealTimers() })
+  it('edits location independently and preserves place identity for note-only changes', async () => {
+    const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: '', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
+    const wrapper = mount(EventDialog, { props: { visible: true, trip: { id: 'trip', name: '旅程', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }, event } })
+    expect(wrapper.get('.more-details').attributes('open')).toBeUndefined()
+    expect(wrapper.find('#existing-place-select').exists()).toBe(false)
+    await wrapper.get('#event-notes').setValue('舒服')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ place_id: 'original', notes: '舒服' })
+    await wrapper.get('#event-place-name').setValue('山邊')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')?.[1]?.[0]).toMatchObject({ place_id: null, place_name: '山邊', version: 1 })
+    await wrapper.setProps({ event: { ...event, city: '京都' } })
+    expect(wrapper.get('.more-details').attributes('open')).toBeDefined()
+    wrapper.unmount()
+  })
+  it('closes the image menu outside or on Escape, but keeps internal clicks usable', async () => {
+    const wrapper = mount(PhotoPicker, { attachTo: document.body, props: { iconOnly: true } })
+    const menu = wrapper.get('details').element as HTMLDetailsElement
+    menu.open = true
+    wrapper.get('summary').element.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(menu.open).toBe(true)
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    expect(menu.open).toBe(false)
+    menu.open = true
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(menu.open).toBe(false)
+    wrapper.unmount()
+  })
   it('aligns the end date when a later start date is chosen and retains same-day trips', async () => {
     const wrapper = mount(TripDialog, { props: { visible: true } })
     const start = wrapper.get('#trip-start-date')
