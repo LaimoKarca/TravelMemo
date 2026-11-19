@@ -192,6 +192,19 @@ describe('PhotoViewer (Lightbox)', () => {
 })
 
 describe('PhotoPicker', () => {
+  it('offers two direct icon actions without a source menu', async () => {
+    const wrapper = mount(PhotoPicker, { props: { directIcons: true, buttonText: '新增相簿照片' } })
+    const inputs = wrapper.findAll('input[type=file]')
+    const camera = vi.spyOn(inputs[0].element as HTMLInputElement, 'click').mockImplementation(() => {})
+    const gallery = vi.spyOn(inputs[1].element as HTMLInputElement, 'click').mockImplementation(() => {})
+    expect(wrapper.find('details').exists()).toBe(false)
+    await wrapper.get('button[aria-label="拍照"]').trigger('click')
+    await wrapper.get('button[aria-label="新增相簿照片"]').trigger('click')
+    expect(camera).toHaveBeenCalledOnce()
+    expect(gallery).toHaveBeenCalledOnce()
+    expect(wrapper.findAll('.picker-btn span').every(span => span.classes().includes('sr-only'))).toBe(true)
+    wrapper.unmount()
+  })
   it('keeps the source active while opening a picker, then closes on native cancel or change', async () => {
     const wrapper = mount(PhotoPicker, { attachTo: document.body, props: { iconOnly: true } })
     try {

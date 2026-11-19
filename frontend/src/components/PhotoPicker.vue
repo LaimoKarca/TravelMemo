@@ -17,6 +17,7 @@ const props = withDefaults(
     cameraButtonText?: string
     compact?: boolean
     iconOnly?: boolean
+    directIcons?: boolean
   }>(),
   {
     multiple: true,
@@ -259,6 +260,8 @@ defineExpose({
         v-if="!iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
+        :class="{ 'direct-icon-btn': directIcons }"
+        :aria-label="cameraButtonText" :title="cameraButtonText"
         :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos"
         @click="triggerCamera"
       >
@@ -266,13 +269,15 @@ defineExpose({
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
           <circle cx="12" cy="13" r="4" />
         </svg>
-        <span>{{ cameraButtonText }}</span>
+        <span :class="{ 'sr-only': directIcons }">{{ cameraButtonText }}</span>
       </button>
 
       <button
         v-if="!iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
+        :class="{ 'direct-icon-btn': directIcons }"
+        :aria-label="buttonText" :title="buttonText"
         :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos"
         @click="triggerGallery"
       >
@@ -281,7 +286,8 @@ defineExpose({
           <circle cx="8.5" cy="8.5" r="1.5" />
           <polyline points="21 15 16 10 5 21" />
         </svg>
-        <span>{{ buttonText }}</span>
+        <AppIcon v-if="directIcons" name="plus" class="add-photo-plus" />
+        <span :class="{ 'sr-only': directIcons }">{{ buttonText }}</span>
       </button>
 
       <span v-if="isUploading" class="upload-status-text">
@@ -365,6 +371,8 @@ defineExpose({
 </template>
 
 <style scoped>
+.picker-btn.direct-icon-btn { position: relative; width: 36px; min-width: 36px; padding: .4rem; justify-content: center; }
+.picker-btn .add-photo-plus { width: 10px; height: 10px; position: absolute; top: 3px; right: 2px; background: var(--color-paper); border-radius: 50%; }
 .photo-source-menu { position: relative; }
 .photo-source-menu summary { list-style: none; }
 .photo-source-menu summary::-webkit-details-marker { display: none; }

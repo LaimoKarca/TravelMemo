@@ -220,6 +220,32 @@ describe('TripWorkspace and Travel Components', () => {
     expect(wrapper.text()).toContain('顯示 3 / 3 處旅途足跡')
   })
 
+  it('searches within the current trip together with city and category filters', async () => {
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    await wrapper.findAll('.trip-card')[0].trigger('click')
+    await flushPromises()
+    const query = wrapper.get('input[aria-label="搜尋足跡"]')
+    expect(wrapper.get('.event-filter-toggle').attributes('aria-expanded')).toBe('false')
+    await query.setValue('午後')
+    expect(wrapper.findAll('.event-card')).toHaveLength(1)
+    expect(wrapper.text()).toContain('金閣寺')
+    await wrapper.get('#city-filter').setValue('京都市')
+    await wrapper.get('#category-filter').setValue('文化')
+    expect(wrapper.findAll('.event-card')).toHaveLength(0)
+    await wrapper.get('.clear-filters-btn').trigger('click')
+    expect((query.element as HTMLInputElement).value).toBe('')
+    expect(wrapper.findAll('.event-card')).toHaveLength(3)
+    await query.setValue('2026-11-21')
+    expect(wrapper.findAll('.event-card')).toHaveLength(1)
+    expect(wrapper.text()).toContain('嵐山天龍寺')
+    await wrapper.get('.back-button').trigger('click')
+    await wrapper.findAll('.trip-card')[1].trigger('click')
+    await flushPromises()
+    expect((wrapper.get('input[aria-label="搜尋足跡"]').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+
   it('performs same-day move up / move down with active filters without discarding hidden IDs', async () => {
     // 3 events on Day 1: E1 (景點), E2 (美食), E3 (景點)
     const day1Events: Event[] = [

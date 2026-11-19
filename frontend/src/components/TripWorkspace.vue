@@ -211,6 +211,9 @@ function getEventPhotos(eventId: string): PhotoDTO[] {
 // Filters for current trip
 const selectedCityFilter = ref<string>('all')
 const selectedCategoryFilter = ref<string>('all')
+const eventQuery = ref('')
+const eventFiltersOpen = ref(false)
+const eventFiltersActive = computed(() => selectedCityFilter.value !== 'all' || selectedCategoryFilter.value !== 'all')
 
 // Modals state
 const showTripModal = ref(false)
@@ -253,7 +256,9 @@ const uniqueCategories = computed(() => {
 
 // Filtered events for display
 const filteredEvents = computed(() => {
+  const query = eventQuery.value.trim().toLocaleLowerCase()
   return currentEvents.value.filter((evt) => {
+    if (query && ![evt.place_name, evt.city, evt.address, evt.category, evt.notes, evt.date].filter(Boolean).join(' ').toLocaleLowerCase().includes(query)) return false
     if (selectedCityFilter.value !== 'all') {
       if ((evt.city || '').trim() !== selectedCityFilter.value) {
         return false
@@ -359,6 +364,8 @@ async function selectTrip(tripId: string) {
   clearAlert()
   loadingDetail.value = true
   activeTripId.value = tripId
+  eventQuery.value = ''
+  eventFiltersOpen.value = false
   selectedCityFilter.value = 'all'
   selectedCategoryFilter.value = 'all'
 
@@ -739,6 +746,7 @@ async function moveEventInDay(event: Event, direction: 'up' | 'down') {
 
 // Reset filters
 function resetFilters() {
+  eventQuery.value = ''
   selectedCityFilter.value = 'all'
   selectedCategoryFilter.value = 'all'
 }
@@ -968,35 +976,35 @@ function resetFilters() {
 
                   <div class="trip-meta-row">
                     <span class="trip-tz-text">{{ trip.timezone }}</span>
+                    <div class="trip-card-actions" @click.stop @keydown.stop>
+                      <button
+                        type="button"
+                        class="btn-icon"
+                        title="編輯手記"
+                        aria-label="編輯手記"
+                        @click="openEditTripModal(trip)"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        class="btn-icon is-danger"
+                        title="刪除手記"
+                        aria-label="刪除手記"
+                        @click="promptDeleteTrip(trip)"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div class="trip-card-actions" @click.stop>
-                  <button
-                    type="button"
-                    class="btn-icon"
-                    title="編輯手記"
-                    aria-label="編輯手記"
-                    @click="openEditTripModal(trip)"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    class="btn-icon is-danger"
-                    title="刪除手記"
-                    aria-label="刪除手記"
-                    @click="promptDeleteTrip(trip)"
-                  >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                    </svg>
-                  </button>
-                </div>
               </article>
             </div>
           </section>
@@ -1029,15 +1037,7 @@ function resetFilters() {
                   >
                     <AppIcon name="refresh" />
                   </button>
-                  <button
-                    type="button"
-                    class="btn btn-secondary"
-                    :disabled="actionInProgress"
-                    @click="openEditTripModal(currentTrip)"
-                    aria-label="編輯手記"
-                  >
-                    <span class="edit-label-desktop">編輯手記</span><span class="edit-label-mobile">編輯</span>
-                  </button>
+
                   <button
                     type="button"
                     class="btn btn-primary"
@@ -1057,7 +1057,10 @@ function resetFilters() {
               <!-- Flattened Trip Title & Metadata -->
               <div class="trip-summary-line">
                 <div class="trip-summary-title-wrap">
-                  <h2 class="banner-trip-name">{{ currentTrip.name }}</h2>
+                  <h2 class="banner-trip-name"><span>{{ currentTrip.name }}</span> <button type="button" class="btn-icon title-edit" aria-label="編輯手記" title="編輯手記" :disabled="actionInProgress" @click="openEditTripModal(currentTrip)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg></button></h2>
                   <div class="banner-dates">
                     <span class="banner-date-icon" aria-hidden="true">
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1082,7 +1085,7 @@ function resetFilters() {
             <section class="trip-gallery-block" aria-label="旅程相簿">
               <div class="album-header">
                 <button type="button" class="album-toggle" :aria-expanded="albumOpen" @click="albumOpen = !albumOpen"><span>旅程相簿 <small>{{ currentTripPhotos.length }}</small></span><AppIcon name="chevron" :class="{ 'is-open': albumOpen }" /></button>
-                <PhotoPicker ref="tripPhotoPickerRef" :compact="true" :multiple="true" button-text="新增相簿照片" camera-button-text="拍照" @upload-complete="handleTripPhotoUploaded" />
+                <PhotoPicker ref="tripPhotoPickerRef" :direct-icons="true" :compact="true" :multiple="true" button-text="新增相簿照片" camera-button-text="拍照" @upload-complete="handleTripPhotoUploaded" />
               </div>
               <div v-show="albumOpen">
               <PhotoGallery
@@ -1105,9 +1108,13 @@ function resetFilters() {
               </div>
             </section>
 
-            <!-- Flattened Filter Bar: City & Category Filtering -->
-            <div class="filter-bar" role="region" aria-label="旅途回憶篩選">
-              <div class="filter-controls">
+            <form class="filter-bar" role="search" aria-label="搜尋旅途足跡" @submit.prevent>
+              <div class="event-search-row">
+                <div class="event-query"><AppIcon name="search" /><input v-model="eventQuery" type="search" class="form-input" aria-label="搜尋足跡" placeholder="搜尋足跡…" /></div>
+                <button type="button" class="icon-button event-filter-toggle" :class="{ 'is-active': eventFiltersActive }" :aria-expanded="eventFiltersOpen" aria-controls="event-filter-options" :aria-label="eventFiltersActive ? '篩選足跡（已套用）' : '篩選足跡'" @click="eventFiltersOpen = !eventFiltersOpen"><AppIcon name="filter" /></button>
+                <span class="filter-summary" :aria-label="`顯示 ${filteredEvents.length} / ${currentEvents.length} 處旅途足跡`"><span class="count-desktop">顯示 </span>{{ filteredEvents.length }} / {{ currentEvents.length }}<span class="count-desktop"> 處旅途足跡</span></span>
+              </div>
+              <div v-show="eventFiltersOpen" id="event-filter-options" class="filter-controls event-filter-options">
                 <div class="filter-field">
                   <label for="city-filter" class="filter-label">城市篩選：</label>
                   <select
@@ -1137,7 +1144,7 @@ function resetFilters() {
                 </div>
 
                 <button
-                  v-if="selectedCityFilter !== 'all' || selectedCategoryFilter !== 'all'"
+                  v-if="eventQuery || eventFiltersActive"
                   type="button"
                   class="btn-link clear-filters-btn"
                   @click="resetFilters"
@@ -1145,11 +1152,7 @@ function resetFilters() {
                   清除篩選
                 </button>
               </div>
-
-              <div class="filter-summary">
-                <span :aria-label="`顯示 ${filteredEvents.length} / ${currentEvents.length} 處旅途足跡`"><span class="count-desktop">顯示 </span>{{ filteredEvents.length }} / {{ currentEvents.length }}<span class="count-desktop"> 處旅途足跡</span></span>
-              </div>
-            </div>
+            </form>
 
             <!-- Timeline Content -->
             <div v-if="loadingDetail" class="loading-state" role="status" aria-live="polite">
@@ -1178,8 +1181,8 @@ function resetFilters() {
 
             <!-- Empty Filtered Results -->
             <div v-else-if="filteredEvents.length === 0" class="empty-state">
-              <h3 class="empty-title">沒有符合篩選條件的旅途紀錄</h3>
-              <p class="empty-desc">請調整城市或類別條件，或點擊清除篩選。</p>
+              <h3 class="empty-title">還沒找到足跡</h3>
+              <p class="empty-desc">換個關鍵字或調整篩選試試。</p>
               <button
                 type="button"
                 class="btn btn-secondary"
@@ -1460,7 +1463,6 @@ function resetFilters() {
 .library-reset { padding: .35rem; min-height: 36px; }
 .create-trip-btn { min-height: 32px; padding: .3rem .65rem; font-size: .8rem; line-height: 1.2; }
 .detail-refresh { min-width: 30px; height: 34px; padding: .3rem; border: 0; background: transparent; }
-.edit-label-mobile { display: none; }
 .album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .4rem 0; color: var(--color-ink-secondary); list-style: none; }
 .album-toggle::-webkit-details-marker { display: none; }
 .album-toggle small { color: var(--color-subtle); margin-left: .4rem; }
@@ -1832,7 +1834,7 @@ function resetFilters() {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0 1.25rem;
+  padding: 0 1.25rem 1rem;
 }
 
 .trip-cover {
@@ -1990,9 +1992,8 @@ function resetFilters() {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
-  border-top: 1px solid var(--color-border-light);
-  padding-top: 0.625rem;
-  margin: 0 1.25rem 1rem;
+  flex: 0 0 auto;
+  margin-left: .5rem;
 }
 
 .btn-icon {
@@ -2024,9 +2025,9 @@ function resetFilters() {
 .detail-header-block {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 1.25rem;
+  gap: .5rem;
+  margin-bottom: .625rem;
+  padding-bottom: .625rem;
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -2107,9 +2108,9 @@ function resetFilters() {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
-  padding: 0.75rem 0;
+  padding: .375rem 0;
   border-bottom: 1px solid var(--color-border);
-  margin-bottom: 1.5rem;
+  margin-bottom: .75rem;
 }
 
 .filter-controls {
@@ -2624,8 +2625,6 @@ function resetFilters() {
   .mobile-logout { min-width: 34px; width: 34px; height: 34px; padding: .4rem; }
   .section-header { gap: .5rem; margin-bottom: .7rem; }
   .section-title { font-size: 1.25rem; }
-  .edit-label-desktop { display: none; }
-  .edit-label-mobile { display: inline; }
   .detail-actions { gap: .25rem; min-width: 0; }
   .detail-actions .btn { padding: .3rem .4rem; font-size: .75rem; min-height: 34px; }
   .detail-actions .ai-record-btn { border-color: transparent; background: var(--color-maple-subtle); color: var(--color-maple); }
@@ -2640,4 +2639,21 @@ function resetFilters() {
   .detail-actions .ai-record-btn svg { display: none; }
   .detail-actions .btn { padding-inline: .25rem; }
 }
+
+.title-edit { display: inline-flex; vertical-align: middle; margin-left: .25rem; }
+.banner-trip-name { overflow-wrap: anywhere; }
+.trip-summary-title-wrap { gap: .4rem; }
+.filter-bar { display: flex; flex-direction: column; align-items: stretch; gap: .5rem; }
+.event-search-row { display: flex; align-items: center; gap: .25rem; border: 1px solid var(--color-border); background: var(--color-paper); border-radius: var(--radius-sm); padding-right: .5rem; min-width: 0; }
+.event-query { display: flex; align-items: center; position: relative; flex: 1; min-width: 0; }
+.event-query > svg { position: absolute; left: .7rem; color: var(--color-subtle); }
+.event-query input { width: 100%; border: 0; background: transparent; padding-left: 2.3rem; }
+.event-filter-toggle { min-width: 34px; width: 34px; height: 34px; padding: .35rem; }
+.event-filter-toggle.is-active { background: var(--color-maple-subtle); }
+.event-search-row .filter-summary { white-space: nowrap; font-size: .75rem; }
+.event-filter-options { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.event-filter-options .filter-field { display: flex; flex-direction: column; align-items: stretch; min-width: 0; }
+.event-filter-options .filter-select { width: 100%; min-width: 0; }
+.event-filter-options .filter-label { position: static; width: auto; height: auto; clip-path: none; }
+.event-filter-options .clear-filters-btn { justify-self: start; grid-column: 1 / -1; min-height: 28px; }
 </style>
