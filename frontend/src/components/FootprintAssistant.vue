@@ -223,7 +223,7 @@ onBeforeUnmount(() => { alive = false; generation++; stopPoll(); if (debounce) c
   <Teleport to="body">
     <div v-if="visible" class="footprint-backdrop" @click.self="close" @keydown="keydown">
       <aside ref="panel" class="footprint-panel" role="dialog" aria-modal="true" aria-labelledby="footprint-title" tabindex="-1">
-        <header class="assist-header"><div><h2 id="footprint-title">幫我記足跡</h2><p>{{ tripInfo.name }}</p></div><button type="button" class="icon-button" aria-label="關閉足跡助手" @click="close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button></header>
+        <header class="assist-header"><div><h2 id="footprint-title">AI 幫我記</h2><p>{{ tripInfo.name }}</p></div><button type="button" class="icon-button" aria-label="關閉足跡助手" @click="close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6" /></svg></button></header>
         <main class="assist-body">
           <div v-if="error" class="assist-error" role="alert">{{ error }} <button v-if="conflict" type="button" class="btn-link" @click="refreshContext">更新手記資料</button></div>
           <div v-if="success" class="assist-success" role="status"><AppIcon name="wand" /><h3>足跡已加入手記</h3><p>回到時間軸，就能繼續編輯與調整順序。</p><button type="button" class="btn btn-secondary" @click="draft = null; success = false; items = []; description = ''; error = ''">繼續記錄</button></div>

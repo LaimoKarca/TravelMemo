@@ -192,6 +192,25 @@ describe('PhotoViewer (Lightbox)', () => {
 })
 
 describe('PhotoPicker', () => {
+  it('keeps the source active while opening a picker, then closes on native cancel or change', async () => {
+    const wrapper = mount(PhotoPicker, { attachTo: document.body, props: { iconOnly: true } })
+    try {
+      const menu = wrapper.get('details').element as HTMLDetailsElement
+      const inputs = wrapper.findAll('input[type=file]')
+      for (const [index, input] of inputs.entries()) {
+        const open = vi.spyOn(input.element as HTMLInputElement, 'click').mockImplementation(() => {
+          expect(menu.open).toBe(true)
+          input.element.dispatchEvent(new Event('focusin', { bubbles: true }))
+          expect(menu.open).toBe(true)
+        })
+        menu.open = true
+        await wrapper.findAll('.photo-source-options button')[index].trigger('click')
+        expect(open).toHaveBeenCalledOnce()
+        await input.trigger(index === 0 ? 'cancel' : 'change')
+        expect(menu.open).toBe(false)
+      }
+    } finally { wrapper.unmount() }
+  })
   it('updates pending previews and accepts parent model updates without polling after unmount', async () => {
     vi.useFakeTimers()
     const get = vi.spyOn(photosApi, 'getPhoto').mockResolvedValue({ ...mockPhotos[0], version: 2 })

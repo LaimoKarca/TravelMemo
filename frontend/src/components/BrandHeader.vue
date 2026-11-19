@@ -1,17 +1,11 @@
 <script setup lang="ts">
-// BrandHeader displays the TravelMemo wordmark with route waypoint icon
+import BrandMark from './BrandMark.vue'
 </script>
 
 <template>
   <header class="brand-header">
     <div class="brand-title-wrap">
-      <div class="brand-icon" aria-hidden="true">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="5" r="3" />
-          <path d="M12 8v10" stroke-dasharray="2 2" />
-          <circle cx="12" cy="19" r="2" fill="currentColor" />
-        </svg>
-      </div>
+      <BrandMark />
       <h1 class="brand-name travelmemo-wordmark">TravelMemo</h1>
       <span class="brand-subtitle">旅程手記</span>
     </div>

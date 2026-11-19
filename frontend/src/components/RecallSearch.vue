@@ -118,19 +118,7 @@ function toggleFilters() {
   showFilters.value = !showFilters.value
 }
 
-function getVectorStatusLabel(status: string): string {
-  switch (status.toLowerCase()) {
-    case 'ready':
-      return '向量索引就緒'
-    case 'building':
-    case 'indexing':
-      return '向量建立中'
-    case 'degraded':
-      return '向量降級模式 (BM25)'
-    default:
-      return `向量狀態：${status}`
-  }
-}
+
 </script>
 
 <template>
@@ -139,10 +127,7 @@ function getVectorStatusLabel(status: string): string {
     <div class="search-header">
       <h2 class="search-title">回憶搜尋</h2>
 
-      <div v-if="searchResult && searchResult.vector_status !== 'ready'" class="vector-status-badge">
-        <span class="status-indicator-dot" :class="searchResult.vector_status.toLowerCase()"></span>
-        <span>{{ getVectorStatusLabel(searchResult.vector_status) }}</span>
-      </div>
+
     </div>
 
     <!-- Search Bar & Controls -->
@@ -316,9 +301,9 @@ function getVectorStatusLabel(status: string): string {
             <line x1="8" y1="11" x2="14" y2="11" />
           </svg>
         </div>
-        <h3 class="empty-title">查無相符的旅行記憶</h3>
+        <h3 class="empty-title">還沒找到回憶</h3>
         <p class="empty-desc">
-          未找到與{{ query ? `「${query}」` : '指定條件' }}相關的足跡或照片。建議調整搜尋條件或日期後再試。
+          換個關鍵字或調整篩選試試。
         </p>
       </div>
 
@@ -344,9 +329,6 @@ function getVectorStatusLabel(status: string): string {
                 :alt="pItem.photo.caption || '搜尋照片結果'"
                 class="photo-result-img"
               />
-              <div class="score-badge photo-score-badge">
-                評分：{{ typeof pItem.score === 'number' ? pItem.score.toFixed(2) : pItem.score }}
-              </div>
             </div>
 
             <div class="photo-result-info">
@@ -358,14 +340,6 @@ function getVectorStatusLabel(status: string): string {
               </p>
 
               <!-- Matched reasons list -->
-              <details v-if="pItem.reasons && pItem.reasons.length > 0" class="reasons-block">
-                <summary class="reasons-title">命中原因</summary>
-                <ul class="reasons-list">
-                  <li v-for="(reason, rIdx) in pItem.reasons" :key="rIdx" class="reason-item">
-                    {{ reason }}
-                  </li>
-                </ul>
-              </details>
 
               <!-- Jump to Trip button if attached event is known -->
               <div v-if="pItem.event" class="photo-result-actions">
@@ -382,7 +356,7 @@ function getVectorStatusLabel(status: string): string {
         </div>
       </div>
 
-      <!-- Flat Rows List with source actions and quiet algorithm tags per brief -->
+      <!-- Results with original sources and recorded context -->
       <div v-if="searchResult.items.length > 0" class="source-cards-grid">
         <article
           v-for="(item, idx) in searchResult.items"
@@ -396,9 +370,6 @@ function getVectorStatusLabel(status: string): string {
                 <span v-if="item.event.time" class="source-time-pill">{{ item.event.time }}</span>
                 <span v-if="item.event.category" class="source-cat-pill">{{ item.event.category }}</span>
                 <span v-if="item.event.trip_name" class="trip-tag">{{ item.event.trip_name }}</span>
-              </div>
-              <div class="score-badge" :title="`關聯度評分: ${item.score}`">
-                <span>評分：{{ typeof item.score === 'number' ? item.score.toFixed(2) : item.score }}</span>
               </div>
             </div>
 
@@ -416,14 +387,6 @@ function getVectorStatusLabel(status: string): string {
               </p>
 
               <!-- Reasons list: Quiet collapsed metadata -->
-              <details v-if="item.reasons && item.reasons.length > 0" class="reasons-block">
-                <summary class="reasons-title">命中原因</summary>
-                <ul class="reasons-list">
-                  <li v-for="(reason, rIdx) in item.reasons" :key="rIdx" class="reason-item">
-                    {{ reason }}
-                  </li>
-                </ul>
-              </details>
 
               <!-- Relation Context -->
               <div v-if="item.relation" class="relation-block">
@@ -1106,4 +1069,5 @@ function getVectorStatusLabel(status: string): string {
 .main-query-row .filter-toggle-btn { border: 0; background: transparent; }
 .trip-selector-wrap { display: flex; flex-direction: column; gap: .35rem; }
 @media(max-width: 768px) { .main-query-row .query-input-wrap { grid-column: auto; grid-row: auto; } .main-query-row :deep(.photo-picker-container) { grid-column: auto; grid-row: auto; } }
+.empty-title, .empty-desc { text-wrap: pretty; }
 </style>

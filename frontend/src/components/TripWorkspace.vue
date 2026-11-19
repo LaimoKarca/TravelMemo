@@ -35,6 +35,7 @@ import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import StatusAlert from './StatusAlert.vue'
 import AppIcon from './AppIcon.vue'
+import BrandMark from './BrandMark.vue'
 import FootprintAssistant from './FootprintAssistant.vue'
 import TripDialog from './TripDialog.vue'
 import EventDialog from './EventDialog.vue'
@@ -161,6 +162,9 @@ const trips = ref<Trip[]>([])
 const tripQuery = ref('')
 const tripPeriod = ref('all')
 const tripYear = ref('')
+const libraryFiltersOpen = ref(false)
+const libraryFiltersActive = computed(() => tripPeriod.value !== 'all' || !!tripYear.value)
+const accountName = computed(() => props.user.email.split('@')[0])
 const tripYears = computed(() => [...new Set(trips.value.map(t => t.start_date.slice(0, 4)))].sort().reverse())
 const visibleTrips = computed(() => {
   const today = new Date().toLocaleDateString('en-CA')
@@ -746,13 +750,7 @@ function resetFilters() {
     <aside class="workspace-sidebar" aria-label="工作區選單">
       <!-- App Brand Title -->
       <div class="sidebar-brand">
-        <div class="brand-badge-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="5" r="3" />
-            <path d="M12 8v10" stroke-dasharray="2 2" />
-            <circle cx="12" cy="19" r="2" fill="currentColor" />
-          </svg>
-        </div>
+        <BrandMark />
         <div class="brand-text-group">
           <span class="brand-title">TravelMemo</span>
           <span class="brand-subtitle">旅程手記</span>
@@ -800,7 +798,7 @@ function resetFilters() {
               <circle cx="12" cy="7" r="4" />
             </svg>
           </div>
-          <span class="user-email" :title="user.email">{{ user.email }}</span>
+          <span class="user-email">{{ accountName }}</span>
         </div>
 
         <button
@@ -820,19 +818,17 @@ function resetFilters() {
 
     <!-- Mobile Top Identity Bar -->
     <header class="mobile-topbar">
-      <div class="mobile-brand">
-        <span class="brand-title">TravelMemo</span>
-        <span class="brand-subtitle">旅程手記</span>
-      </div>
+      <div class="mobile-brand"><BrandMark /><span class="brand-title">TravelMemo</span></div>
       <div class="mobile-user-row">
-        <span class="mobile-user-email">{{ user.email }}</span>
+        <span class="mobile-user-email">{{ accountName }}</span>
         <button
           type="button"
-          class="btn btn-secondary logout-button mobile-logout"
+          class="icon-button logout-button mobile-logout"
+          :aria-label="loggingOut ? '登出中' : '登出'" title="登出"
           :disabled="loggingOut || actionInProgress"
           @click="emit('logout')"
         >
-          <span>{{ loggingOut ? '...' : '登出' }}</span>
+          <span v-if="loggingOut" class="spinner-small" aria-hidden="true"></span><AppIcon v-else name="logout" />
         </button>
       </div>
     </header>
@@ -863,6 +859,7 @@ function resetFilters() {
               <button
                 type="button"
                 class="btn btn-primary create-trip-btn"
+                aria-label="建立旅行手記"
                 :disabled="loadingTrips || actionInProgress"
                 @click="(e) => { handleActionClick(e); openCreateTripModal(); }"
               >
@@ -870,7 +867,7 @@ function resetFilters() {
                   <line x1="12" y1="5" x2="12" y2="19" />
                   <line x1="5" y1="12" x2="19" y2="12" />
                 </svg>
-                <span>新增旅程手記</span>
+                <span>建立</span>
               </button>
             </div>
 
@@ -897,14 +894,20 @@ function resetFilters() {
                 class="btn btn-primary"
                 @click="openCreateTripModal"
               >
-                記錄第一趟旅程
+                建立第一本手記
               </button>
             </div>
 
             <form v-if="trips.length" class="trip-library-tools" role="search" @submit.prevent>
-              <div class="trip-query"><AppIcon name="search" /><input v-model="tripQuery" class="form-input" aria-label="搜尋旅行手記" placeholder="搜尋手記…" type="search" /></div>
-              <select v-model="tripPeriod" class="form-input" aria-label="篩選旅程狀態"><option value="all">全部旅程</option><option value="upcoming">即將出發</option><option value="current">旅行中</option><option value="past">過往旅程</option></select>
-              <select v-model="tripYear" class="form-input" aria-label="篩選旅程年份"><option value="">所有年份</option><option v-for="year in tripYears" :key="year">{{ year }}</option></select>
+              <div class="library-search-bar">
+                <div class="trip-query"><AppIcon name="search" /><input v-model="tripQuery" class="form-input" aria-label="搜尋旅行手記" placeholder="搜尋手記…" type="search" /></div>
+                <button type="button" class="icon-button library-filter-toggle" :class="{ 'is-active': libraryFiltersActive }" :aria-expanded="libraryFiltersOpen" aria-controls="library-filters" :aria-label="libraryFiltersActive ? '篩選手記（已套用）' : '篩選手記'" @click="libraryFiltersOpen = !libraryFiltersOpen"><AppIcon name="filter" /><span v-if="libraryFiltersActive" class="filter-active-dot" aria-hidden="true"></span></button>
+              </div>
+              <div v-show="libraryFiltersOpen" id="library-filters" class="library-filters">
+                <label><span>旅程狀態</span><select v-model="tripPeriod" class="form-input" aria-label="篩選旅程狀態"><option value="all">全部旅程</option><option value="upcoming">即將出發</option><option value="current">旅行中</option><option value="past">過往旅程</option></select></label>
+                <label><span>年份</span><select v-model="tripYear" class="form-input" aria-label="篩選旅程年份"><option value="">所有年份</option><option v-for="year in tripYears" :key="year">{{ year }}</option></select></label>
+                <button v-if="libraryFiltersActive" type="button" class="btn-link library-reset" @click="tripPeriod = 'all'; tripYear = ''">清除</button>
+              </div>
             </form>
             <p v-if="trips.length && !visibleTrips.length" class="empty-filtered-trips">沒有符合的手記。</p>
             <!-- Trips Grid with Restrained Route Mini-Art per brief -->
@@ -1019,7 +1022,7 @@ function resetFilters() {
                 <div class="detail-actions">
                   <button
                     type="button"
-                    class="btn btn-secondary"
+                    class="icon-button detail-refresh"
                     :disabled="actionInProgress"
                     @click="selectTrip(currentTrip.id)"
                     aria-label="重新整理手記" title="重新整理手記"
@@ -1031,8 +1034,9 @@ function resetFilters() {
                     class="btn btn-secondary"
                     :disabled="actionInProgress"
                     @click="openEditTripModal(currentTrip)"
+                    aria-label="編輯手記"
                   >
-                    編輯手記
+                    <span class="edit-label-desktop">編輯手記</span><span class="edit-label-mobile">編輯</span>
                   </button>
                   <button
                     type="button"
@@ -1046,6 +1050,7 @@ function resetFilters() {
                     </svg>
                     <span>記錄足跡</span>
                   </button>
+                  <button type="button" class="btn btn-secondary ai-record-btn" :disabled="actionInProgress" @click="showFootprintAssistant = true"><AppIcon name="wand" /><span>AI 幫我記</span></button>
                 </div>
               </nav>
 
@@ -1081,6 +1086,7 @@ function resetFilters() {
               </div>
               <div v-show="albumOpen">
               <PhotoGallery
+                class="trip-album-photos"
                 :photos="currentTripPhotos"
                 :cover-photo-id="currentTripCoverId"
                 :loading="loadingTripPhotos"
@@ -1088,7 +1094,8 @@ function resetFilters() {
                 :can-reorder="true"
                 :can-delete="true"
                 :can-edit-caption="true"
-                empty-text="這趟旅程尚未新增照片，點擊上方按鈕記錄旅途片刻。"
+                empty-text="還沒有照片"
+                empty-hint="拍照或加入旅途照片"
                 @reorder="handleReorderPhotos"
                 @delete="handleDeletePhoto"
                 @retry="handleRetryPhoto"
@@ -1158,8 +1165,8 @@ function resetFilters() {
                   <polyline points="12 6 12 12 14 14" />
                 </svg>
               </div>
-              <h3 class="empty-title">這趟旅程尚未記錄任何足跡</h3>
-              <p class="empty-desc">寫下第一個值得留存的旅行回憶。點擊下方按鈕開始記錄。</p>
+              <h3 class="empty-title">還沒有足跡</h3>
+              <p class="empty-desc">記下旅程的第一站。</p>
               <button
                 type="button"
                 class="btn btn-primary"
@@ -1381,7 +1388,6 @@ function resetFilters() {
       </button>
     </nav>
 
-    <button v-if="activeTab === 'trips' && activeTripId && currentTrip && !showEventModal && !showTripModal && !confirmDialogVisible" type="button" class="footprint-launcher" @click="showFootprintAssistant = true"><AppIcon name="wand" /><span>幫我記足跡</span></button>
     <FootprintAssistant v-if="currentTrip && activeTripId" :key="currentTrip.id" :visible="showFootprintAssistant" :trip="currentTrip" :categories="uniqueCategories" @close="showFootprintAssistant = false" @saved="handleFootprintsSaved" />
 
     <!-- Dialogs remain proper modals -->
@@ -1440,16 +1446,22 @@ function resetFilters() {
 </template>
 
 <style scoped>
-.footprint-launcher { position: fixed; right: 1.8rem; bottom: 1.8rem; z-index: 80; display: flex; align-items: center; gap: .55rem; padding: .8rem 1.05rem; border: 1px solid var(--color-maple-border); border-radius: 999px; background: var(--color-maple); color: var(--color-paper); font: inherit; font-size: .85rem; cursor: pointer; box-shadow: 0 5px 20px #453a3220; }
-.footprint-launcher:hover { background: var(--color-maple-hover); }
-@media(max-width: 768px) { .footprint-launcher { right: 1rem; bottom: calc(76px + env(safe-area-inset-bottom) + .6rem); } }
-
-.trip-library-tools { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.25rem 0; }
-.trip-query { display: flex; align-items: center; flex: 1 1 240px; position: relative; }
+.trip-library-tools { display: flex; flex-direction: column; gap: .6rem; margin: .85rem 0 1.25rem; }
+.library-search-bar { display: flex; align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); padding-right: .2rem; }
+.trip-query { display: flex; align-items: center; flex: 1; min-width: 0; position: relative; }
 .trip-query svg { position: absolute; left: .8rem; color: var(--color-subtle); }
-.trip-query input { padding-left: 2.6rem; width: 100%; }
-.trip-library-tools select { width: auto; flex: 0 1 150px; }
-.album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .75rem 0; color: var(--color-ink-secondary); list-style: none; }
+.trip-query input { padding-left: 2.6rem; width: 100%; border: 0; background: transparent; }
+.library-filter-toggle { flex: 0 0 38px; min-width: 38px; height: 38px; position: relative; }
+.library-filter-toggle.is-active { background: var(--color-maple-subtle); }
+.filter-active-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--color-maple); position: absolute; top: 5px; right: 5px; }
+.library-filters { display: flex; align-items: end; gap: .6rem; }
+.library-filters label { display: flex; flex-direction: column; gap: .25rem; flex: 1; min-width: 0; color: var(--color-subtle); font-size: .75rem; }
+.library-filters select { width: 100%; min-width: 0; }
+.library-reset { padding: .35rem; min-height: 36px; }
+.create-trip-btn { min-height: 32px; padding: .3rem .65rem; font-size: .8rem; line-height: 1.2; }
+.detail-refresh { min-width: 30px; height: 34px; padding: .3rem; border: 0; background: transparent; }
+.edit-label-mobile { display: none; }
+.album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .4rem 0; color: var(--color-ink-secondary); list-style: none; }
 .album-toggle::-webkit-details-marker { display: none; }
 .album-toggle small { color: var(--color-subtle); margin-left: .4rem; }
 .album-toggle svg.is-open { transform: rotate(180deg); }
@@ -1771,9 +1783,9 @@ function resetFilters() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-  gap: 1rem;
+  margin-bottom: .9rem;
+  flex-wrap: nowrap;
+  gap: .6rem;
 }
 
 .section-title {
@@ -1845,8 +1857,8 @@ function resetFilters() {
   background-color: transparent;
   border: none;
   border-radius: 0;
-  padding: 0.5rem 0 1.25rem;
-  margin-bottom: 1.5rem;
+  padding: 0.25rem 0 .6rem;
+  margin-bottom: .75rem;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -2598,5 +2610,34 @@ function resetFilters() {
   .filter-field .filter-select { width: 100%; min-width: 0; max-width: 100%; padding: .4rem .25rem; font-size: .75rem; }
   .filter-bar > :last-child { font-size: .7rem; white-space: nowrap; }
   .filter-bar > :last-child span { font-size: inherit; }
+}
+
+.trip-album-photos :deep(.empty-hint) { font-size: .8rem; text-wrap: pretty; }
+.trip-album-photos :deep(.empty-text) { font-weight: 600; color: var(--color-ink); }
+@media(max-width: 768px) {
+  .mobile-topbar { gap: .5rem; padding: .5rem .875rem; }
+  .mobile-brand { align-items: center; gap: .35rem; flex-shrink: 0; }
+  .mobile-brand :deep(.brand-mark) { width: 30px; height: 30px; }
+  .mobile-brand .brand-title { font-size: 1rem; }
+  .mobile-user-row { min-width: 0; gap: .2rem; }
+  .mobile-user-email { max-width: 110px; min-width: 0; }
+  .mobile-logout { min-width: 34px; width: 34px; height: 34px; padding: .4rem; }
+  .section-header { gap: .5rem; margin-bottom: .7rem; }
+  .section-title { font-size: 1.25rem; }
+  .edit-label-desktop { display: none; }
+  .edit-label-mobile { display: inline; }
+  .detail-actions { gap: .25rem; min-width: 0; }
+  .detail-actions .btn { padding: .3rem .4rem; font-size: .75rem; min-height: 34px; }
+  .detail-actions .ai-record-btn { border-color: transparent; background: var(--color-maple-subtle); color: var(--color-maple); }
+  .detail-nav { gap: .2rem; }
+  .detail-nav .back-button { min-width: 26px; padding: .25rem; }
+  .trip-gallery-block { gap: .5rem; }
+  .empty-state { padding: 1.5rem 1rem; }
+  .empty-title, .empty-desc { text-wrap: pretty; }
+}
+@media(max-width: 350px) {
+  .mobile-user-email { max-width: 70px; }
+  .detail-actions .ai-record-btn svg { display: none; }
+  .detail-actions .btn { padding-inline: .25rem; }
 }
 </style>

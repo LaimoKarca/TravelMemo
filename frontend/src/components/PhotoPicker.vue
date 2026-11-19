@@ -40,10 +40,12 @@ const emit = defineEmits<{
 
 const cameraInputRef = ref<HTMLInputElement | null>(null)
 const galleryInputRef = ref<HTMLInputElement | null>(null)
+const pickerRef = ref<HTMLElement | null>(null)
 const menuRef = ref<HTMLDetailsElement | null>(null)
 function closeOutside(event: Event) {
-  if (menuRef.value?.open && event.target instanceof Node && !menuRef.value.contains(event.target)) menuRef.value.open = false
+  if (menuRef.value?.open && event.target instanceof Node && !pickerRef.value?.contains(event.target)) closeMenu()
 }
+function closeMenu() { if (menuRef.value) menuRef.value.open = false }
 function closeEscape(event: KeyboardEvent) {
   if (event.key === 'Escape' && menuRef.value?.open) {
     event.preventDefault()
@@ -63,7 +65,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('keydown', closeEscape, true)
 })
 function choosePhoto(camera: boolean) {
-  if (menuRef.value) menuRef.value.open = false
+  // Keep the tapped source visible until the native picker has opened.
   if (camera) triggerCamera()
   else triggerGallery()
 }
@@ -143,6 +145,7 @@ function triggerGallery() {
 }
 
 async function handleFileChange(event: Event) {
+  closeMenu()
   const target = event.target as HTMLInputElement
   const files = target.files
   if (!files || files.length === 0) return
@@ -219,7 +222,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="photo-picker-container" :class="{ 'is-compact': compact, 'is-icon-only': iconOnly }">
+  <div ref="pickerRef" class="photo-picker-container" :class="{ 'is-compact': compact, 'is-icon-only': iconOnly }">
     <!-- Hidden File Inputs (Hidden from tab order & a11y tree since action buttons provide entry) -->
     <input
       ref="cameraInputRef"
@@ -231,6 +234,7 @@ defineExpose({
       aria-hidden="true"
       :disabled="disabled || isUploading"
       @change="handleFileChange"
+      @cancel="closeMenu"
     />
     <input
       ref="galleryInputRef"
@@ -242,6 +246,7 @@ defineExpose({
       aria-hidden="true"
       :disabled="disabled || isUploading"
       @change="handleFileChange"
+      @cancel="closeMenu"
     />
 
     <!-- Action Buttons -->

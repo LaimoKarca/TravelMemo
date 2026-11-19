@@ -129,13 +129,14 @@ describe('TripWorkspace and Travel Components', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders user email, logout button, and trip list on mount', async () => {
+  it('renders the account name without the email domain, logout, and trip list', async () => {
     const wrapper = mount(TripWorkspace, {
       props: { user: mockUser }
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('traveler@travelmemo.local')
+    expect(wrapper.text()).toContain('traveler')
+    expect(wrapper.html()).not.toContain('traveler@travelmemo.local')
     expect(wrapper.text()).toContain('我的旅行手記')
     expect(wrapper.text()).toContain('京都秋楓巡禮')
     expect(wrapper.text()).toContain('台東縱谷慢旅')
@@ -145,6 +146,25 @@ describe('TripWorkspace and Travel Components', () => {
     expect(logoutBtn.exists()).toBe(true)
     await logoutBtn.trigger('click')
     expect(wrapper.emitted('logout')).toBeTruthy()
+  })
+
+  it('keeps library filters collapsed and applies or clears them without clearing the query', async () => {
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    const toggle = wrapper.get('.library-filter-toggle')
+    expect(toggle.attributes('aria-expanded')).toBe('false')
+    await toggle.trigger('click')
+    expect(toggle.attributes('aria-expanded')).toBe('true')
+    await wrapper.get('input[aria-label="搜尋旅行手記"]').setValue('京都')
+    await wrapper.get('select[aria-label="篩選旅程年份"]').setValue('2026')
+    expect(toggle.attributes('aria-label')).toContain('已套用')
+    await toggle.trigger('click')
+    expect(wrapper.get('.trip-cards-grid').text()).toContain('京都')
+    await toggle.trigger('click')
+    await wrapper.get('.library-reset').trigger('click')
+    expect(toggle.attributes('aria-label')).toBe('篩選手記')
+    expect((wrapper.get('input[type=search]').element as HTMLInputElement).value).toBe('京都')
+    wrapper.unmount()
   })
 
   it('opens trip detail timeline when clicking a trip card', async () => {

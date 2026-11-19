@@ -68,7 +68,7 @@ describe('RecallSearch', () => {
     expect(wrapper.find('#filter-limit').exists()).toBe(true)
   })
 
-  it('dispatches search and renders source card, reasons, relation, vector status, and clarification', async () => {
+  it('renders sources and relation context without technical ranking details', async () => {
     const searchSpy = vi.spyOn(searchApi, 'searchRecall').mockResolvedValue(mockSearchResult)
 
     const wrapper = mount(RecallSearch, {
@@ -105,8 +105,9 @@ describe('RecallSearch', () => {
     expect(wrapper.text()).toContain('清水寺本堂')
     expect(wrapper.text()).toContain('京都秋楓紀行')
     expect(wrapper.text()).toContain('登舞台遠眺京都市區景色。')
-    expect(wrapper.text()).toContain('評分：0.88')
-    expect(wrapper.text()).toContain('符合關鍵字「清水寺」')
+    expect(wrapper.find('.score-badge').exists()).toBe(false)
+    expect(wrapper.find('.reasons-block').exists()).toBe(false)
+    expect(wrapper.find('.vector-status-badge').exists()).toBe(false)
     expect(wrapper.text()).toContain('時間關係脈絡：')
     expect(wrapper.text()).toContain('基準日期 2026-11-19 ➔ 上一站 ➔ 目標日期 2026-11-20')
 
@@ -142,7 +143,7 @@ describe('RecallSearch', () => {
     await wrapper.find('form.search-form-card').trigger('submit.prevent')
     await flushPromises()
 
-    expect(wrapper.text()).toContain('查無相符的旅行記憶')
+    expect(wrapper.text()).toContain('還沒找到回憶')
   })
 
   it('resets all filters when clicking reset button', async () => {

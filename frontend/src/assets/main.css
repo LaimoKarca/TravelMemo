@@ -247,3 +247,10 @@ textarea:focus-visible {
   white-space: nowrap;
   border-width: 0;
 }
+
+/* Keep editable controls readable without triggering iOS focus zoom.
+   This baseline intentionally wins over compact component typography. */
+@media (max-width: 1023px), (pointer: coarse) {
+  input:not(.otp-input):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),
+  select, textarea { font-size: max(16px, 1rem) !important; }
+}

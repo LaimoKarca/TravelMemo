@@ -14,6 +14,7 @@ const props = withDefaults(
     canDelete?: boolean
     canEditCaption?: boolean
     emptyText?: string
+    emptyHint?: string
     compactEmpty?: boolean
   }>(),
   {
@@ -195,6 +196,7 @@ onBeforeUnmount(() => {
         </svg>
       </div>
       <p class="empty-text">{{ emptyText }}</p>
+      <p v-if="emptyHint" class="empty-hint">{{ emptyHint }}</p>
     </div>
 
     <!-- Photos Grid -->

@@ -892,7 +892,7 @@ function handleCitationClick(citation: Citation) {
               ref="composerInputRef"
               v-model="inputContent"
               class="form-input chat-textarea"
-              placeholder="詢問任何關於您旅程手記的問題..."
+              placeholder="問問你的旅行回憶…"
               rows="2"
               :disabled="sendingMessage || loadingMessages"
               @keydown.enter.exact.prevent="handleSendMessage"
@@ -1962,6 +1962,6 @@ function handleCitationClick(citation: Citation) {
 @media(max-width: 768px) {
   .header-main-row { flex-direction: row; align-items: center; justify-content: space-between; gap: .5rem; }
   .header-main-row h2 { margin: 0; }
-  .btn-new-conv { min-height: 34px; padding: .3rem .6rem; white-space: nowrap; }
+  .btn-new-conv { min-height: 30px; height: 30px; padding: .25rem .55rem; line-height: 1.2; white-space: nowrap; }
 }
 </style>

@@ -106,7 +106,8 @@ describe('Frontend Vue Components', () => {
 
     // Verify TripWorkspace is rendered
     expect(wrapper.findComponent(TripWorkspace).exists()).toBe(true)
-    expect(wrapper.text()).toContain('session-traveler@travelmemo.local')
+    expect(wrapper.text()).toContain('session-traveler')
+    expect(wrapper.text()).not.toContain('session-traveler@travelmemo.local')
 
     // Click logout
     const logoutBtn = wrapper.find('button.logout-button')
@@ -194,6 +195,7 @@ describe('Frontend Vue Components', () => {
 
     // Successfully logged in to TripWorkspace
     expect(wrapper.findComponent(TripWorkspace).exists()).toBe(true)
-    expect(wrapper.text()).toContain('retry-tester@travelmemo.local')
+    expect(wrapper.text()).toContain('retry-tester')
+    expect(wrapper.text()).not.toContain('retry-tester@travelmemo.local')
   })
 })

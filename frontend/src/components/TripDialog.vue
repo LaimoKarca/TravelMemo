@@ -76,7 +76,7 @@ async function uploadCover(photo: PhotoDTO) {
 }
 
 const isEdit = computed(() => !!props.trip)
-const dialogTitle = computed(() => (isEdit.value ? '編輯旅行手記' : '新增旅行手記'))
+const dialogTitle = computed(() => (isEdit.value ? '編輯旅行手記' : '建立旅行手記'))
 
 const timezoneOptions = computed(() => {
   return getTimezoneOptions(startDate.value || undefined)

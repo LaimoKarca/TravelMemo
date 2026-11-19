@@ -35,7 +35,7 @@ Neo4j 以 Conversation 的 `HAS_REQUEST` 關係保存 ChatRequest，包含擁有
 
 ## 從描述整理足跡
 
-「幫我記足跡」使用獨立的 FootprintDraft 資源，不建立 Conversation，也不把待確認描述當成已發生的到訪證據。
+手記操作列的「AI 幫我記」使用獨立的 FootprintDraft 資源，不建立 Conversation，也不把待確認描述當成已發生的到訪證據。
 每份草稿屬於目前使用者與指定旅程，保存記錄日期、描述、候選欄位、勾選順序、處理狀態及版本。
 草稿尚未確認前不建立 Event、Place、Category、NEXT 或事件索引。
 
