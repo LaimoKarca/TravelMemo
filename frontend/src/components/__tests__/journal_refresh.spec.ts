@@ -33,6 +33,19 @@ describe('Journal editing and resumable chat', () => {
     expect(wrapper.emitted('update:modelValue')?.[1]).toEqual(['河邊走走'])
     wrapper.unmount()
   })
+  it('covers the screen while polishing and removes the mask after failure', async () => {
+    let reject!: (reason: unknown) => void
+    vi.spyOn(auth, 'request').mockReturnValue(new Promise((_, fail) => { reject = fail }))
+    const wrapper = mount(JournalNote, { props: { modelValue: '散步', kind: 'event', label: '隨筆', id: 'busy-note' } })
+    await wrapper.get('[aria-label="AI 潤飾文字"]').trigger('click')
+    expect(document.body.querySelector('.polish-mask')?.getAttribute('aria-busy')).toBe('true')
+    expect(document.body.querySelector('.polish-spinner')).not.toBeNull()
+    reject(new Error('offline'))
+    await flushPromises()
+    expect(document.body.querySelector('.polish-mask')).toBeNull()
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('exposes one image menu and does not impose a 20-photo album limit', () => {
     const wrapper = mount(PhotoPicker, { props: { iconOnly: true } })
     expect(wrapper.findAll('summary')).toHaveLength(1)

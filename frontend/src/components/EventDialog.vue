@@ -12,6 +12,7 @@ const props = withDefaults(
     visible: boolean
     trip: Trip
     event?: Event | null
+    categories?: string[]
     places?: Place[]
     loading?: boolean
     errorMessage?: string
@@ -52,6 +53,18 @@ const clientValidationError = ref('')
 const isEdit = computed(() => !!props.event)
 const dialogTitle = computed(() => (isEdit.value ? '編輯旅行足跡' : '記錄旅行足跡'))
 
+const addedCategories = ref<string[]>([])
+const addingCategory = ref(false)
+const newCategory = ref('')
+const categoryOptions = computed(() => [...new Set([...commonCategories, ...(props.categories || []), ...addedCategories.value, category.value].filter(Boolean))])
+function addCategory() {
+  const value = newCategory.value.trim()
+  if (!value || value.length > 200) return
+  addedCategories.value.push(value)
+  category.value = value
+  newCategory.value = ''
+  addingCategory.value = false
+}
 const commonCategories = ['景點', '美食', '住宿', '交通', '購物', '文化', '咖啡', '休閒']
 
 const eventPhotos = ref<PhotoDTO[]>([])
@@ -391,7 +404,7 @@ onBeforeUnmount(() => {
           <legend class="fieldset-legend">地點資料</legend>
 
           <!-- Toggle buttons for Existing vs New Place if places are available -->
-          <div v-if="places && places.length > 0" class="place-mode-switch">
+          <div v-if="!isEdit && places && places.length > 0" class="place-mode-switch">
             <button
               type="button"
               class="mode-chip"
@@ -411,7 +424,7 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Existing place dropdown -->
-          <div v-if="placeMode === 'existing' && places && places.length > 0" class="form-group">
+          <div v-if="!isEdit && placeMode === 'existing' && places && places.length > 0" class="form-group">
             <label for="existing-place-select" class="form-label">
               選擇旅途中的既有地點
             </label>
@@ -441,7 +454,7 @@ onBeforeUnmount(() => {
               placeholder="例如：清水寺、築地場外市場、台東鐵花村"
               maxlength="200"
               required
-              :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+              :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
             />
           </div>
 
@@ -457,7 +470,7 @@ onBeforeUnmount(() => {
                 class="form-input"
                 placeholder="例如：京都市、台東市"
                 maxlength="200"
-                :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+                :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
               />
             </div>
 
@@ -472,12 +485,12 @@ onBeforeUnmount(() => {
                 class="form-input"
                 placeholder="例如：東山區清水1丁目294"
                 maxlength="1000"
-                :disabled="loading || (placeMode === 'existing' && !!selectedPlaceId)"
+                :disabled="loading || isEdit || (placeMode === 'existing' && !!selectedPlaceId)"
               />
             </div>
           </div>
 
-          <div v-if="placeMode === 'existing' && selectedPlaceId" class="place-bound-hint">
+          <div v-if="!isEdit && placeMode === 'existing' && selectedPlaceId" class="place-bound-hint">
             <span>使用既有地點資料。如欲建立獨立新地點，請點擊</span>
             <button type="button" class="inline-link-btn" @click="switchToNewPlace">
               改為自訂新地點
@@ -493,28 +506,14 @@ onBeforeUnmount(() => {
             <label class="form-label">
               回憶分類 <span class="required-star">*</span>
             </label>
-            <div class="category-chips">
-              <button
-                v-for="cat in commonCategories"
-                :key="cat"
-                type="button"
-                class="chip-btn"
-                :class="{ 'is-selected': category === cat }"
-                @click="category = cat"
-              >
-                {{ cat }}
-              </button>
+            <div class="category-select-row">
+              <select id="event-category" v-model="category" class="form-input" :disabled="loading" required aria-label="回憶分類"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
+              <button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 新增標籤</button>
             </div>
-            <input
-              id="event-category"
-              v-model="category"
-              type="text"
-              class="form-input category-custom-input"
-              placeholder="或自行輸入類別名稱"
-              maxlength="200"
-              required
-              :disabled="loading"
-            />
+            <div v-if="addingCategory" class="category-select-row">
+              <input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" />
+              <button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button>
+            </div>
           </div>
 
           <div class="form-row">
@@ -563,49 +562,13 @@ onBeforeUnmount(() => {
 
         <JournalNote id="event-notes" v-model="notes" kind="event" label="旅途隨筆與心得備忘" placeholder="留下餐點、沿途風景或旅途感受…" :disabled="loading" :maxlength="20000" />
 
-        <!-- Event Photos Section -->
-        <fieldset class="form-fieldset">
-          <legend class="fieldset-legend">足跡相片</legend>
-
-          <!-- For existing event: direct photo gallery & upload -->
-          <div v-if="isEdit && event" class="event-photos-edit-mode">
-            <PhotoPicker
-              ref="eventPhotoPickerRef"
-              :compact="true"
-              :multiple="true"
-              button-text="新增照片"
-              camera-button-text="拍照"
-              @upload-complete="handleEventPhotoUploaded"
-            />
-            <div class="photos-sub-wrapper">
-              <PhotoGallery
-                :photos="eventPhotos"
-                :loading="loadingPhotos"
-                :can-set-cover="false"
-                :can-reorder="false"
-                :can-delete="true"
-                :can-edit-caption="true"
-                empty-text="此處足跡尚未附帶照片"
-                @delete="handleDeleteEventPhoto"
-                @retry="handleRetryEventPhoto"
-                @update-caption="handleUpdateEventPhotoCaption"
-                @refresh="props.event && fetchEventPhotos(props.event.id)"
-              />
-            </div>
+        <section class="event-photo-section" aria-label="足跡相片">
+          <div class="event-photo-heading"><h4>足跡相片</h4>
+            <PhotoPicker v-if="isEdit && event" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
+            <PhotoPicker v-else v-model:photos="stagedPhotos" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
           </div>
-
-          <!-- For new event: staged photo picker + previews -->
-          <div v-else class="event-photos-new-mode">
-            <p class="field-hint staged-hint">可先拍照或選取照片，儲存足跡時將自動綁定：</p>
-            <PhotoPicker
-              v-model:photos="stagedPhotos"
-              :compact="true"
-              :multiple="true"
-              button-text="選擇照片"
-              camera-button-text="拍照"
-            />
-          </div>
-        </fieldset>
+          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" @update-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
+        </section>
 
         <footer class="dialog-footer">
           <button
@@ -631,6 +594,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.event-photo-heading { display: flex; align-items: center; gap: .75rem; margin-bottom: .8rem; }
+.event-photo-heading { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+.event-photo-heading :deep(.photo-picker-container) { display: contents; }
+.event-photo-heading :deep(.picker-buttons-row) { justify-self: end; }
+.event-photo-heading :deep(.staged-previews-grid), .event-photo-heading :deep(.picker-error-msg) { grid-column: 1 / -1; }
+.event-photo-heading h4 { margin: 0 auto 0 0; color: var(--color-maple); font-size: .875rem; font-weight: 600; white-space: nowrap; }
+.event-photo-heading :deep(.picker-btn) { min-height: 36px; padding: .4rem .55rem; font-size: .8rem; }
+.category-select-row { display: flex; align-items: center; gap: .75rem; }
+.category-select-row .form-input { flex: 1; min-width: 0; }
+.add-tag-button { flex: 0 0 auto; background: none; border: 0; color: var(--color-maple); font: inherit; font-size: .85rem; padding: .5rem 0; cursor: pointer; }
+
 .dialog-backdrop {
   position: fixed;
   inset: 0;

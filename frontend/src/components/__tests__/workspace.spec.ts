@@ -460,7 +460,12 @@ describe('TripWorkspace and Travel Components', () => {
 
     // User edits notes and category
     await wrapper.find('#event-notes').setValue('夕陽西下時分非常壯觀，值得再訪！')
-    await wrapper.find('#event-category').setValue('攝影')
+    expect(wrapper.find('.place-mode-switch').exists()).toBe(false)
+    expect(wrapper.find('#existing-place-select').exists()).toBe(false)
+    expect(wrapper.find('#event-place-name').attributes('disabled')).toBeDefined()
+    await wrapper.find('.add-tag-button').trigger('click')
+    await wrapper.find('[aria-label="新標籤名稱"]').setValue('攝影')
+    await wrapper.findAll('.add-tag-button')[1].trigger('click')
 
     // 409 conflict arrives
     await wrapper.setProps({

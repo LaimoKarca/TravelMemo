@@ -189,6 +189,7 @@ const reusablePlaces = ref<Place[]>([])
 // Photo state
 const currentTripPhotos = ref<PhotoDTO[]>([])
 const currentTripCoverId = ref<string | null>(null)
+const albumOpen = ref(false)
 const loadingTripPhotos = ref(false)
 const tripCovers = ref<Record<string, string | null>>({})
 const tripPhotoPickerRef = ref<any>(null)
@@ -365,6 +366,7 @@ async function fetchPlaces() {
 }
 
 async function selectTrip(tripId: string) {
+  albumOpen.value = false
   clearAlert()
   loadingDetail.value = true
   activeTripId.value = tripId
@@ -1093,19 +1095,12 @@ function resetFilters() {
             </div>
 
             <!-- Trip Photo Gallery Section -->
-            <details :key="currentTrip.id" class="trip-gallery-block" aria-label="旅程相簿">
-              <summary class="album-toggle"><span>旅程相簿 <small>{{ currentTripPhotos.length }}</small></span><AppIcon name="chevron" /></summary>
-              <div class="gallery-header-row">
-                <PhotoPicker
-                  ref="tripPhotoPickerRef"
-                  :compact="true"
-                  :multiple="true"
-                  button-text="新增相簿照片"
-                  camera-button-text="拍照"
-                  @upload-complete="handleTripPhotoUploaded"
-                />
+            <section class="trip-gallery-block" aria-label="旅程相簿">
+              <div class="album-header">
+                <button type="button" class="album-toggle" :aria-expanded="albumOpen" @click="albumOpen = !albumOpen"><span>旅程相簿 <small>{{ currentTripPhotos.length }}</small></span><AppIcon name="chevron" :class="{ 'is-open': albumOpen }" /></button>
+                <PhotoPicker ref="tripPhotoPickerRef" :compact="true" :multiple="true" button-text="新增相簿照片" camera-button-text="拍照" @upload-complete="handleTripPhotoUploaded" />
               </div>
-
+              <div v-show="albumOpen">
               <PhotoGallery
                 :photos="currentTripPhotos"
                 :cover-photo-id="currentTripCoverId"
@@ -1122,7 +1117,8 @@ function resetFilters() {
                 @update-caption="handleUpdateCaption"
                 @refresh="currentTrip && fetchTripPhotos(currentTrip.id)"
               />
-            </details>
+              </div>
+            </section>
 
             <!-- Flattened Filter Bar: City & Category Filtering -->
             <div class="filter-bar" role="region" aria-label="旅途回憶篩選">
@@ -1425,6 +1421,7 @@ function resetFilters() {
       :trip="currentTrip"
       :event="editingEvent"
       :places="reusablePlaces"
+      :categories="uniqueCategories"
       :loading="actionInProgress"
       :error-message="eventModalError"
       :has-conflict="eventModalConflict"
@@ -1469,7 +1466,15 @@ function resetFilters() {
 .album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .75rem 0; color: var(--color-ink-secondary); list-style: none; }
 .album-toggle::-webkit-details-marker { display: none; }
 .album-toggle small { color: var(--color-subtle); margin-left: .4rem; }
-details[open] > .album-toggle svg { transform: rotate(180deg); }
+.album-toggle svg.is-open { transform: rotate(180deg); }
+.album-header { display: flex; align-items: center; gap: .75rem; }
+.album-header { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+.album-header :deep(.photo-picker-container) { display: contents; }
+.album-header :deep(.picker-buttons-row) { justify-self: end; }
+.album-header :deep(.staged-previews-grid), .album-header :deep(.picker-error-msg) { grid-column: 1 / -1; }
+.album-header .album-toggle { border: 0; background: none; gap: .5rem; margin-right: auto; font: inherit; white-space: nowrap; }
+.album-header :deep(.picker-btn) { min-height: 36px; padding: .4rem .55rem; font-size: .8rem; }
+@media(max-width: 480px) { .album-header { gap: .35rem; } .album-header :deep(.picker-buttons-row) { gap: .3rem; } .album-toggle { font-size: .85rem !important; } }
 .custom-cover-action { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--color-subtle); }
 .empty-filtered-trips { padding: 2rem 0; color: var(--color-subtle); }
 
