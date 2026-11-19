@@ -201,6 +201,19 @@ def test_http_contract_auth_csrf_owner_scope_and_bounds(setup):
         assert client.delete(path, params={"version": ready["version"]}, headers=headers).status_code == 404
 
 
+def test_shifted_trip_dates_return_conflict_before_field_validation(setup):
+    repository, trip, _, service = setup
+    record = draft(service, trip)
+    generate(service, trip, record)
+    service.process_pending()
+    ready = service.get("owner", trip["id"], record["id"])
+    repository.update_trip("owner", trip["id"], {**trip, "start_date": "2026-01-03"})
+    with pytest.raises(TravelConflictError):
+        service.commit("owner", trip["id"], record["id"], {
+            "version": ready["version"], "trip_version": ready["trip_version"], "request_id": str(uuid4())})
+    assert service.get("owner", trip["id"], record["id"])["items"] == ready["items"]
+
+
 def test_generator_sends_only_bounded_trip_context_and_selected_reference_date():
     class Client:
         def __init__(self):

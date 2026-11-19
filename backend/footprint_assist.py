@@ -280,6 +280,8 @@ class FootprintAssistant:
         trip = self._trip(owner, trip_id)
         items = []
         if record["status"] != "committed":
+            if record["version"] != data.version or trip["version"] != data.trip_version:
+                raise TravelConflictError("草稿或手記已更新，請重新核對後再加入。")
             if record["status"] in ("queued", "running"):
                 raise TravelConflictError("仍在整理足跡，請等待完成。")
             for item in record.get("items", []):
