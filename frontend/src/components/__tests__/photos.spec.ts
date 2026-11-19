@@ -192,6 +192,21 @@ describe('PhotoViewer (Lightbox)', () => {
 })
 
 describe('PhotoPicker', () => {
+  it('uses one native source picker without capture and can reopen after cancellation', async () => {
+    const wrapper = mount(PhotoPicker, { props: { nativePicker: true, buttonText: '加入相簿照片' } })
+    expect(wrapper.find('details').exists()).toBe(false)
+    expect(wrapper.findAll('.picker-buttons-row button')).toHaveLength(1)
+    const gallery = wrapper.findAll('input[type=file]')[1]
+    expect(gallery.attributes('capture')).toBeUndefined()
+    expect(gallery.attributes('multiple')).toBeDefined()
+    const open = vi.spyOn(gallery.element as HTMLInputElement, 'click').mockImplementation(() => {})
+    await wrapper.get('button[aria-label="加入相簿照片"]').trigger('click')
+    await gallery.trigger('cancel')
+    await wrapper.get('button[aria-label="加入相簿照片"]').trigger('click')
+    expect(open).toHaveBeenCalledTimes(2)
+    expect(wrapper.emitted('upload-complete')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('offers two direct icon actions without a source menu', async () => {
     const wrapper = mount(PhotoPicker, { props: { directIcons: true, buttonText: '新增相簿照片' } })
     const inputs = wrapper.findAll('input[type=file]')

@@ -18,6 +18,7 @@ const props = withDefaults(
     compact?: boolean
     iconOnly?: boolean
     directIcons?: boolean
+    nativePicker?: boolean
   }>(),
   {
     multiple: true,
@@ -252,12 +253,13 @@ defineExpose({
 
     <!-- Action Buttons -->
     <div class="picker-buttons-row">
-      <details v-if="iconOnly" ref="menuRef" class="photo-source-menu" @keydown.esc.prevent="menuRef && (menuRef.open = false)">
+      <button v-if="nativePicker" type="button" class="icon-button native-picker-btn" :aria-label="buttonText" :title="buttonText" :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos" @click="triggerGallery"><AppIcon name="camera" /></button>
+      <details v-else-if="iconOnly" ref="menuRef" class="photo-source-menu" @keydown.esc.prevent="menuRef && (menuRef.open = false)">
         <summary class="icon-button" aria-label="加入圖片" title="加入圖片" :aria-disabled="disabled || isUploading" @click="(disabled || isUploading) && $event.preventDefault()"><AppIcon name="image" /></summary>
         <div class="photo-source-options"><button type="button" @click="choosePhoto(true)">拍照</button><button type="button" @click="choosePhoto(false)">從圖庫選取</button></div>
       </details>
       <button
-        v-if="!iconOnly"
+        v-if="!nativePicker && !iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
         :class="{ 'direct-icon-btn': directIcons }"
@@ -273,7 +275,7 @@ defineExpose({
       </button>
 
       <button
-        v-if="!iconOnly"
+        v-if="!nativePicker && !iconOnly"
         type="button"
         class="btn btn-secondary picker-btn"
         :class="{ 'direct-icon-btn': directIcons }"
@@ -371,6 +373,7 @@ defineExpose({
 </template>
 
 <style scoped>
+.native-picker-btn { min-width: 36px; width: 36px; height: 36px; padding: .4rem; }
 .picker-btn.direct-icon-btn { position: relative; width: 36px; min-width: 36px; padding: .4rem; justify-content: center; }
 .picker-btn .add-photo-plus { width: 10px; height: 10px; position: absolute; top: 3px; right: 2px; background: var(--color-paper); border-radius: 50%; }
 .photo-source-menu { position: relative; }

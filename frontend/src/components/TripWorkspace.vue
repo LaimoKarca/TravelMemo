@@ -1006,27 +1006,28 @@ function resetFilters() {
               <!-- Flattened Trip Title & Metadata -->
               <div class="trip-summary-line">
                 <div class="trip-summary-title-wrap">
-                  <h2 class="banner-trip-name"><span>{{ currentTrip.name }}</span> <button type="button" class="btn-icon title-edit" aria-label="編輯手記" title="編輯手記" :disabled="actionInProgress" @click="openEditTripModal(currentTrip)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M12 20h9" />
-                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                    </svg></button></h2>
-                  <div class="banner-dates">
-                    <span class="banner-date-icon" aria-hidden="true">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                    </span>
-                    <span>{{ currentTrip.start_date }} ～ {{ currentTrip.end_date }}</span>
-                    <span class="banner-tz-pill">{{ currentTrip.timezone }}</span>
+                  <h2 class="banner-trip-name">{{ currentTrip.name }}</h2>
+                  <div class="trip-metadata-row">
+                    <div class="banner-dates">
+                      <span class="banner-date-icon" aria-hidden="true">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                      </span>
+                      <span>{{ currentTrip.start_date }} ～ {{ currentTrip.end_date }}</span>
+                      <span class="banner-tz-pill">{{ currentTrip.timezone }}</span>
+                    </div>
+                    <button v-if="!currentTrip.description" type="button" class="icon-button summary-edit" aria-label="編輯手記" title="編輯手記" :disabled="actionInProgress" @click="openEditTripModal(currentTrip)"><AppIcon name="edit" /></button>
                   </div>
                 </div>
 
-                <p v-if="currentTrip.description" class="banner-description">
-                  {{ currentTrip.description }}
-                </p>
+                <div v-if="currentTrip.description" class="trip-description-row">
+                  <p class="banner-description">{{ currentTrip.description }}</p>
+                  <button type="button" class="icon-button summary-edit" aria-label="編輯手記" title="編輯手記" :disabled="actionInProgress" @click="openEditTripModal(currentTrip)"><AppIcon name="edit" /></button>
+                </div>
               </div>
             </div>
 
@@ -1034,7 +1035,7 @@ function resetFilters() {
             <section class="trip-gallery-block" aria-label="旅程相簿">
               <div class="album-header">
                 <button type="button" class="album-toggle" :aria-expanded="albumOpen" @click="albumOpen = !albumOpen"><span>旅程相簿 <small>{{ currentTripPhotos.length }}</small></span><AppIcon name="chevron" :class="{ 'is-open': albumOpen }" /></button>
-                <PhotoPicker ref="tripPhotoPickerRef" :direct-icons="true" :compact="true" :multiple="true" button-text="新增相簿照片" camera-button-text="拍照" @upload-complete="handleTripPhotoUploaded" />
+                <PhotoPicker ref="tripPhotoPickerRef" :native-picker="true" :compact="true" :multiple="true" button-text="加入相簿照片" @upload-complete="handleTripPhotoUploaded" />
               </div>
               <div v-show="albumOpen">
               <PhotoGallery
@@ -1192,7 +1193,7 @@ function resetFilters() {
                       </div>
 
                       <div class="event-place-info">
-                        <h4 class="event-place-name">{{ evt.place_name }} <span v-if="evt.city" class="event-city-tag">{{ evt.city }}</span></h4>
+                        <h4 class="event-place-name">{{ evt.place_name }} <span v-if="evt.city" class="event-city-tag"><AppIcon name="pin" /><span>{{ evt.city }}</span></span></h4>
                         <div v-if="evt.address" class="event-location-text">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -2515,11 +2516,16 @@ function resetFilters() {
   .detail-actions .btn { padding-inline: .25rem; }
 }
 
-.title-edit { display: inline-flex; vertical-align: middle; margin-left: .25rem; border: 0; background: transparent; }
+.trip-description-row { display: flex; align-items: flex-end; gap: .5rem; }
+.trip-description-row .banner-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.summary-edit { min-width: 32px; width: 32px; height: 32px; padding: .4rem; margin-left: auto; flex: 0 0 auto; color: var(--color-subtle); }
+.trip-metadata-row { display: flex; align-items: center; gap: .5rem; flex: 1 1 auto; min-width: 0; }
+.trip-metadata-row .banner-dates { flex-wrap: wrap; min-width: 0; }
+@media(max-width: 768px) { .trip-metadata-row { flex-basis: 100%; } }
 .banner-trip-name { overflow-wrap: anywhere; }
 .trip-summary-title-wrap { gap: .4rem; }
 .filter-bar { display: flex; flex-direction: column; align-items: stretch; gap: .5rem; }
-.event-search-row { display: flex; align-items: center; gap: .25rem; border: 1px solid var(--color-border); background: var(--color-paper); border-radius: var(--radius-sm); padding-right: .5rem; min-width: 0; }
+.event-search-row { display: flex; align-items: center; gap: .25rem; border: 0; background: transparent; border-radius: 0; padding-right: .5rem; min-width: 0; }
 .event-query { display: flex; align-items: center; position: relative; flex: 1; min-width: 0; }
 .event-query > svg { position: absolute; left: .7rem; color: var(--color-subtle); }
 .event-query input { width: 100%; border: 0; background: transparent; padding-left: 2.3rem; }
@@ -2537,7 +2543,8 @@ function resetFilters() {
 .event-header-actions .icon-button:hover { color: var(--color-maple); }
 .event-header-actions .event-delete:hover { color: var(--color-error-text); }
 .event-place-name { overflow-wrap: anywhere; text-wrap: pretty; }
-.event-city-tag { display: inline-block; vertical-align: middle; font-size: .75rem; font-weight: 400; line-height: 1.4; margin-left: .3rem; padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-border-light); color: var(--color-subtle); }
+.event-city-tag { display: inline-flex; align-items: center; vertical-align: middle; max-width: 100%; gap: .2rem; margin-left: .3rem; font-size: .75rem; font-weight: 400; line-height: 1.4; color: var(--color-subtle); }
+.event-city-tag svg { width: .9rem; height: .9rem; }
 .event-tags { min-width: 0; flex-wrap: wrap; }
 .event-category-pill { overflow-wrap: anywhere; }
 .timezone-notice { font-size: .8rem; color: var(--color-subtle); }
