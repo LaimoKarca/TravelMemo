@@ -1958,4 +1958,10 @@ function handleCitationClick(citation: Citation) {
 .chat-input-bar:has(.staged-preview-item) { padding-top: 100px; }
 .composer-picker-row .reading-indicator, .composer-picker-row .staged-alert-hint { position: absolute; bottom: calc(100% + 5px); left: 0; font-size: .75rem; }
 @media (max-width: 560px) { .send-btn { padding: .4rem .65rem; } .send-btn span { display: none; } }
+
+@media(max-width: 768px) {
+  .header-main-row { flex-direction: row; align-items: center; justify-content: space-between; gap: .5rem; }
+  .header-main-row h2 { margin: 0; }
+  .btn-new-conv { min-height: 34px; padding: .3rem .6rem; white-space: nowrap; }
+}
 </style>

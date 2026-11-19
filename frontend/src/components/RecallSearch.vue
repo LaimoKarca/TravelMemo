@@ -170,17 +170,6 @@ function getVectorStatusLabel(status: string): string {
 
         <PhotoPicker ref="searchPhotoPickerRef" v-model:photos="searchPhotos" :icon-only="true" :compact="true" :multiple="true" :max-photos="4" />
 
-        <!-- Readily available trip selector in main search bar -->
-        <div class="trip-selector-wrap">
-          <label for="filter-trip" class="sr-only">指定旅程</label>
-          <select id="filter-trip" v-model="selectedTripId" class="form-input filter-input trip-select" :disabled="loading">
-            <option value="">全部旅程手記</option>
-            <option v-for="t in trips" :key="t.id" :value="t.id">
-              {{ t.name }}
-            </option>
-          </select>
-        </div>
-
         <!-- Clear filter toggle button -->
         <button
           type="button"
@@ -191,7 +180,7 @@ function getVectorStatusLabel(status: string): string {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
           </svg>
-          <span>{{ showFilters ? '收起篩選' : '進階篩選' }}</span>
+          <span class="sr-only">{{ showFilters ? '收起篩選' : '進階篩選' }}</span>
         </button>
 
         <button
@@ -203,12 +192,24 @@ function getVectorStatusLabel(status: string): string {
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
-          <span>{{ loading ? '搜尋中...' : '搜尋' }}</span>
+          <span class="sr-only">{{ loading ? '搜尋中...' : '搜尋' }}</span>
         </button>
       </div>
 
       <!-- Collapsible Additional Filters Grid (v-show preserves DOM access for tests/a11y) -->
       <div v-show="showFilters" class="filters-grid">
+        <!-- Trip scope stays with the other collapsible filters. -->
+        <div class="trip-selector-wrap">
+          <label for="filter-trip" class="filter-label">指定旅程</label>
+          <select id="filter-trip" v-model="selectedTripId" class="form-input filter-input trip-select" :disabled="loading">
+            <option value="">全部旅程手記</option>
+            <option v-for="t in trips" :key="t.id" :value="t.id">
+              {{ t.name }}
+            </option>
+          </select>
+        </div>
+
+
         <div class="filter-col">
           <label for="filter-city" class="filter-label">城市</label>
           <input
@@ -1094,4 +1095,15 @@ function getVectorStatusLabel(status: string): string {
   .main-query-row .filter-toggle-btn { grid-column: 1 / 3; grid-row: 3; }
   .main-query-row .search-submit-btn { grid-column: 3 / 5; grid-row: 3; }
 }
+
+.main-query-row { display: flex; flex-wrap: nowrap; gap: .15rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-paper); padding: .15rem; align-items: center; }
+.main-query-row .query-input-wrap { flex: 1 1 0; min-width: 0; width: auto; }
+.main-query-row .query-input { border: 0; background: transparent; box-shadow: none; padding-left: .65rem; }
+.main-query-row .search-lens-icon { display: none; }
+.main-query-row .filter-toggle-btn, .main-query-row .search-submit-btn { flex: 0 0 36px; width: 36px; min-height: 38px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.main-query-row :deep(.is-icon-only) { flex: 0 0 36px; width: 36px; }
+.main-query-row :deep(.icon-button) { min-width: 36px; width: 36px; height: 38px; }
+.main-query-row .filter-toggle-btn { border: 0; background: transparent; }
+.trip-selector-wrap { display: flex; flex-direction: column; gap: .35rem; }
+@media(max-width: 768px) { .main-query-row .query-input-wrap { grid-column: auto; grid-row: auto; } .main-query-row :deep(.photo-picker-container) { grid-column: auto; grid-row: auto; } }
 </style>

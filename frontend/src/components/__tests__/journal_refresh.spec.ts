@@ -7,10 +7,26 @@ import EventDialog from '../EventDialog.vue'
 import ConversationView from '../ConversationView.vue'
 import * as auth from '../../api/auth'
 import * as api from '../../api/conversation'
+import * as photos from '../../api/photos'
+import type { PhotoDTO } from '../../types/photo'
 
 describe('Journal editing and resumable chat', () => {
   beforeEach(() => { vi.restoreAllMocks(); localStorage.clear() })
   afterEach(() => { vi.useRealTimers() })
+  it('updates the cover for the trip being edited', async () => {
+    const trip = { id: 'edited-trip', name: 'Trip', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }
+    const photo = { id: 'uploaded-cover' } as PhotoDTO
+    const bind = vi.spyOn(photos, 'bindPhoto').mockResolvedValue(photo)
+    const set = vi.spyOn(photos, 'setTripCover').mockResolvedValue({ photo_id: photo.id })
+    const wrapper = mount(TripDialog, { props: { visible: true, trip } })
+    wrapper.findComponent(PhotoPicker).vm.$emit('upload-complete', photo)
+    await flushPromises()
+    expect(bind).toHaveBeenCalledWith(photo.id, 'trip', trip.id)
+    expect(set).toHaveBeenCalledWith(trip.id, photo.id)
+    expect(wrapper.emitted('cover-updated')?.[0]).toEqual([{ tripId: trip.id, photoId: photo.id }])
+    expect(wrapper.get('.cover-preview').attributes('src')).toContain(photo.id)
+    wrapper.unmount()
+  })
   it('edits location independently and preserves place identity for note-only changes', async () => {
     const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: '', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
     const wrapper = mount(EventDialog, { props: { visible: true, trip: { id: 'trip', name: '旅程', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }, event } })

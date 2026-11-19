@@ -29,8 +29,7 @@ import {
   retryPhoto,
   updatePhoto,
   reorderTripPhotos,
-  getTripCover,
-  setTripCover
+  getTripCover
 } from '../api/photos'
 import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
@@ -171,14 +170,6 @@ const visibleTrips = computed(() => {
     && (tripPeriod.value === 'all' || (tripPeriod.value === 'upcoming' ? t.start_date > today : tripPeriod.value === 'past' ? t.end_date < today : t.start_date <= today && t.end_date >= today)))
     .sort((a, b) => b.start_date.localeCompare(a.start_date) || b.id.localeCompare(a.id))
 })
-const coverPickerRef = ref<any>(null)
-async function handleCustomCover(photo: PhotoDTO) {
-  if (!currentTrip.value) return
-  await handleTripPhotoUploaded(photo)
-  await handleSetCover(photo.id)
-  coverPickerRef.value?.clear()
-}
-
 const activeTripId = ref<string | null>(null)
 const currentTrip = ref<Trip | null>(null)
 const showFootprintAssistant = ref(false)
@@ -420,19 +411,9 @@ async function handleTripPhotoUploaded(photo: PhotoDTO) {
   }
 }
 
-async function handleSetCover(photoId: string) {
-  if (!currentTrip.value) return
-  actionInProgress.value = true
-  try {
-    const res = await setTripCover(currentTrip.value.id, photoId)
-    currentTripCoverId.value = res.photo_id
-    tripCovers.value[currentTrip.value.id] = res.photo_id
-    showAlert('已更新旅程封面照片。', 'success')
-  } catch (err: any) {
-    showAlert(err instanceof ApiError ? err.detail : '設定封面照片失敗。', 'error')
-  } finally {
-    actionInProgress.value = false
-  }
+async function handleCoverUpdated(payload: { tripId: string; photoId: string | null }) {
+  tripCovers.value[payload.tripId] = payload.photoId
+  if (currentTrip.value?.id === payload.tripId) await fetchTripPhotos(payload.tripId)
 }
 
 async function handleReorderPhotos(photoIds: string[]) {
@@ -505,12 +486,18 @@ function openCreateTripModal() {
   showTripModal.value = true
 }
 
-function openEditTripModal(trip: Trip) {
+async function openEditTripModal(trip: Trip) {
   clearAlert()
   editingTrip.value = trip
   tripModalError.value = ''
   tripModalConflict.value = false
   showTripModal.value = true
+  try {
+    const cover = await getTripCover(trip.id)
+    tripCovers.value[trip.id] = cover.photo_id
+  } catch {
+    showAlert('暫時無法讀取手記封面，請稍後重新開啟編輯。', 'error')
+  }
 }
 
 async function handleTripSubmit(payload: CreateTripPayload | UpdateTripPayload) {
@@ -1019,6 +1006,7 @@ function resetFilters() {
                 <button
                   type="button"
                   class="btn-link back-button"
+                  aria-label="返回手記列表"
                   @click="backToTripList"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1079,7 +1067,6 @@ function resetFilters() {
                   </div>
                 </div>
 
-                <div class="custom-cover-action"><span>封面</span><PhotoPicker ref="coverPickerRef" :icon-only="true" :multiple="false" :max-photos="1" :compact="true" @upload-complete="handleCustomCover" /></div>
                 <p v-if="currentTrip.description" class="banner-description">
                   {{ currentTrip.description }}
                 </p>
@@ -1097,12 +1084,11 @@ function resetFilters() {
                 :photos="currentTripPhotos"
                 :cover-photo-id="currentTripCoverId"
                 :loading="loadingTripPhotos"
-                :can-set-cover="true"
+                :can-set-cover="false"
                 :can-reorder="true"
                 :can-delete="true"
                 :can-edit-caption="true"
                 empty-text="這趟旅程尚未新增照片，點擊上方按鈕記錄旅途片刻。"
-                @set-cover="handleSetCover"
                 @reorder="handleReorderPhotos"
                 @delete="handleDeletePhoto"
                 @retry="handleRetryPhoto"
@@ -1154,7 +1140,7 @@ function resetFilters() {
               </div>
 
               <div class="filter-summary">
-                <span>顯示 {{ filteredEvents.length }} / {{ currentEvents.length }} 處旅途足跡</span>
+                <span :aria-label="`顯示 ${filteredEvents.length} / ${currentEvents.length} 處旅途足跡`"><span class="count-desktop">顯示 </span>{{ filteredEvents.length }} / {{ currentEvents.length }}<span class="count-desktop"> 處旅途足跡</span></span>
               </div>
             </div>
 
@@ -1402,6 +1388,8 @@ function resetFilters() {
     <TripDialog
       :visible="showTripModal"
       :trip="editingTrip"
+      :cover-photo-id="editingTrip ? tripCovers[editingTrip.id] : null"
+      @cover-updated="handleCoverUpdated"
       :loading="actionInProgress"
       :error-message="tripModalError"
       :has-conflict="tripModalConflict"
@@ -2592,5 +2580,23 @@ function resetFilters() {
     animation: none !important;
     display: none !important;
   }
+}
+
+@media(max-width: 768px) {
+  .count-desktop { display: none; }
+  .detail-nav { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: .4rem; }
+  .detail-nav .back-button { font-size: .75rem; gap: .2rem; white-space: nowrap; }
+  .detail-nav .back-button span { display: none; }
+  .detail-nav .back-button { min-width: 32px; min-height: 36px; }
+  .detail-actions { display: flex; gap: .35rem; flex-wrap: nowrap; }
+  .detail-actions .btn { min-height: 36px; padding: .35rem .55rem; font-size: .75rem; gap: .25rem; white-space: nowrap; }
+  .detail-actions .btn svg { width: 16px; height: 16px; }
+  .filter-bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: .4rem; align-items: center; }
+  .filter-controls { display: grid; grid-template-columns: 1fr 1fr; min-width: 0; width: auto; gap: .4rem; }
+  .filter-field { min-width: 0; }
+  .filter-field .filter-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .filter-field .filter-select { width: 100%; min-width: 0; max-width: 100%; padding: .4rem .25rem; font-size: .75rem; }
+  .filter-bar > :last-child { font-size: .7rem; white-space: nowrap; }
+  .filter-bar > :last-child span { font-size: inherit; }
 }
 </style>

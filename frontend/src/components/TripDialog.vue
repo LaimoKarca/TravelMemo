@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import JournalNote from './JournalNote.vue'
+import PhotoPicker from './PhotoPicker.vue'
+import { bindPhoto, listPhotos, setTripCover } from '../api/photos'
+import type { PhotoDTO } from '../types/photo'
 import type { Trip, CreateTripPayload, UpdateTripPayload } from '../types/travel'
 import { getTimezoneOptions, normalizeTimezoneInput } from '../utils/timezones'
 
@@ -11,6 +14,7 @@ const props = withDefaults(
     loading?: boolean
     errorMessage?: string
     hasConflict?: boolean
+    coverPhotoId?: string | null
   }>(),
   {
     trip: null,
@@ -24,6 +28,7 @@ const emit = defineEmits<{
   (e: 'submit', payload: CreateTripPayload | UpdateTripPayload): void
   (e: 'refresh'): void
   (e: 'cancel'): void
+  (e: 'cover-updated', payload: { tripId: string; photoId: string | null }): void
 }>()
 
 const dialogRef = ref<HTMLElement | null>(null)
@@ -35,6 +40,40 @@ const endDate = ref('')
 const timezone = ref('Asia/Taipei')
 const description = ref('')
 const clientValidationError = ref('')
+const coverPicker = ref<any>(null)
+const coverBusy = ref(false)
+const coverError = ref('')
+const albumPhotos = ref<PhotoDTO[]>([])
+const currentCover = ref<string | null>(props.coverPhotoId || null)
+watch(() => props.coverPhotoId, id => { currentCover.value = id || null })
+watch(() => props.visible, visible => { if (visible) { currentCover.value = props.coverPhotoId || null; albumPhotos.value = []; coverError.value = '' } })
+async function loadAlbum(event: Event) {
+  if (!(event.target as HTMLDetailsElement).open || !props.trip) return
+  try { albumPhotos.value = (await listPhotos({ trip_id: props.trip.id })).items }
+  catch { coverError.value = '暫時無法讀取相簿。' }
+}
+async function chooseCover(id: string | null) {
+  if (!props.trip || coverBusy.value) return
+  const tripId = props.trip.id
+  coverBusy.value = true; coverError.value = ''
+  try {
+    await setTripCover(tripId, id)
+    currentCover.value = id
+    emit('cover-updated', { tripId, photoId: id })
+  } catch { coverError.value = '封面更新失敗，請稍後再試。' }
+  finally { coverBusy.value = false }
+}
+async function uploadCover(photo: PhotoDTO) {
+  if (!props.trip) return
+  const tripId = props.trip.id
+  try {
+    await bindPhoto(photo.id, 'trip', tripId)
+    if (props.trip?.id !== tripId) return
+    await chooseCover(photo.id)
+    coverPicker.value?.clear()
+  }
+  catch { coverError.value = '封面照片加入失敗，請稍後再試。' }
+}
 
 const isEdit = computed(() => !!props.trip)
 const dialogTitle = computed(() => (isEdit.value ? '編輯旅行手記' : '新增旅行手記'))
@@ -327,6 +366,13 @@ onBeforeUnmount(() => {
 
         <JournalNote id="trip-description" v-model="description" kind="trip" label="旅行隨筆／備忘回憶" placeholder="記下旅程的初衷、夥伴或沿途感受…" :disabled="loading" />
 
+        <section v-if="isEdit" class="cover-editor" aria-label="手記封面">
+          <div class="cover-editor-heading"><h4>手記封面</h4><button v-if="currentCover" type="button" class="btn-link" :disabled="loading || coverBusy" @click="chooseCover(null)">移除</button></div>
+          <img v-if="currentCover" :src="`/api/v1/photos/${currentCover}/thumbnail`" class="cover-preview" alt="目前手記封面" />
+          <PhotoPicker ref="coverPicker" :compact="true" :multiple="false" :max-photos="1" :disabled="loading || coverBusy" button-text="上傳封面" @upload-complete="uploadCover" />
+          <details @toggle="loadAlbum"><summary>從旅程相簿選擇</summary><div class="cover-options"><button v-for="photo in albumPhotos" :key="photo.id" type="button" :disabled="loading || coverBusy" :aria-label="`選為封面：${photo.caption || '相簿照片'}`" :aria-pressed="currentCover === photo.id" @click="chooseCover(photo.id)"><img :src="photo.thumbnail_url" :alt="photo.caption || '相簿照片'" loading="lazy" /></button></div></details>
+          <small>封面變更會即時儲存。</small><p v-if="coverError" role="alert" class="cover-error">{{ coverError }}</p>
+        </section>
         <footer class="dialog-footer">
           <button
             type="button"
@@ -351,6 +397,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cover-editor { border-top: 1px solid var(--color-border-light); padding-top: 1rem; display: flex; flex-direction: column; gap: .65rem; }
+.cover-editor-heading { display: flex; justify-content: space-between; align-items: center; }
+.cover-editor h4 { font-size: .875rem; color: var(--color-maple); margin: 0; }
+.cover-editor small, .cover-editor summary { font-size: .8rem; color: var(--color-subtle); }
+.cover-editor summary { cursor: pointer; }
+.cover-preview { width: 100%; max-height: 140px; object-fit: cover; border-radius: var(--radius-sm); }
+.cover-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: .4rem; max-height: 160px; overflow: auto; margin-top: .5rem; }
+.cover-options button { padding: 2px; border: 1px solid transparent; background: none; border-radius: var(--radius-sm); cursor: pointer; }
+.cover-options button[aria-pressed=true] { border-color: var(--color-maple); }
+.cover-options img { width: 100%; height: 60px; object-fit: cover; display: block; }
+.cover-error { font-size: .8rem; color: var(--color-error-text); }
 .dialog-backdrop {
   position: fixed;
   inset: 0;
