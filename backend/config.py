@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-6-luna"
     openai_timeout: float = Field(default=45, ge=1, le=180)
     openai_max_output_tokens: int = Field(default=2000, ge=128, le=10000)
+    footprint_assist_max_output_tokens: int = Field(default=6000, ge=1000, le=10000)
+    footprint_assist_concurrency: int = Field(default=2, ge=1, le=4)
     ai_user_concurrency: int = Field(default=1, ge=1, le=10)
     ai_global_concurrency: int = Field(default=2, ge=1, le=10)
     conversation_history_limit: int = Field(default=12, ge=2, le=50)

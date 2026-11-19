@@ -189,6 +189,11 @@ class MemoryTravelRepository:
             for eid in event_ids_to_delete:
                 del self.events[eid]
 
+            drafts = getattr(self, "_footprint_drafts", {})
+            for draft_id, draft in list(drafts.items()):
+                if draft.get("owner_id") == owner_id and draft.get("trip_id") == trip_id:
+                    del drafts[draft_id]
+
             del self.trips[trip_id]
 
     def get_places(self, owner_id: str) -> list[dict]:
@@ -627,6 +632,16 @@ class Neo4jTravelRepository:
             if check_res["version"] != version:
                 raise TravelConflictError("旅程已被修改，請重新整理後再試。")
 
+            # Remove private draft text in the same transaction as its journal.
+            tx.run(
+                """
+                    MATCH (:Trip {id: $trip_id, owner_id: $owner_id})
+                          -[:HAS_FOOTPRINT_DRAFT]->(d:FootprintDraft {owner_id: $owner_id})
+                    DETACH DELETE d
+                    """,
+                owner_id=owner_id,
+                trip_id=trip_id,
+            ).consume()
             # Delete events and NEXT edges; retain reusable Places
             tx.run(
                 """

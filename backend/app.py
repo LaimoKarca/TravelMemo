@@ -35,6 +35,7 @@ def create_app(
     embedder=None,
     photo_service=None,
     photo_analyzer=None,
+    footprint_generator=None,
 ):
     settings = settings or get_settings()
     owned = store is None
@@ -43,6 +44,7 @@ def create_app(
     from backend.chat_jobs import ChatJobService, create_chat_job_router
     from backend.conversation import ConversationService, create_conversation_router
     from backend.conversation_store import MemoryConversationStore, Neo4jConversationStore
+    from backend.footprint_assist import FootprintAssistant, create_footprint_router
     from backend.photo_analysis import PhotoAnalysisWorker
     from backend.photo_search import PhotoSearchService
     from backend.photo_store import MemoryPhotoStore, Neo4jPhotoStore
@@ -80,6 +82,7 @@ def create_app(
     conversations.photo_service = photo_service
     conversations.photo_analyzer = photo_worker.analyzer
     chat_jobs = ChatJobService(conversations)
+    footprints = FootprintAssistant(settings, travel_repository, generator=footprint_generator)
 
     async def cleanup():
         while True:
@@ -103,12 +106,15 @@ def create_app(
         await asyncio.to_thread(photo_search.initialize)
         await asyncio.to_thread(chat_jobs.initialize)
         await chat_jobs.start()
+        await asyncio.to_thread(footprints.initialize)
+        await footprints.start()
         if owned:
             tasks.append(asyncio.create_task(search_service.run_worker()))
             tasks.append(asyncio.create_task(photo_worker.run_worker()))
         try:
             yield
         finally:
+            await footprints.stop()
             await chat_jobs.stop()
             for task in tasks:
                 task.cancel()
@@ -130,6 +136,8 @@ def create_app(
     )
     app.state.search = search_service
     app.state.chat_jobs = chat_jobs
+    app.state.footprints = footprints
+    app.include_router(create_footprint_router(auth, footprints))
     app.include_router(create_chat_job_router(auth, chat_jobs))
     app.include_router(create_writing_router(auth, WritingService(settings)))
     app.state.conversations = conversations

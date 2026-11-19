@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, watch } from 'vue'
 import type { User } from '../types/auth'
 import type {
   Trip,
@@ -36,6 +36,7 @@ import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import StatusAlert from './StatusAlert.vue'
 import AppIcon from './AppIcon.vue'
+import FootprintAssistant from './FootprintAssistant.vue'
 import TripDialog from './TripDialog.vue'
 import EventDialog from './EventDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -180,6 +181,12 @@ async function handleCustomCover(photo: PhotoDTO) {
 
 const activeTripId = ref<string | null>(null)
 const currentTrip = ref<Trip | null>(null)
+const showFootprintAssistant = ref(false)
+watch(() => [activeTab.value, activeTripId.value], () => { showFootprintAssistant.value = false })
+async function handleFootprintsSaved() {
+  if (activeTripId.value) await selectTrip(activeTripId.value)
+}
+
 const currentEvents = ref<Event[]>([])
 const nextEdges = ref<Array<{ from_id: string; to_id: string }>>([])
 
@@ -1388,6 +1395,9 @@ function resetFilters() {
       </button>
     </nav>
 
+    <button v-if="activeTab === 'trips' && activeTripId && currentTrip && !showEventModal && !showTripModal && !confirmDialogVisible" type="button" class="footprint-launcher" @click="showFootprintAssistant = true"><AppIcon name="wand" /><span>幫我記足跡</span></button>
+    <FootprintAssistant v-if="currentTrip && activeTripId" :key="currentTrip.id" :visible="showFootprintAssistant" :trip="currentTrip" :categories="uniqueCategories" @close="showFootprintAssistant = false" @saved="handleFootprintsSaved" />
+
     <!-- Dialogs remain proper modals -->
     <TripDialog
       :visible="showTripModal"
@@ -1442,6 +1452,10 @@ function resetFilters() {
 </template>
 
 <style scoped>
+.footprint-launcher { position: fixed; right: 1.8rem; bottom: 1.8rem; z-index: 80; display: flex; align-items: center; gap: .55rem; padding: .8rem 1.05rem; border: 1px solid var(--color-maple-border); border-radius: 999px; background: var(--color-maple); color: var(--color-paper); font: inherit; font-size: .85rem; cursor: pointer; box-shadow: 0 5px 20px #453a3220; }
+.footprint-launcher:hover { background: var(--color-maple-hover); }
+@media(max-width: 768px) { .footprint-launcher { right: 1rem; bottom: calc(76px + env(safe-area-inset-bottom) + .6rem); } }
+
 .trip-library-tools { display: flex; flex-wrap: wrap; gap: .65rem; margin: 1.25rem 0; }
 .trip-query { display: flex; align-items: center; flex: 1 1 240px; position: relative; }
 .trip-query svg { position: absolute; left: .8rem; color: var(--color-subtle); }

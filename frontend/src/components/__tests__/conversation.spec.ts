@@ -85,7 +85,7 @@ describe('ConversationView', () => {
 
     // Initial view is new blank chat
     expect(wrapper.find('.empty-chat-state').exists()).toBe(true)
-    expect(wrapper.text()).toContain('您好！我是您的旅行手記助理。')
+    expect(wrapper.text()).toContain('想找回哪段旅程？')
     expect(wrapper.find('#chat-message-input').exists()).toBe(true)
 
     // Collapsed history details with far-right chevron and aria-expanded

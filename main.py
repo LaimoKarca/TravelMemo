@@ -58,6 +58,7 @@ def main():
             search.initialize()
             conversations = Neo4jConversationStore(store.driver, store.database)
             conversations.initialize()
+            from backend.footprint_store import FootprintStore
             from backend.photo_search import PhotoSearchService
             from backend.photo_store import Neo4jPhotoStore
             from backend.photos import PhotoService
@@ -66,6 +67,7 @@ def main():
                                   search.repository, conversations)
             photos.initialize()
             PhotoSearchService(get_settings(), photos, search.embedder).initialize()
+            FootprintStore(search.repository).initialize()
             print("Neo4j constraints and retrieval indexes initialized.")
         finally:
             store.close()

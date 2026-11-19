@@ -707,10 +707,8 @@ function handleCitationClick(citation: Citation) {
           </div>
 
           <div v-else-if="messages.length === 0" class="empty-chat-state">
-            <p class="empty-chat-title">您好！我是您的旅行手記助理。</p>
-            <p class="empty-chat-sub">
-              您可以詢問：「我上次去京都吃了哪幾家店？」或「我有記錄過清水寺的隨筆嗎？」
-            </p>
+            <p class="empty-chat-title">想找回哪段旅程？</p>
+            <div class="empty-chat-examples"><span>我去過哪些咖啡店？</span><span>清水寺是哪天去的？</span></div>
           </div>
 
           <!-- Message turns separated with natural space -->
@@ -1009,6 +1007,10 @@ function handleCitationClick(citation: Citation) {
 </template>
 
 <style scoped>
+.empty-chat-examples { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem 1.2rem; margin-top: .65rem; font-size: .85rem; color: var(--color-subtle); }
+.empty-chat-examples span { white-space: nowrap; }
+.empty-chat-title { text-wrap: balance; }
+
 .source-link { border: 0; background: none; padding: .2rem 0; color: var(--color-maple); cursor: pointer; text-align: left; font: inherit; font-size: .85rem; text-decoration: underline; text-decoration-color: var(--color-maple-border); text-underline-offset: 3px; }
 .source-note { color: var(--color-subtle); font-size: .75rem; }
 .deleted-source { color: var(--color-subtle); text-decoration: line-through; font-size: .85rem; }

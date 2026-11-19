@@ -27,3 +27,37 @@ Create events: append after existing same-date events. Edit date: move to end of
 The draft must be nonblank and at most 10,000 characters. This authenticated, CSRF-protected operation uses the configured AI model and does not create or update a Trip or Event.
 The frontend previews the result before applying it, keeps the original available for undo, and still uses the regular save endpoint to persist edits.
 Invalid input returns422, rejected content400, concurrent requests429, and unavailable AI503. Existing draft text remains available when polishing fails.
+
+## Footprint drafts
+
+The trip-specific assistant creates pending drafts from text. It is independent of Conversation and does not write events until explicit confirmation.
+Base path: `/trips/{trip_id}/footprint-drafts`. The usual session, CSRF and owner checks apply; foreign trip or draft IDs return404.
+
+| Method and path | Body | Result |
+| --- | --- | --- |
+| `POST /` | `{record_date,text}` | 201 Draft |
+| `GET /` | — | `{items:[Draft]}` containing the latest active draft, or an empty list |
+| `GET /{draft_id}` | — | Draft |
+| `PATCH /{draft_id}` | `{version,record_date?,text?,items?}` | Updated Draft |
+| `POST /{draft_id}/generate` | `{version,request_id}` | 202 Draft; poll the draft for progress |
+| `POST /{draft_id}/commit` | `{version,trip_version,request_id}` | `{events,trip_version,draft}` |
+| `DELETE /{draft_id}?version=N` | — | 204; discard the draft |
+
+`request_id` is a UUID. Draft has `id`, `trip_id`, `version`, `status`, `record_date`, `text`, `items`, `issues`,
+`trip_version`, `error`, `request_id` and timestamps. Status is `editing`, `queued`, `running`, `ready`, `failed` or `committed`.
+`issues` maps item IDs to missing or invalid field messages. It helps editing and does not replace server validation at commit.
+
+Items contain `id`, `selected`, `place_name`, `date`, `time`, `city`, `address`, `category` and `notes`; item array order is the preview order.
+Place name, date and time may be null while drafting. Selected items must satisfy the regular Event creation rules before commit.
+Record date is required within the trip bounds, text is limited to10,000 characters, and generated items are limited to20.
+An empty description can be saved while editing, but generation requires nonblank text. Unselected incomplete items do not block committing the selected valid items.
+Unspecified dates use record date; relative dates use it as the anchor in the trip timezone. Unknown time stays null and unclassified items use `其他`.
+
+Generation saves its request and processing state, then runs outside the browser connection. One owner has at most one active assistant worker;
+the default is two assistant workers overall, adjustable by server configuration. Queued and interrupted running work can resume after startup; failed generation preserves previous items and input.
+A manual retry may call the external model again. Discard removes the draft; a late generation result cannot restore it.
+
+Commit validates the selected items, draft version and current Trip version. Conflicts return409 and retain the draft for review.
+The selected events, new Places, Categories, NEXT links and commit result are saved in one transaction; the Trip version advances once.
+Existing same-day events retain their order and new same-day events append in preview order. A repeated confirmation of a committed draft returns its original result,
+even when the confirmation response was lost; it does not create a second set of events. No existing events are changed by this assistant.

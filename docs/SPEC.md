@@ -25,7 +25,7 @@ Trip 含名稱、日期範圍、時區與描述。Event 含日期、選填時間
 八小時 trail 清洗僅屬 benchmark。編輯採版本檢查，衝突返回 409。
 
 API `/api/v1`：auth/request-code、verify-code、logout、me；trips 與 events CRUD、
-trips/{id}/event-order；search；conversations、messages 與 requests；writing/polish；usage/me；health/live、ready。
+trips/{id}/event-order 與 footprint-drafts；search；conversations、messages 與 requests；writing/polish；usage/me；health/live、ready。
 前後端使用同網域。搜尋回傳事件、名次、理由及關係證據；對話回傳回答、引用與
 answered/insufficient_evidence/needs_clarification/unavailable 狀態。
 
@@ -52,6 +52,20 @@ OpenAI 官方 Python SDK Responses API，預設 gpt-6-luna（依使用者後續�
 安全流程採正規化、明確攻擊規則及結構化模型分類；失敗不放行，通過後才寫入訊息與查詢資料。
 上下文採近期原文、較舊內容分批滾動摘要與完整 JSON 提示大小上限；摘要只作話題記憶，不作旅程證據。
 實作與設定見 [後端處理流程](BACKEND.md)。
+
+## 描述建立足跡
+
+手記詳情提供「幫我記足跡」獨立面板，帶入目前旅程。使用者先選旅程內的記錄日期，再輸入最多一萬字元的描述，
+模型以結構化輸出整理最多二十筆待確認足跡；不在原有回憶對話中寫入事件。第一版只接受文字，不讀取圖片作為新增依據。
+
+使用者可修改、勾選及調整同日草稿順序，補齊地點與日期後確認批次加入。未指定日期使用記錄日期，
+「今天／昨天」以該日期為基準；未知時間留空，分類不明使用「其他」，不造店名、地址或經歷。
+明確重訪保留獨立候選，草稿不進入時間軸、檢索或來源證據。
+
+FootprintDraft 以擁有者、旅程、版本及生成請求管理，關閉或斷線後可接續，程序重啟可恢復生成工作。
+重新整理先確認取代現有草稿；失敗保留描述與草稿。確認時驗證草稿及 Trip 版本，衝突回傳 409。
+全部 Event、Place、Category、NEXT 與去重結果在同一交易寫入，Trip 版本更新一次，失敗不留下部分紀錄。
+新事件按日期接在同日既有紀錄後，維持預覽順序；不修改既有事件，重送確認不重複新增。
 
 ## 運作與資料範圍
 
