@@ -3,11 +3,35 @@ import {
   DEFAULT_TIMEZONE,
   getTimezoneOffset,
   getTimezoneOptions,
-  normalizeTimezoneInput
+  normalizeTimezoneInput,
+  getTripLocalDate,
+  getTripStatus
 } from '../timezones'
 import timezoneCatalog from '../../data/timezones.json'
 
 describe('Timezone UI Utilities & Catalog', () => {
+  it('gets the trip-local date across UTC midnight and fractional fixed offsets', () => {
+    const now = new Date('2026-11-20T19:00:00Z')
+    expect(getTripLocalDate(now, 'Asia/Tokyo')).toBe('2026-11-21')
+    expect(getTripLocalDate(now, 'UTC+05:30')).toBe('2026-11-21')
+    expect(getTripLocalDate(new Date('2026-11-20T02:00:00Z'), 'UTC-03:30')).toBe('2026-11-19')
+    expect(now.toISOString()).toBe('2026-11-20T19:00:00.000Z')
+    expect(() => getTripLocalDate(now, 'Invalid/Zone')).toThrow(RangeError)
+  })
+
+  it('uses the IANA offset at the current instant, including daylight saving time', () => {
+    expect(getTripLocalDate(new Date('2026-01-15T04:30:00Z'), 'America/New_York')).toBe('2026-01-14')
+    expect(getTripLocalDate(new Date('2026-07-15T04:30:00Z'), 'America/New_York')).toBe('2026-07-15')
+  })
+
+  it('includes the entire start and end dates in the current trip status', () => {
+    const statusAt = (instant: string) => getTripStatus('2026-11-20', '2026-11-22', 'UTC+05:30', new Date(instant))
+    expect(statusAt('2026-11-19T18:29:59Z')).toBe('upcoming')
+    expect(statusAt('2026-11-19T18:30:00Z')).toBe('current')
+    expect(statusAt('2026-11-22T18:29:59Z')).toBe('current')
+    expect(statusAt('2026-11-22T18:30:00Z')).toBe('past')
+  })
+
   it('verifies locked provenance version and catalog count', () => {
     expect(timezoneCatalog.provenance.version).toBe('2026.6')
     expect(timezoneCatalog.provenance.source).toBe('tzdata.zoneinfo/zone.tab')

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils'
 import TripWorkspace from '../TripWorkspace.vue'
 import TripDialog from '../TripDialog.vue'
 import EventDialog from '../EventDialog.vue'
@@ -7,6 +7,7 @@ import ConfirmDialog from '../ConfirmDialog.vue'
 import * as travelApi from '../../api/travel'
 import * as convApi from '../../api/conversation'
 import * as searchApi from '../../api/search'
+import * as timezones from '../../utils/timezones'
 import type { Trip, Event, Place } from '../../types/travel'
 
 const mockUser = {
@@ -95,6 +96,8 @@ const mockEvents: Event[] = [
   }
 ]
 
+enableAutoUnmount(afterEach)
+
 describe('TripWorkspace and Travel Components', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -126,6 +129,7 @@ describe('TripWorkspace and Travel Components', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     document.body.innerHTML = ''
   })
 
@@ -246,105 +250,85 @@ describe('TripWorkspace and Travel Components', () => {
     wrapper.unmount()
   })
 
-  it('performs same-day move up / move down with active filters without discarding hidden IDs', async () => {
-    // 3 events on Day 1: E1 (景點), E2 (美食), E3 (景點)
-    const day1Events: Event[] = [
-      {
-        id: 'e-1',
-        trip_id: 'trip-1',
-        place_id: 'p-1',
-        place_name: '清水寺',
-        city: '京都市',
-        address: '',
-        category: '景點',
-        date: '2026-11-20',
-        time: '09:00',
-        notes: '',
-        position: 0,
-        version: 1
-      },
-      {
-        id: 'e-2',
-        trip_id: 'trip-1',
-        place_id: 'p-2',
-        place_name: '錦市場午餐',
-        city: '京都市',
-        address: '',
-        category: '美食',
-        date: '2026-11-20',
-        time: '12:00',
-        notes: '',
-        position: 1,
-        version: 1
-      },
-      {
-        id: 'e-3',
-        trip_id: 'trip-1',
-        place_id: 'p-3',
-        place_name: '金閣寺',
-        city: '京都市',
-        address: '',
-        category: '景點',
-        date: '2026-11-20',
-        time: '15:00',
-        notes: '',
-        position: 2,
-        version: 1
-      }
-    ]
-
-    vi.spyOn(travelApi, 'getTrip').mockResolvedValue({
-      trip: { ...mockTrips[0] },
-      events: day1Events,
-      next_edges: []
-    })
-
-    const reorderSpy = vi.spyOn(travelApi, 'reorderEvents').mockResolvedValue({
-      trip: { ...mockTrips[0], version: 2 },
-      events: [day1Events[0], day1Events[2], day1Events[1]],
-      next_edges: []
-    })
-
-    const wrapper = mount(TripWorkspace, {
-      props: { user: mockUser }
-    })
+  it.each([
+    ['2026-11-19T03:00:00Z', ['event-event-1', 'event-event-2', 'event-event-3']],
+    ['2026-11-20T03:00:00Z', ['event-event-3', 'event-event-2', 'event-event-1']],
+    ['2026-11-25T03:00:00Z', ['event-event-1', 'event-event-2', 'event-event-3']]
+  ])('displays the trip in state-based order at %s without rewriting its route', async (now, expected) => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date(now))
+    const reorder = vi.spyOn(travelApi, 'reorderEvents')
+    const original = mockEvents.map(e => ({ ...e }))
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
     await flushPromises()
-
-    // Select trip-1
     await wrapper.findAll('.trip-card')[0].trigger('click')
     await flushPromises()
+    expect(wrapper.findAll('.event-card').map(e => e.attributes('id'))).toEqual(expected)
+    expect(wrapper.find('.btn-reorder').exists()).toBe(false)
+    expect(wrapper.text()).toContain('接續足跡：金閣寺')
+    await wrapper.get('#category-filter').setValue('景點')
+    expect(wrapper.findAll('.event-card').map(e => e.attributes('id'))).toEqual(expected.filter(id => id !== 'event-event-3'))
+    expect(reorder).not.toHaveBeenCalled()
+    expect(mockEvents).toEqual(original)
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
 
-    // Filter to '景點' -> hides e-2 (錦市場午餐)
-    await wrapper.find('#category-filter').setValue('景點')
+  it('switches to forward order after the trip-local final day ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+    vi.setSystemTime(new Date('2026-11-24T14:59:30Z'))
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
     await flushPromises()
-
-    // Only e-1 and e-3 are visible
-    expect(wrapper.text()).toContain('清水寺')
-    expect(wrapper.text()).not.toContain('錦市場午餐')
-    expect(wrapper.text()).toContain('金閣寺')
-
-    // Find reorder buttons for visible cards
-    // e-1 is at position 0 in full day -> canMoveUp is false, canMoveDown is true
-    // e-3 is at position 2 in full day -> canMoveUp is true, canMoveDown is false
-    const reorderButtons = wrapper.findAll('.btn-reorder')
-    // e-1: move up disabled, move down enabled
-    expect((reorderButtons[0].element as HTMLButtonElement).disabled).toBe(true)
-    expect((reorderButtons[1].element as HTMLButtonElement).disabled).toBe(false)
-
-    // e-3: move up enabled, move down disabled
-    expect((reorderButtons[2].element as HTMLButtonElement).disabled).toBe(false)
-    expect((reorderButtons[3].element as HTMLButtonElement).disabled).toBe(true)
-
-    // Click "Move Up" on e-3 (金閣寺)
-    await reorderButtons[2].trigger('click')
+    await wrapper.findAll('.trip-card')[0].trigger('click')
     await flushPromises()
+    expect(wrapper.findAll('.event-card')[0].attributes('id')).toBe('event-event-3')
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(wrapper.findAll('.event-card')[0].attributes('id')).toBe('event-event-1')
+    expect(wrapper.findAll('.day-number')[0].text()).toBe('Day 1')
+    wrapper.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
 
-    // It swaps with its real adjacent sibling e-2 in full day, keeping e-1 first!
-    // And e-2 is NOT discarded! All 3 IDs are preserved!
-    expect(reorderSpy).toHaveBeenCalledWith('trip-1', {
-      version: 1,
-      event_ids: ['e-1', 'e-3', 'e-2']
+  it('offers delete before edit in the footprint header and keeps the city next to the place', async () => {
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    await wrapper.findAll('.trip-card')[0].trigger('click')
+    await flushPromises()
+    const card = wrapper.findAll('.event-card')[0]
+    expect(card.get('.event-place-name').text()).toContain('京都市')
+    expect(card.find('.event-footer-actions').exists()).toBe(false)
+    const actions = card.findAll('.event-header-actions button')
+    expect(actions[0].attributes('aria-label')).toContain('刪除')
+    expect(actions[1].attributes('aria-label')).toContain('編輯')
+    await actions[0].trigger('click')
+    const confirmation = wrapper.findAllComponents(ConfirmDialog).find(dialog => dialog.props('visible'))
+    expect(confirmation).toBeDefined()
+    confirmation!.vm.$emit('cancel')
+    await actions[1].trigger('click')
+    expect(wrapper.findComponent(EventDialog).props('visible')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('keeps a valid but unsupported timezone readable without guessing its status', async () => {
+    const originalStatus = timezones.getTripStatus
+    vi.spyOn(timezones, 'getTripStatus').mockImplementation((start, end, zone, now) => {
+      if (zone === 'America/Coyhaique') throw new RangeError('Unsupported timezone')
+      return originalStatus(start, end, zone, now)
     })
+    const trip = { ...mockTrips[0], timezone: 'America/Coyhaique' }
+    vi.spyOn(travelApi, 'listTrips').mockResolvedValue({ items: [trip] })
+    vi.spyOn(travelApi, 'getTrip').mockResolvedValue({ trip, events: mockEvents, next_edges: [] })
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    expect(wrapper.findAll('.trip-card')).toHaveLength(1)
+    await wrapper.get('select[aria-label="篩選旅程狀態"]').setValue('current')
+    expect(wrapper.findAll('.trip-card')).toHaveLength(0)
+    await wrapper.get('select[aria-label="篩選旅程狀態"]').setValue('all')
+    await wrapper.get('.trip-card').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('.timezone-notice').text()).toContain('暫依行程順序顯示')
+    expect(wrapper.findAll('.event-card').map(card => card.attributes('id'))).toEqual(['event-event-1', 'event-event-2', 'event-event-3'])
+    wrapper.unmount()
   })
 
   it('TripDialog manages focus: traps Tab/Shift+Tab, focuses first input, restores launcher on close', async () => {

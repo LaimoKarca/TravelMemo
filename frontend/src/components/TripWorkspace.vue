@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import type { User } from '../types/auth'
 import type {
   Trip,
@@ -19,8 +19,7 @@ import {
   deleteTrip,
   createEvent,
   updateEvent,
-  deleteEvent,
-  reorderEvents
+  deleteEvent
 } from '../api/travel'
 import {
   listPhotos,
@@ -35,6 +34,7 @@ import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import StatusAlert from './StatusAlert.vue'
 import AppIcon from './AppIcon.vue'
+import { getTripStatus } from '../utils/timezones'
 import BrandMark from './BrandMark.vue'
 import FootprintAssistant from './FootprintAssistant.vue'
 import TripDialog from './TripDialog.vue'
@@ -159,6 +159,16 @@ function clearAlert() {
 
 // Data state
 const trips = ref<Trip[]>([])
+const clockNow = ref(new Date())
+let clockTimer: ReturnType<typeof setInterval> | undefined
+function refreshClock() { clockNow.value = new Date() }
+function tripStatus(trip: Trip) {
+  try { return getTripStatus(trip.start_date, trip.end_date, trip.timezone, clockNow.value) }
+  catch (error) {
+    if (error instanceof RangeError) return 'unknown'
+    throw error
+  }
+}
 const tripQuery = ref('')
 const tripPeriod = ref('all')
 const tripYear = ref('')
@@ -167,11 +177,10 @@ const libraryFiltersActive = computed(() => tripPeriod.value !== 'all' || !!trip
 const accountName = computed(() => props.user.email.split('@')[0])
 const tripYears = computed(() => [...new Set(trips.value.map(t => t.start_date.slice(0, 4)))].sort().reverse())
 const visibleTrips = computed(() => {
-  const today = new Date().toLocaleDateString('en-CA')
   const q = tripQuery.value.trim().toLocaleLowerCase()
   return trips.value.filter(t => (!q || `${t.name} ${t.description || ''} ${t.timezone}`.toLocaleLowerCase().includes(q))
     && (!tripYear.value || t.start_date.startsWith(tripYear.value))
-    && (tripPeriod.value === 'all' || (tripPeriod.value === 'upcoming' ? t.start_date > today : tripPeriod.value === 'past' ? t.end_date < today : t.start_date <= today && t.end_date >= today)))
+    && (tripPeriod.value === 'all' || tripStatus(t) === tripPeriod.value))
     .sort((a, b) => b.start_date.localeCompare(a.start_date) || b.id.localeCompare(a.id))
 })
 const activeTripId = ref<string | null>(null)
@@ -285,12 +294,14 @@ const timelineGroups = computed<DayGroup[]>(() => {
 
   const groupsMap = new Map<string, Event[]>()
 
-  // Sort events by date ascending, then position ascending
+  const trip = currentTrip.value
+  const direction = tripStatus(trip) === 'current' ? -1 : 1
+  // Reverse only the presentation; recorded positions and NEXT remain unchanged.
   const sorted = [...filteredEvents.value].sort((a, b) => {
     if (a.date !== b.date) {
-      return a.date.localeCompare(b.date)
+      return direction * a.date.localeCompare(b.date)
     }
-    return a.position - b.position
+    return direction * (a.position - b.position || a.id.localeCompare(b.id))
   })
 
   for (const evt of sorted) {
@@ -302,7 +313,7 @@ const timelineGroups = computed<DayGroup[]>(() => {
   const startDate = new Date(currentTrip.value.start_date)
   const result: DayGroup[] = []
 
-  const sortedDates = Array.from(groupsMap.keys()).sort()
+  const sortedDates = Array.from(groupsMap.keys()).sort((a, b) => direction * a.localeCompare(b))
   for (const dateStr of sortedDates) {
     const curDate = new Date(dateStr)
     const diffDays = Math.round((curDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
@@ -324,26 +335,18 @@ function getNextEventName(eventId: string): string | null {
   return target ? `${target.place_name}` : null
 }
 
-// Check reordering bounds on the FULL same-day list (unaffected by active filters)
-function canMoveUpInDay(event: Event): boolean {
-  const sameDayEvents = currentEvents.value
-    .filter((e) => e.date === event.date)
-    .sort((a, b) => a.position - b.position)
-  const index = sameDayEvents.findIndex((e) => e.id === event.id)
-  return index > 0
-}
-
-function canMoveDownInDay(event: Event): boolean {
-  const sameDayEvents = currentEvents.value
-    .filter((e) => e.date === event.date)
-    .sort((a, b) => a.position - b.position)
-  const index = sameDayEvents.findIndex((e) => e.id === event.id)
-  return index >= 0 && index < sameDayEvents.length - 1
-}
-
 // Fetch all trips on mount
 onMounted(async () => {
+  refreshClock()
+  clockTimer = setInterval(refreshClock, 60000)
+  document.addEventListener('visibilitychange', refreshClock)
+  window.addEventListener('focus', refreshClock)
   await fetchTrips()
+})
+onBeforeUnmount(() => {
+  if (clockTimer !== undefined) clearInterval(clockTimer)
+  document.removeEventListener('visibilitychange', refreshClock)
+  window.removeEventListener('focus', refreshClock)
 })
 
 async function fetchTrips() {
@@ -690,60 +693,6 @@ function promptDeleteEvent(event: Event) {
   confirmDialogVisible.value = true
 }
 
-// --- Same-Day Move Up / Down Reorder per contract ---
-async function moveEventInDay(event: Event, direction: 'up' | 'down') {
-  if (!currentTrip.value || actionInProgress.value) return
-
-  const allEvents = [...currentEvents.value].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date)
-    return a.position - b.position
-  })
-
-  const sameDayEvents = allEvents.filter((e) => e.date === event.date)
-  const indexInDay = sameDayEvents.findIndex((e) => e.id === event.id)
-
-  if (direction === 'up' && indexInDay <= 0) return
-  if (direction === 'down' && indexInDay >= sameDayEvents.length - 1) return
-
-  const targetIndexInDay = direction === 'up' ? indexInDay - 1 : indexInDay + 1
-  const swapEvent = sameDayEvents[targetIndexInDay]
-
-  const globalIndexA = allEvents.findIndex((e) => e.id === event.id)
-  const globalIndexB = allEvents.findIndex((e) => e.id === swapEvent.id)
-
-  const reordered = [...allEvents]
-  reordered[globalIndexA] = swapEvent
-  reordered[globalIndexB] = event
-
-  const eventIds = reordered.map((e) => e.id)
-
-  actionInProgress.value = true
-  clearAlert()
-
-  try {
-    const res = await reorderEvents(currentTrip.value.id, {
-      version: currentTrip.value.version,
-      event_ids: eventIds
-    })
-    currentTrip.value = res.trip
-    currentEvents.value = (res.events || []).sort((a, b) => {
-      if (a.date !== b.date) return a.date.localeCompare(b.date)
-      return a.position - b.position
-    })
-    nextEdges.value = res.next_edges || []
-    showAlert('已更新足跡順序。', 'success')
-  } catch (err: any) {
-    if (err instanceof ApiError && err.status === 409) {
-      showAlert('順序調整提示：旅程紀錄已在其他地方更新，已為您重新整理最新狀態。', 'error')
-      await selectTrip(currentTrip.value.id)
-    } else {
-      showAlert(err instanceof ApiError ? err.detail : '調整足跡順序失敗。', 'error')
-    }
-  } finally {
-    actionInProgress.value = false
-  }
-}
-
 // Reset filters
 function resetFilters() {
   eventQuery.value = ''
@@ -1070,7 +1019,7 @@ function resetFilters() {
                         <line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
                     </span>
-                    <span>{{ currentTrip.start_date }} 至 {{ currentTrip.end_date }}</span>
+                    <span>{{ currentTrip.start_date }} ～ {{ currentTrip.end_date }}</span>
                     <span class="banner-tz-pill">{{ currentTrip.timezone }}</span>
                   </div>
                 </div>
@@ -1194,6 +1143,7 @@ function resetFilters() {
 
             <!-- Grouped Timeline -->
             <div v-else class="timeline-container">
+              <p v-if="tripStatus(currentTrip) === 'unknown'" class="timezone-notice" role="status">此裝置不支援這個旅程時區，暫依行程順序顯示。</p>
               <div
                 v-for="day in timelineGroups"
                 :key="day.date"
@@ -1235,39 +1185,20 @@ function resetFilters() {
                           </span>
                         </div>
 
-                        <!-- Same-Day Move Up / Down Buttons -->
-                        <div class="event-reorder-actions" aria-label="同日足跡順序調整">
-                          <button
-                            type="button"
-                            class="btn-reorder"
-                            :disabled="!canMoveUpInDay(evt) || actionInProgress"
-                            :title="!canMoveUpInDay(evt) ? '已是當日最前足跡' : '在同日足跡中往上移一位'"
-                            :aria-label="`將 ${evt.place_name} 往上移`"
-                            @click="moveEventInDay(evt, 'up')"
-                          >
-                            ▲ 往上移
-                          </button>
-                          <button
-                            type="button"
-                            class="btn-reorder"
-                            :disabled="!canMoveDownInDay(evt) || actionInProgress"
-                            :title="!canMoveDownInDay(evt) ? '已是當日最後足跡' : '在同日足跡中往下移一位'"
-                            :aria-label="`將 ${evt.place_name} 往下移`"
-                            @click="moveEventInDay(evt, 'down')"
-                          >
-                            ▼ 往下移
-                          </button>
+                        <div class="event-header-actions">
+                          <button type="button" class="icon-button event-delete" :disabled="actionInProgress" :aria-label="`刪除足跡：${evt.place_name}`" title="刪除足跡" @click="promptDeleteEvent(evt)"><AppIcon name="trash" /></button>
+                          <button type="button" class="icon-button" :disabled="actionInProgress" :aria-label="`編輯足跡：${evt.place_name}`" title="編輯足跡" @click="openEditEventModal(evt)"><AppIcon name="edit" /></button>
                         </div>
                       </div>
 
                       <div class="event-place-info">
-                        <h4 class="event-place-name">{{ evt.place_name }}</h4>
-                        <div v-if="evt.city || evt.address" class="event-location-text">
+                        <h4 class="event-place-name">{{ evt.place_name }} <span v-if="evt.city" class="event-city-tag">{{ evt.city }}</span></h4>
+                        <div v-if="evt.address" class="event-location-text">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                             <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                             <circle cx="12" cy="10" r="3" />
                           </svg>
-                          <span>{{ [evt.city, evt.address].filter(Boolean).join(' · ') }}</span>
+                          <span>{{ evt.address }}</span>
                         </div>
                       </div>
 
@@ -1302,25 +1233,6 @@ function resetFilters() {
                         <span class="next-target-name">{{ getNextEventName(evt.id) }}</span>
                       </div>
 
-                      <!-- Event Bottom Actions -->
-                      <div class="event-footer-actions">
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm"
-                          :disabled="actionInProgress"
-                          @click="openEditEventModal(evt)"
-                        >
-                          編輯
-                        </button>
-                        <button
-                          type="button"
-                          class="btn btn-secondary btn-sm btn-delete-text"
-                          :disabled="actionInProgress"
-                          @click="promptDeleteEvent(evt)"
-                        >
-                          刪除
-                        </button>
-                      </div>
                     </div>
                   </article>
                 </div>
@@ -1860,7 +1772,7 @@ function resetFilters() {
   border: none;
   border-radius: 0;
   padding: 0.25rem 0 .6rem;
-  margin-bottom: .75rem;
+  margin-bottom: .3125rem;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -2108,7 +2020,7 @@ function resetFilters() {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 1rem;
-  padding: .375rem 0;
+  padding: .1875rem 0;
   border-bottom: 1px solid var(--color-border);
   margin-bottom: .75rem;
 }
@@ -2288,35 +2200,6 @@ function resetFilters() {
   border-radius: var(--radius-xs);
 }
 
-.event-reorder-actions {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.btn-reorder {
-  min-height: 28px;
-  padding: 0.2rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 500;
-  background-color: var(--color-paper);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  color: var(--color-ink);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.btn-reorder:hover:not(:disabled) {
-  background-color: var(--color-maple-subtle);
-  border-color: var(--color-maple);
-  color: var(--color-maple);
-}
-
-.btn-reorder:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
 .event-place-name {
   font-size: 1.0625rem;
   font-weight: 700;
@@ -2365,14 +2248,6 @@ function resetFilters() {
 
 .next-target-name {
   font-weight: 600;
-}
-
-.event-footer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  border-top: 1px solid var(--color-border-light);
-  padding-top: 0.5rem;
 }
 
 .btn-sm {
@@ -2640,7 +2515,7 @@ function resetFilters() {
   .detail-actions .btn { padding-inline: .25rem; }
 }
 
-.title-edit { display: inline-flex; vertical-align: middle; margin-left: .25rem; }
+.title-edit { display: inline-flex; vertical-align: middle; margin-left: .25rem; border: 0; background: transparent; }
 .banner-trip-name { overflow-wrap: anywhere; }
 .trip-summary-title-wrap { gap: .4rem; }
 .filter-bar { display: flex; flex-direction: column; align-items: stretch; gap: .5rem; }
@@ -2656,4 +2531,14 @@ function resetFilters() {
 .event-filter-options .filter-select { width: 100%; min-width: 0; }
 .event-filter-options .filter-label { position: static; width: auto; height: auto; clip-path: none; }
 .event-filter-options .clear-filters-btn { justify-self: start; grid-column: 1 / -1; min-height: 28px; }
+
+.event-header-actions { display: flex; flex: 0 0 auto; gap: .35rem; }
+.event-header-actions .icon-button { min-width: 32px; width: 32px; height: 32px; padding: .4rem; color: var(--color-subtle); }
+.event-header-actions .icon-button:hover { color: var(--color-maple); }
+.event-header-actions .event-delete:hover { color: var(--color-error-text); }
+.event-place-name { overflow-wrap: anywhere; text-wrap: pretty; }
+.event-city-tag { display: inline-block; vertical-align: middle; font-size: .75rem; font-weight: 400; line-height: 1.4; margin-left: .3rem; padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-border-light); color: var(--color-subtle); }
+.event-tags { min-width: 0; flex-wrap: wrap; }
+.event-category-pill { overflow-wrap: anywhere; }
+.timezone-notice { font-size: .8rem; color: var(--color-subtle); }
 </style>

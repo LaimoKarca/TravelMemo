@@ -151,6 +151,39 @@ function parseFixedUtc(str: string): string | null {
   return `UTC${sign}${pad(hours)}:${pad(minutes)}`;
 }
 
+/** Calendar date at an instant in the trip's IANA zone or fixed UTC offset. */
+export function getTripLocalDate(now: Date, timeZone: string): string {
+  const fixed = parseFixedUtc(timeZone);
+  if (fixed) {
+    const minutes = (Number(fixed.slice(4, 6)) * 60 + Number(fixed.slice(7, 9)))
+      * (fixed[3] === '-' ? -1 : 1);
+    return new Date(now.getTime() + minutes * 60_000).toISOString().slice(0, 10);
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    calendar: 'gregory',
+    numberingSystem: 'latn',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const value = (type: 'year' | 'month' | 'day') => parts.find(part => part.type === type)!.value;
+  return `${value('year').padStart(4, '0')}-${value('month')}-${value('day')}`;
+}
+
+export function getTripStatus(
+  startDate: string,
+  endDate: string,
+  timeZone: string,
+  now: Date,
+): 'upcoming' | 'current' | 'past' {
+  const today = getTripLocalDate(now, timeZone);
+  if (today < startDate) return 'upcoming';
+  if (today > endDate) return 'past';
+  return 'current';
+}
+
 /**
  * Get formatted UTC offset at a given referenceDate (handling DST).
  * Returns e.g. "UTC+08:00", "UTC-04:00".
