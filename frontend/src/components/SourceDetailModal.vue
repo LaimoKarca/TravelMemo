@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { SearchEvent } from '../types/search'
+import type { EventDestination } from '../types/travel'
 import { getEvent } from '../api/search'
+import { listPhotos } from '../api/photos'
+import type { PhotoDTO } from '../types/photo'
 import { ApiError } from '../api/auth'
 import AppIcon from './AppIcon.vue'
+import PhotoGallery from './PhotoGallery.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -13,13 +17,16 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'jump', payload: { tripId: string; eventId: string }): void
+  (e: 'jump', payload: EventDestination): void
 }>()
 
 const loading = ref(false)
 const errorMessage = ref('')
 const currentEvent = ref<SearchEvent | null>(null)
 const isDeleted = ref(false)
+const photos = ref<PhotoDTO[]>([])
+const loadingPhotos = ref(false)
+const photoError = ref(false)
 
 let loadEventGen = 0
 const modalRef = ref<HTMLElement | null>(null)
@@ -32,6 +39,9 @@ watch(
       previousActiveElement = document.activeElement as HTMLElement | null
       errorMessage.value = ''
       isDeleted.value = false
+      photos.value = []
+      loadingPhotos.value = false
+      photoError.value = false
 
       // Use initialEvent search snapshot as preview only while fetching fresh data
       if (initEvt) {
@@ -82,6 +92,7 @@ async function loadEvent(id: string) {
       return
     }
     currentEvent.value = fetched
+    if (!fetched.trip_id) void loadPhotos(id, currentGen)
   } catch (err: any) {
     const activeTargetId = props.eventId || props.initialEvent?.id
     if (!props.visible || currentGen !== loadEventGen || activeTargetId !== id) {
@@ -101,6 +112,18 @@ async function loadEvent(id: string) {
   }
 }
 
+async function loadPhotos(id: string, generation: number) {
+  loadingPhotos.value = true
+  try {
+    const result = await listPhotos({ event_id: id })
+    if (generation === loadEventGen) photos.value = result.items
+  } catch {
+    if (generation === loadEventGen) photoError.value = true
+  } finally {
+    if (generation === loadEventGen) loadingPhotos.value = false
+  }
+}
+
 function focusFirstElement() {
   if (!modalRef.value) return
   const focusables = modalRef.value.querySelectorAll<HTMLElement>(
@@ -112,7 +135,7 @@ function focusFirstElement() {
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (!props.visible || !modalRef.value) return
+  if (!props.visible || !modalRef.value || document.querySelector('.lightbox-backdrop')) return
 
   if (e.key === 'Escape') {
     e.preventDefault()
@@ -223,6 +246,8 @@ function handleJump() {
           <span class="notes-label">隨筆備忘：</span>
           <p class="notes-text">{{ currentEvent.notes }}</p>
         </div>
+        <p v-if="photoError" role="status">暫時無法載入照片。</p>
+        <PhotoGallery v-if="!currentEvent.trip_id && (loadingPhotos || photos.length)" :key="currentEvent.id" :photos="photos" :loading="loadingPhotos" :can-delete="false" :can-edit-caption="false" @refresh="loadPhotos(currentEvent.id, loadEventGen)" />
 
       </div>
 
@@ -238,7 +263,7 @@ function handleJump() {
             <polyline points="15 3 21 3 21 9" />
             <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
-          <span>前往手記</span>
+          <span>{{ currentEvent.trip_id ? '前往手記' : '前往足跡' }}</span>
         </button>
       </footer>
     </div>

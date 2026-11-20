@@ -122,7 +122,7 @@ describe('Media Frontend Integration', () => {
 
     expect(wrapper.text()).toContain('根據您上傳的照片，這是京都嵐山的渡月橋。')
     expect(wrapper.find('.answer-scope-pill').exists()).toBe(false)
-    expect(wrapper.text()).toContain('引用手記照片：')
+    expect(wrapper.text()).toContain('照片來源')
     expect(wrapper.text()).toContain('嵐山渡月橋')
 
     // Renders photo thumbnails

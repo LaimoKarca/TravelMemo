@@ -1,7 +1,12 @@
+import datetime
+from functools import wraps
 from threading import RLock
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from neo4j import Driver
+from neo4j.exceptions import TransientError
+
+from backend.timezones import normalize_timezone
 
 
 def deterministic_category_id(owner_id: str, normalized_name: str) -> str:
@@ -29,6 +34,20 @@ class TravelValidationError(Exception):
         self.message = message
 
 
+def optimistic_write(operation):
+    @wraps(operation)
+    def wrapped(*args, **kwargs):
+        try:
+            return operation(*args, **kwargs)
+        except TransientError as exc:
+            # A competing attach/bind can also contend on relationship group locks.
+            # The failed transaction is rolled back before returning a retryable 409.
+            if exc.code == "Neo.TransientError.Transaction.DeadlockDetected":
+                raise TravelConflictError("資料正在其他頁面更新，請重新整理後再試。") from exc
+            raise
+    return wrapped
+
+
 def find_event_insert_index(events: list[dict], new_date: str) -> int:
     """Finds index to append after existing same-date events while keeping dates nondecreasing."""
     for idx, ev in enumerate(events):
@@ -42,6 +61,19 @@ def build_next_edges(events: list[dict]) -> list[dict]:
     return [
         {"from_id": events[i]["id"], "to_id": events[i + 1]["id"]} for i in range(len(events) - 1)
     ]
+
+
+def validate_attachment(event: dict, trip: dict, events: list[dict], before_id: str | None) -> int:
+    if not trip["start_date"] <= event["date"] <= trip["end_date"]:
+        raise TravelValidationError("足跡日期不在手記日期範圍內。")
+    if normalize_timezone(event.get("timezone", "Asia/Taipei")) != normalize_timezone(trip.get("timezone", "Asia/Taipei")):
+        raise TravelValidationError("足跡與手記時區不同，請先調整足跡的日期與時區。")
+    if before_id is not None:
+        for position, row in enumerate(events):
+            if row["id"] == before_id and row["date"] == event["date"]:
+                return position
+        raise TravelValidationError("指定的前置位置必須是同本手記、同一天的足跡。")
+    return find_event_insert_index(events, event["date"])
 
 
 def format_trip(t: dict) -> dict:
@@ -59,7 +91,7 @@ def format_trip(t: dict) -> dict:
 def format_event(e: dict) -> dict:
     return {
         "id": e["id"],
-        "trip_id": e["trip_id"],
+        "trip_id": e.get("trip_id"),
         "place_id": e["place_id"],
         "place_name": e["place_name"],
         "city": e.get("city", ""),
@@ -68,8 +100,10 @@ def format_event(e: dict) -> dict:
         "date": e["date"],
         "time": e.get("time"),
         "notes": e.get("notes", ""),
-        "position": e.get("position", 0),
+        "position": e.get("position", 0) if e.get("trip_id") else None,
         "version": e["version"],
+        "timezone": e.get("timezone", "Asia/Taipei"),
+        "record_scope": "trip" if e.get("trip_id") else "standalone",
     }
 
 
@@ -91,6 +125,7 @@ class MemoryTravelRepository:
         self.places: dict[str, dict] = {}
         self.categories: dict[str, dict] = {}
         self.lock = RLock()
+        self.photo_store = None
 
     def initialize(self):
         pass
@@ -168,6 +203,8 @@ class MemoryTravelRepository:
             trip["start_date"] = data["start_date"]
             trip["end_date"] = data["end_date"]
             trip["timezone"] = data.get("timezone", "Asia/Taipei")
+            for event in trip_events:
+                event["timezone"] = trip["timezone"]
             trip["description"] = data.get("description", "")
             trip["version"] += 1
             return format_trip(trip)
@@ -217,7 +254,7 @@ class MemoryTravelRepository:
             if not event or event.get("owner_id") != owner_id:
                 return None
             res = format_event(event)
-            trip = self.trips.get(event["trip_id"])
+            trip = self.trips.get(event.get("trip_id"))
             if trip:
                 res["trip_name"] = trip.get("name", "")
             return res
@@ -280,6 +317,8 @@ class MemoryTravelRepository:
             new_event = {
                 "id": event_id,
                 "trip_id": trip_id,
+                "timezone": trip.get("timezone", "Asia/Taipei"),
+                "record_scope": "trip",
                 "owner_id": owner_id,
                 "place_id": place["id"],
                 "place_name": place["name"],
@@ -303,6 +342,62 @@ class MemoryTravelRepository:
             trip["version"] += 1
             return format_event(new_event)
 
+    def list_standalone_events(self, owner_id: str, *, q: str = "", city: str | None = None,
+                               category: str | None = None, date_from: str | None = None,
+                               date_to: str | None = None, limit: int = 20, offset: int = 0) -> dict:
+        with self.lock:
+            query = q.strip().casefold()
+            events = [e for e in self.events.values() if e.get("owner_id") == owner_id
+                      and not e.get("trip_id")
+                      and (not city or e.get("city") == city)
+                      and (not category or e.get("category") == category)
+                      and (not date_from or e["date"] >= date_from)
+                      and (not date_to or e["date"] <= date_to)
+                      and (not query or query in " ".join(str(e.get(k, "")) for k in
+                           ("place_name", "city", "address", "category", "notes")).casefold())]
+            events.sort(key=lambda e: e["id"])
+            events.sort(key=lambda e: (e["date"], e.get("time") or "", e.get("created_at") or ""), reverse=True)
+            page = events[offset:offset + limit + 1]
+            return {"items": [format_event(e) for e in page[:limit]],
+                    "next_offset": offset + limit if len(page) > limit else None}
+
+    def create_standalone_event(self, owner_id: str, data: dict) -> dict:
+        with self.lock:
+            place = self._resolve_place_on_create(owner_id, data)
+            event = {"id": str(uuid4()), "owner_id": owner_id, "trip_id": None,
+                     "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="microseconds"),
+                     "record_scope": "standalone", "timezone": normalize_timezone(data.get("timezone", "Asia/Taipei")),
+                     "place_id": place["id"], "place_name": place["name"],
+                     "city": place.get("city", ""), "address": place.get("address", ""),
+                     "category": self._resolve_category(owner_id, data.get("category", "未分類")),
+                     "date": data["date"], "time": data.get("time"), "notes": data.get("notes", ""),
+                     "position": None, "version": 1, "embedding_status": "pending", "embedded_version": 0}
+            self.events[event["id"]] = event
+            return format_event(event)
+
+    def attach_event_to_trip(self, owner_id: str, event_id: str, data: dict) -> dict:
+        with self.lock:
+            event = self.events.get(event_id)
+            trip = self.trips.get(data["trip_id"])
+            if not event or event.get("owner_id") != owner_id:
+                raise TravelNotFoundError("找不到指定的足跡。")
+            if not trip or trip.get("owner_id") != owner_id:
+                raise TravelNotFoundError("找不到指定的手記。")
+            if event["version"] != data["version"] or event.get("trip_id") or trip["version"] != data["trip_version"]:
+                raise TravelConflictError("足跡或手記已變更，請重新整理後再試。")
+            events = [e for e in self.events.values() if e.get("owner_id") == owner_id and e.get("trip_id") == trip["id"]]
+            events.sort(key=lambda e: (e.get("position", 0), e["id"]))
+            insert_at = validate_attachment(event, trip, events, data.get("before_event_id"))
+            if self.photo_store is not None:
+                self.photo_store.sync_event_trip(owner_id, event_id, trip["id"])
+            event.update(trip_id=trip["id"], record_scope="trip", timezone=trip.get("timezone", "Asia/Taipei"),
+                         version=event["version"] + 1, embedding_status="pending")
+            events.insert(insert_at, event)
+            for position, row in enumerate(events):
+                row["position"] = position
+            trip["version"] += 1
+            return format_event(event)
+
     def update_event(self, owner_id: str, event_id: str, data: dict) -> dict:
         with self.lock:
             event = self.events.get(event_id)
@@ -311,12 +406,22 @@ class MemoryTravelRepository:
             if event["version"] != data["version"]:
                 raise TravelConflictError("事件已被修改，請重新整理後再試。")
 
+            if not event.get("trip_id"):
+                place = self._resolve_place_on_create(owner_id, data)
+                event.update(place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
+                             address=place.get("address", ""), category=self._resolve_category(owner_id, data["category"]),
+                             date=data["date"], time=data.get("time"), notes=data.get("notes", ""),
+                             timezone=normalize_timezone(data.get("timezone") or event.get("timezone", "Asia/Taipei")),
+                             version=event["version"] + 1, embedding_status="pending")
+                return format_event(event)
             trip = self.trips.get(event["trip_id"])
             if not trip or trip.get("owner_id") != owner_id:
                 raise TravelNotFoundError("找不到指定的旅程。")
 
             if data["date"] < trip["start_date"] or data["date"] > trip["end_date"]:
                 raise TravelValidationError("事件日期必須在旅程日期範圍內。")
+            if data.get("timezone") and normalize_timezone(data["timezone"]) != trip.get("timezone", "Asia/Taipei"):
+                raise TravelValidationError("手記足跡使用手記的時區，請於編輯手記調整。")
 
             # Place resolution:
             # If supplied place_id, use authoritative existing place fields.
@@ -352,6 +457,7 @@ class MemoryTravelRepository:
             event["notes"] = data.get("notes", "")
             event["version"] += 1
             event["embedding_status"] = "pending"
+            event["timezone"] = trip.get("timezone", "Asia/Taipei")
 
             trip_events = [
                 e
@@ -380,6 +486,9 @@ class MemoryTravelRepository:
             if event["version"] != version:
                 raise TravelConflictError("事件已被修改，請重新整理後再試。")
 
+            if not event.get("trip_id"):
+                del self.events[event_id]
+                return
             trip = self.trips.get(event["trip_id"])
             if not trip or trip.get("owner_id") != owner_id:
                 raise TravelNotFoundError("找不到指定的旅程。")
@@ -458,6 +567,20 @@ class Neo4jTravelRepository:
                     f"CREATE CONSTRAINT {label.lower()}_{prop} IF NOT EXISTS "
                     f"FOR (n:{label}) REQUIRE n.{prop} IS UNIQUE"
                 ).consume()
+            # Backfill only ownership paths whose IDs and properties agree. Never infer
+            # ownership from an unverified Event.owner_id property alone.
+            session.run("""
+                MATCH (u:User)-[:OWNS]->(t:Trip)-[:HAS_EVENT]->(e:Event)
+                WHERE u.id = t.owner_id AND e.owner_id = u.id AND e.trip_id = t.id
+                  AND NOT EXISTS { MATCH (other:Trip)-[:HAS_EVENT]->(e) WHERE other <> t }
+                  AND NOT EXISTS { MATCH (other:User)-[:OWNS_EVENT]->(e) WHERE other <> u }
+                MERGE (u)-[:OWNS_EVENT]->(e)
+                SET e.record_scope = 'trip', e.timezone = coalesce(t.timezone, 'Asia/Taipei')
+                """).consume()
+            session.run("""
+                CREATE INDEX event_owner_scope IF NOT EXISTS
+                FOR (e:Event) ON (e.owner_id, e.record_scope, e.date)
+                """).consume()
 
     def close(self):
         pass
@@ -508,10 +631,12 @@ class Neo4jTravelRepository:
 
             events_res = tx.run(
                 """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event)
+                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event {owner_id: $owner_id, trip_id: $trip_id})
+                    MATCH (:User {id:$owner_id})-[:OWNS_EVENT]->(e)
                     RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
                            e.city AS city, e.address AS address, e.category AS category, e.date AS date,
-                           e.time AS time, e.notes AS notes, e.position AS position, e.version AS version
+                           e.time AS time, e.notes AS notes, e.position AS position, e.version AS version,
+                           coalesce(t.timezone, 'Asia/Taipei') AS timezone, 'trip' AS record_scope
                     ORDER BY e.position ASC, e.id ASC
                     """,
                 owner_id=owner_id,
@@ -521,7 +646,8 @@ class Neo4jTravelRepository:
 
             next_res = tx.run(
                 """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e1:Event)-[:NEXT]->(e2:Event)
+                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e1:Event {owner_id:$owner_id, trip_id:$trip_id})-[:NEXT]->(e2:Event {owner_id:$owner_id, trip_id:$trip_id})
+                    MATCH (t)-[:HAS_EVENT]->(e2)
                     RETURN e1.id AS from_id, e2.id AS to_id
                     ORDER BY e1.position ASC
                     """,
@@ -610,6 +736,10 @@ class Neo4jTravelRepository:
                 timezone=data.get("timezone", "Asia/Taipei"),
                 description=data.get("description", ""),
             ).single()
+            tx.run("""
+                MATCH (:Trip {id:$trip, owner_id:$owner})-[:HAS_EVENT]->(e:Event {owner_id:$owner, trip_id:$trip})
+                SET e.timezone=$zone
+                """, owner=owner_id, trip=trip_id, zone=data.get("timezone", "Asia/Taipei")).consume()
             tx.commit()
             return dict(upd)
 
@@ -683,495 +813,232 @@ class Neo4jTravelRepository:
         with self.driver.session(database=self.database) as session:
             res = session.run(
                 """
-                MATCH (t:Trip {owner_id: $owner_id})-[:HAS_EVENT]->(e:Event {id: $event_id, owner_id: $owner_id})
+                MATCH (:User {id: $owner_id})-[:OWNS_EVENT]->(e:Event {id: $event_id, owner_id: $owner_id})
+                OPTIONAL MATCH (:User {id: $owner_id})-[:OWNS]->(t:Trip {owner_id: $owner_id})-[:HAS_EVENT]->(e)
+                WITH e, t WHERE (e.trip_id IS NULL AND NOT EXISTS { MATCH (:Trip)-[:HAS_EVENT]->(e) }) OR e.trip_id = t.id
                 RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
                        e.city AS city, e.address AS address, e.category AS category, e.date AS date,
                        e.time AS time, e.notes AS notes, e.position AS position, e.version AS version,
-                       t.name AS trip_name
+                       t.name AS trip_name, coalesce(t.timezone, e.timezone, 'Asia/Taipei') AS timezone,
+                       CASE WHEN e.trip_id IS NULL THEN 'standalone' ELSE 'trip' END AS record_scope
                 """,
                 owner_id=owner_id,
                 event_id=event_id,
             ).single()
             return dict(res) if res else None
 
+    @staticmethod
+    def _locked_trip(tx, owner_id: str, trip_id: str) -> dict:
+        row = tx.run("""
+            MATCH (:User {id:$owner})-[:OWNS]->(t:Trip {id:$id, owner_id:$owner})
+            SET t.__lock = coalesce(t.__lock, 0) + 1
+            RETURN properties(t) AS trip
+            """, owner=owner_id, id=trip_id).single()
+        if not row:
+            raise TravelNotFoundError("找不到指定的手記。")
+        return dict(row["trip"])
+
+    @staticmethod
+    def _locked_event(tx, owner_id: str, event_id: str) -> dict:
+        # SET establishes a node write lock before the following query reads state.
+        locked = tx.run("""
+            MATCH (e:Event {id:$id, owner_id:$owner})
+            SET e.__standalone_lock = coalesce(e.__standalone_lock, 0) + 1
+            RETURN e.id AS id
+            """, owner=owner_id, id=event_id).single()
+        if not locked:
+            raise TravelNotFoundError("找不到指定的足跡。")
+        row = tx.run("MATCH (:User {id:$owner})-[:OWNS_EVENT]->(e:Event {id:$id, owner_id:$owner}) RETURN properties(e) AS event",
+                     owner=owner_id, id=event_id).single()
+        if not row:
+            raise TravelNotFoundError("找不到指定的足跡。")
+        return dict(row["event"])
+
+    @staticmethod
+    def _event_links(tx, owner_id: str, data: dict) -> tuple[dict, str]:
+        if data.get("place_id"):
+            row = tx.run("""MATCH (:User {id:$owner})-[:OWNS_PLACE]->(p:Place {id:$id, owner_id:$owner})
+                            RETURN properties(p) AS place""", owner=owner_id, id=data["place_id"]).single()
+            if not row:
+                raise TravelNotFoundError("找不到指定的地點。")
+            place = dict(row["place"])
+        else:
+            place = {"id": str(uuid4()), "owner_id": owner_id, "name": data["place_name"],
+                     "city": data.get("city", ""), "address": data.get("address", "")}
+            tx.run("""MERGE (u:User {id:$owner}) CREATE (p:Place) SET p=$place
+                      CREATE (u)-[:OWNS_PLACE]->(p)""", owner=owner_id, place=place).consume()
+        category = data.get("category", "未分類")
+        cat_id = deterministic_category_id(owner_id, category.strip())
+        tx.run("""MERGE (u:User {id:$owner}) MERGE (c:Category {id:$id})
+                  ON CREATE SET c.owner_id=$owner, c.name=$name, c.normalized_name=$norm
+                  MERGE (u)-[:OWNS_CATEGORY]->(c)""",
+               owner=owner_id, id=cat_id, name=category, norm=category.strip()).consume()
+        return place, cat_id
+
+    @staticmethod
+    def _trip_event_rows(tx, owner_id: str, trip_id: str) -> list[dict]:
+        return [dict(row) for row in tx.run("""
+            MATCH (:User {id:$owner})-[:OWNS_EVENT]->(e:Event {owner_id:$owner, trip_id:$trip})
+                  <-[:HAS_EVENT]-(:Trip {id:$trip, owner_id:$owner})
+            RETURN e.id AS id, e.date AS date, e.position AS position
+            ORDER BY e.position, e.id
+            """, owner=owner_id, trip=trip_id)]
+
+    @staticmethod
+    def _set_trip_order(tx, owner_id: str, trip_id: str, rows: list[dict]):
+        updates = [{"id": row["id"], "position": pos} for pos, row in enumerate(rows)]
+        tx.run("""UNWIND $updates AS row
+                  MATCH (:Trip {id:$trip, owner_id:$owner})-[:HAS_EVENT]->(e:Event {id:row.id, owner_id:$owner})
+                  SET e.position=row.position""", updates=updates, owner=owner_id, trip=trip_id).consume()
+        tx.run("""MATCH (:Trip {id:$trip, owner_id:$owner})-[:HAS_EVENT]->(e:Event {owner_id:$owner})-[r:NEXT]->()
+                  DELETE r""", trip=trip_id, owner=owner_id).consume()
+        tx.run("""UNWIND $pairs AS pair
+                  MATCH (t:Trip {id:$trip, owner_id:$owner})-[:HAS_EVENT]->(a:Event {id:pair.from_id, owner_id:$owner})
+                  MATCH (t)-[:HAS_EVENT]->(b:Event {id:pair.to_id, owner_id:$owner})
+                  CREATE (a)-[:NEXT]->(b)""",
+               pairs=build_next_edges(rows), trip=trip_id, owner=owner_id).consume()
+        tx.run("""MATCH (t:Trip {id:$trip, owner_id:$owner}) SET t.version=t.version+1""",
+               trip=trip_id, owner=owner_id).consume()
+
+    def list_standalone_events(self, owner_id: str, *, q: str = "", city: str | None = None,
+                               category: str | None = None, date_from: str | None = None,
+                               date_to: str | None = None, limit: int = 20, offset: int = 0) -> dict:
+        with self.driver.session(database=self.database) as session:
+            rows = list(session.run("""
+                MATCH (:User {id:$owner})-[:OWNS_EVENT]->(e:Event {owner_id:$owner, record_scope:'standalone'})
+                WHERE e.trip_id IS NULL AND NOT EXISTS { MATCH (:Trip)-[:HAS_EVENT]->(e) }
+                  AND ($city IS NULL OR e.city=$city) AND ($category IS NULL OR e.category=$category)
+                  AND ($date_from IS NULL OR e.date >= $date_from) AND ($date_to IS NULL OR e.date <= $date_to)
+                  AND ($q='' OR toLower(coalesce(e.place_name,'')+' '+coalesce(e.city,'')+' '+coalesce(e.address,'')+' '+
+                       coalesce(e.category,'')+' '+coalesce(e.notes,'')) CONTAINS $q)
+                RETURN properties(e) AS event ORDER BY e.date DESC, coalesce(e.time,'') DESC,
+                    coalesce(e.created_at,'') DESC, e.id ASC
+                SKIP $offset LIMIT $limit
+                """, owner=owner_id, city=city or None, category=category or None,
+                date_from=date_from, date_to=date_to, q=q.strip().lower(), offset=offset, limit=limit+1))
+            return {"items": [format_event(dict(row["event"])) for row in rows[:limit]],
+                    "next_offset": offset+limit if len(rows)>limit else None}
+
+    def create_standalone_event(self, owner_id: str, data: dict) -> dict:
+        return self._create_event(owner_id, None, data)
+
     def create_event(self, owner_id: str, trip_id: str, data: dict) -> dict:
-        with (
-            self.driver.session(database=self.database) as session,
-            session.begin_transaction() as tx,
-        ):
-            # Lock trip node
-            trip_res = tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})
-                    SET t.__lock = coalesce(t.__lock, 0) + 1
-                    RETURN t.version AS version, t.start_date AS start_date, t.end_date AS end_date
-                    """,
-                owner_id=owner_id,
-                trip_id=trip_id,
-            ).single()
-            if not trip_res:
-                raise TravelNotFoundError("找不到指定的旅程。")
+        return self._create_event(owner_id, trip_id, data)
 
-            start_date = trip_res["start_date"]
-            end_date = trip_res["end_date"]
-            if data["date"] < start_date or data["date"] > end_date:
+    def _create_event(self, owner_id: str, trip_id: str | None, data: dict) -> dict:
+        with self.driver.session(database=self.database) as session, session.begin_transaction() as tx:
+            trip = self._locked_trip(tx, owner_id, trip_id) if trip_id else None
+            if trip and not trip["start_date"] <= data["date"] <= trip["end_date"]:
                 raise TravelValidationError("事件日期必須在旅程日期範圍內。")
-
-            # Resolve Place
-            place_id = data.get("place_id")
-            if place_id:
-                p_res = tx.run(
-                    """
-                        MATCH (p:Place {id: $place_id, owner_id: $owner_id})
-                        RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
-                        """,
-                    owner_id=owner_id,
-                    place_id=place_id,
-                ).single()
-                if not p_res:
-                    raise TravelNotFoundError("找不到指定的地點。")
-                place = dict(p_res)
-            else:
-                new_place_id = str(uuid4())
-                p_res = tx.run(
-                    """
-                        MERGE (u:User {id: $owner_id})
-                        CREATE (p:Place {
-                            id: $id,
-                            owner_id: $owner_id,
-                            name: $name,
-                            city: $city,
-                            address: $address
-                        })
-                        CREATE (u)-[:OWNS_PLACE]->(p)
-                        RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
-                        """,
-                    owner_id=owner_id,
-                    id=new_place_id,
-                    name=data["place_name"],
-                    city=data.get("city", ""),
-                    address=data.get("address", ""),
-                ).single()
-                place = dict(p_res)
-
-            # Resolve Category deterministically under owner
-            norm = data["category"].strip()
-            cat_id = deterministic_category_id(owner_id, norm)
-            tx.run(
-                """
-                    MERGE (u:User {id: $owner_id})
-                    MERGE (c:Category {id: $cat_id})
-                    ON CREATE SET c.owner_id = $owner_id, c.name = $name, c.normalized_name = $norm
-                    MERGE (u)-[:OWNS_CATEGORY]->(c)
-                    """,
-                owner_id=owner_id,
-                cat_id=cat_id,
-                name=data["category"],
-                norm=norm,
-            ).consume()
-
-            # Get existing events ordered by position
-            ev_res = tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event)
-                    RETURN e.id AS id, e.date AS date, e.position AS position
-                    ORDER BY e.position ASC, e.id ASC
-                    """,
-                owner_id=owner_id,
-                trip_id=trip_id,
-            )
-            existing_events = [dict(r) for r in ev_res]
-
-            insert_idx = find_event_insert_index(existing_events, data["date"])
-
-            event_id = str(uuid4())
-            new_event_meta = {"id": event_id, "date": data["date"], "position": insert_idx}
-            existing_events.insert(insert_idx, new_event_meta)
-
-            # Create event node and relationships
-            created_ev = tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})
-                    MATCH (p:Place {id: $place_id, owner_id: $owner_id})
-                    MATCH (c:Category {id: $cat_id})
-                    CREATE (e:Event {
-                        id: $id,
-                        trip_id: $trip_id,
-                        owner_id: $owner_id,
-                        place_id: $place_id,
-                        place_name: $place_name,
-                        city: $city,
-                        address: $address,
-                        category: $category,
-                        date: $date,
-                        time: $time,
-                        notes: $notes,
-                        position: $position,
-                        version: 1,
-                        embedding_status: 'pending',
-                        embedded_version: 0
-                    })
-                    CREATE (t)-[:HAS_EVENT]->(e)
-                    CREATE (e)-[:AT]->(p)
-                    CREATE (e)-[:HAS_CATEGORY]->(c)
-                    RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
-                           e.city AS city, e.address AS address, e.category AS category, e.date AS date,
-                           e.time AS time, e.notes AS notes, e.position AS position, e.version AS version
-                    """,
-                trip_id=trip_id,
-                owner_id=owner_id,
-                place_id=place["id"],
-                cat_id=cat_id,
-                id=event_id,
-                place_name=place["name"],
-                city=place["city"],
-                address=place["address"],
-                category=data["category"],
-                date=data["date"],
-                time=data.get("time"),
-                notes=data.get("notes", ""),
-                position=insert_idx,
-            ).single()
-
-            # Update positions
-            pos_updates = [
-                {"id": ev["id"], "position": idx}
-                for idx, ev in enumerate(existing_events)
-                if ev["position"] != idx or ev["id"] == event_id
-            ]
-            if pos_updates:
-                tx.run(
-                    """
-                        UNWIND $updates AS u
-                        MATCH (e:Event {id: u.id})
-                        SET e.position = u.position
-                        """,
-                    updates=pos_updates,
-                ).consume()
-
-            # Rebuild NEXT edges in this trip
-            tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id})-[:HAS_EVENT]->(e1:Event)-[r:NEXT]->(e2:Event)
-                    DELETE r
-                    """,
-                trip_id=trip_id,
-            ).consume()
-
-            pairs = [
-                {"from_id": existing_events[i]["id"], "to_id": existing_events[i + 1]["id"]}
-                for i in range(len(existing_events) - 1)
-            ]
-            if pairs:
-                tx.run(
-                    """
-                        UNWIND $pairs AS p
-                        MATCH (e1:Event {id: p.from_id})
-                        MATCH (e2:Event {id: p.to_id})
-                        CREATE (e1)-[:NEXT]->(e2)
-                        """,
-                    pairs=pairs,
-                ).consume()
-
-            # Increment trip version
-            tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})
-                    SET t.version = t.version + 1
-                    """,
-                trip_id=trip_id,
-                owner_id=owner_id,
-            ).consume()
-
+            place, cat_id = self._event_links(tx, owner_id, data)
+            event = {"id": str(uuid4()), "owner_id": owner_id, "trip_id": trip_id,
+                     "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="microseconds"),
+                     "record_scope": "trip" if trip else "standalone",
+                     "timezone": normalize_timezone(trip.get("timezone", "Asia/Taipei") if trip else data.get("timezone", "Asia/Taipei")),
+                     "place_id": place["id"], "place_name": place["name"], "city": place.get("city", ""),
+                     "address": place.get("address", ""), "category": data.get("category", "未分類"),
+                     "date": data["date"], "time": data.get("time"), "notes": data.get("notes", ""),
+                     "position": None, "version": 1, "embedding_status": "pending", "embedded_version": 0}
+            rows = self._trip_event_rows(tx, owner_id, trip_id) if trip else []
+            if trip:
+                event["position"] = find_event_insert_index(rows, event["date"])
+                rows.insert(event["position"], event)
+            tx.run("""MATCH (u:User {id:$owner})
+                      MATCH (p:Place {id:$place, owner_id:$owner}), (c:Category {id:$category, owner_id:$owner})
+                      CREATE (e:Event) SET e=$event
+                      CREATE (u)-[:OWNS_EVENT]->(e), (e)-[:AT]->(p), (e)-[:HAS_CATEGORY]->(c)""",
+                   owner=owner_id, place=place["id"], category=cat_id, event=event).consume()
+            if trip:
+                tx.run("""MATCH (t:Trip {id:$trip, owner_id:$owner}), (e:Event {id:$event, owner_id:$owner})
+                          CREATE (t)-[:HAS_EVENT]->(e)""", trip=trip_id, event=event["id"], owner=owner_id).consume()
+                self._set_trip_order(tx, owner_id, trip_id, rows)
             tx.commit()
-            return dict(created_ev)
+            return format_event(event)
 
+    @optimistic_write
     def update_event(self, owner_id: str, event_id: str, data: dict) -> dict:
-        with (
-            self.driver.session(database=self.database) as session,
-            session.begin_transaction() as tx,
-        ):
-            check_res = tx.run(
-                """
-                    MATCH (e:Event {id: $event_id, owner_id: $owner_id})
-                    MATCH (t:Trip {id: e.trip_id, owner_id: $owner_id})
-                    SET t.__lock = coalesce(t.__lock, 0) + 1
-                    RETURN e.version AS event_version, e.trip_id AS trip_id, e.date AS old_date,
-                           t.start_date AS start_date, t.end_date AS end_date
-                    """,
-                owner_id=owner_id,
-                event_id=event_id,
-            ).single()
-            if not check_res:
-                raise TravelNotFoundError("找不到指定的事件。")
-            if check_res["event_version"] != data["version"]:
-                raise TravelConflictError("事件已被修改，請重新整理後再試。")
-
-            trip_id = check_res["trip_id"]
-            old_date = check_res["old_date"]
-            start_date = check_res["start_date"]
-            end_date = check_res["end_date"]
-
-            if data["date"] < start_date or data["date"] > end_date:
+        current = self.get_event(owner_id, event_id)
+        if not current:
+            raise TravelNotFoundError("找不到指定的足跡。")
+        with self.driver.session(database=self.database) as session, session.begin_transaction() as tx:
+            trip_id = current.get("trip_id")
+            trip = self._locked_trip(tx, owner_id, trip_id) if trip_id else None
+            event = self._locked_event(tx, owner_id, event_id)
+            if event.get("trip_id") != trip_id or event["version"] != data["version"]:
+                raise TravelConflictError("足跡已被修改，請重新整理後再試。")
+            if trip and not trip["start_date"] <= data["date"] <= trip["end_date"]:
                 raise TravelValidationError("事件日期必須在旅程日期範圍內。")
-
-            # Place resolution
-            place_id = data.get("place_id")
-            if place_id:
-                p_res = tx.run(
-                    """
-                        MATCH (p:Place {id: $place_id, owner_id: $owner_id})
-                        RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
-                        """,
-                    owner_id=owner_id,
-                    place_id=place_id,
-                ).single()
-                if not p_res:
-                    raise TravelNotFoundError("找不到指定的地點。")
-                place = dict(p_res)
-            else:
-                new_place_id = str(uuid4())
-                p_res = tx.run(
-                    """
-                        MERGE (u:User {id: $owner_id})
-                        CREATE (p:Place {
-                            id: $id,
-                            owner_id: $owner_id,
-                            name: $name,
-                            city: $city,
-                            address: $address
-                        })
-                        CREATE (u)-[:OWNS_PLACE]->(p)
-                        RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
-                        """,
-                    owner_id=owner_id,
-                    id=new_place_id,
-                    name=data["place_name"],
-                    city=data.get("city", ""),
-                    address=data.get("address", ""),
-                ).single()
-                place = dict(p_res)
-
-            # Resolve Category deterministically under owner
-            norm = data["category"].strip()
-            cat_id = deterministic_category_id(owner_id, norm)
-            tx.run(
-                """
-                    MERGE (u:User {id: $owner_id})
-                    MERGE (c:Category {id: $cat_id})
-                    ON CREATE SET c.owner_id = $owner_id, c.name = $name, c.normalized_name = $norm
-                    MERGE (u)-[:OWNS_CATEGORY]->(c)
-                    """,
-                owner_id=owner_id,
-                cat_id=cat_id,
-                name=data["category"],
-                norm=norm,
-            ).consume()
-
-            # Ordering
-            ev_res = tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event)
-                    RETURN e.id AS id, e.date AS date, e.position AS position
-                    ORDER BY e.position ASC, e.id ASC
-                    """,
-                owner_id=owner_id,
-                trip_id=trip_id,
-            )
-            existing_events = [dict(r) for r in ev_res]
-
-            new_date = data["date"]
-            if old_date != new_date:
-                # Move to end of new date group
-                existing_events = [e for e in existing_events if e["id"] != event_id]
-                insert_idx = find_event_insert_index(existing_events, new_date)
-                existing_events.insert(insert_idx, {"id": event_id, "date": new_date})
-
-            pos_map = {ev["id"]: idx for idx, ev in enumerate(existing_events)}
-
-            # Update event node
-            upd_ev = tx.run(
-                """
-                    MATCH (e:Event {id: $event_id, owner_id: $owner_id})
-                    MATCH (p:Place {id: $place_id, owner_id: $owner_id})
-                    MATCH (c:Category {id: $cat_id})
-                    SET e.place_id = $place_id,
-                        e.place_name = $place_name,
-                        e.city = $city,
-                        e.address = $address,
-                        e.category = $category,
-                        e.date = $date,
-                        e.time = $time,
-                        e.notes = $notes,
-                        e.position = $position,
-                        e.version = e.version + 1,
-                        e.embedding_status = 'pending'
-                    WITH e, p, c
-                    OPTIONAL MATCH (e)-[r1:AT]->(:Place)
-                    DELETE r1
-                    WITH e, p, c
-                    OPTIONAL MATCH (e)-[r2:HAS_CATEGORY]->(:Category)
-                    DELETE r2
-                    CREATE (e)-[:AT]->(p)
-                    CREATE (e)-[:HAS_CATEGORY]->(c)
-                    RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
-                           e.city AS city, e.address AS address, e.category AS category, e.date AS date,
-                           e.time AS time, e.notes AS notes, e.position AS position, e.version AS version
-                    """,
-                event_id=event_id,
-                owner_id=owner_id,
-                place_id=place["id"],
-                cat_id=cat_id,
-                place_name=place["name"],
-                city=place["city"],
-                address=place["address"],
-                category=data["category"],
-                date=new_date,
-                time=data.get("time"),
-                notes=data.get("notes", ""),
-                position=pos_map[event_id],
-            ).single()
-
-            if old_date != new_date:
-                pos_updates = [{"id": eid, "position": pos} for eid, pos in pos_map.items()]
-                tx.run(
-                    """
-                        UNWIND $updates AS u
-                        MATCH (e:Event {id: u.id})
-                        SET e.position = u.position
-                        """,
-                    updates=pos_updates,
-                ).consume()
-
-                # Rebuild NEXT edges
-                tx.run(
-                    """
-                        MATCH (t:Trip {id: $trip_id})-[:HAS_EVENT]->(e1:Event)-[r:NEXT]->(e2:Event)
-                        DELETE r
-                        """,
-                    trip_id=trip_id,
-                ).consume()
-
-                pairs = [
-                    {
-                        "from_id": existing_events[i]["id"],
-                        "to_id": existing_events[i + 1]["id"],
-                    }
-                    for i in range(len(existing_events) - 1)
-                ]
-                if pairs:
-                    tx.run(
-                        """
-                            UNWIND $pairs AS p
-                            MATCH (e1:Event {id: p.from_id})
-                            MATCH (e2:Event {id: p.to_id})
-                            CREATE (e1)-[:NEXT]->(e2)
-                            """,
-                        pairs=pairs,
-                    ).consume()
-
-            # Increment trip version
-            tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})
-                    SET t.version = t.version + 1
-                    """,
-                trip_id=trip_id,
-                owner_id=owner_id,
-            ).consume()
-
+            zone = normalize_timezone((trip or {}).get("timezone") or data.get("timezone") or event.get("timezone", "Asia/Taipei"))
+            if trip and data.get("timezone") and normalize_timezone(data["timezone"]) != zone:
+                raise TravelValidationError("手記足跡使用手記的時區，請於編輯手記調整。")
+            place, cat_id = self._event_links(tx, owner_id, data)
+            rows = self._trip_event_rows(tx, owner_id, trip_id) if trip else []
+            if trip and data["date"] != event["date"]:
+                rows = [row for row in rows if row["id"] != event_id]
+                rows.insert(find_event_insert_index(rows, data["date"]), {"id":event_id,"date":data["date"]})
+            event.update(place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
+                         address=place.get("address", ""), category=data["category"], date=data["date"],
+                         time=data.get("time"), notes=data.get("notes", ""), timezone=zone,
+                         version=event["version"]+1, embedding_status="pending",
+                         position=next((pos for pos,row in enumerate(rows) if row["id"]==event_id), None))
+            event.pop("__standalone_lock", None)
+            tx.run("""MATCH (e:Event {id:$id, owner_id:$owner}) SET e=$event
+                      WITH e OPTIONAL MATCH (e)-[r:AT|HAS_CATEGORY]->() DELETE r""",
+                   id=event_id, owner=owner_id, event=event).consume()
+            tx.run("""MATCH (e:Event {id:$id, owner_id:$owner}), (p:Place {id:$place, owner_id:$owner}),
+                            (c:Category {id:$category, owner_id:$owner})
+                      CREATE (e)-[:AT]->(p), (e)-[:HAS_CATEGORY]->(c)""",
+                   id=event_id, owner=owner_id, place=place["id"], category=cat_id).consume()
+            if trip:
+                self._set_trip_order(tx, owner_id, trip_id, rows)
             tx.commit()
-            return dict(upd_ev)
+            return format_event(event)
 
+    @optimistic_write
     def delete_event(self, owner_id: str, event_id: str, version: int) -> None:
-        with (
-            self.driver.session(database=self.database) as session,
-            session.begin_transaction() as tx,
-        ):
-            check_res = tx.run(
-                """
-                    MATCH (e:Event {id: $event_id, owner_id: $owner_id})
-                    MATCH (t:Trip {id: e.trip_id, owner_id: $owner_id})
-                    SET t.__lock = coalesce(t.__lock, 0) + 1
-                    RETURN e.version AS event_version, e.trip_id AS trip_id
-                    """,
-                owner_id=owner_id,
-                event_id=event_id,
-            ).single()
-            if not check_res:
-                raise TravelNotFoundError("找不到指定的事件。")
-            if check_res["event_version"] != version:
-                raise TravelConflictError("事件已被修改，請重新整理後再試。")
-
-            trip_id = check_res["trip_id"]
-
-            # Delete event (Place is preserved)
-            tx.run(
-                """
-                    MATCH (e:Event {id: $event_id})
-                    DETACH DELETE e
-                    """,
-                event_id=event_id,
-            ).consume()
-
-            # Remaining events
-            ev_res = tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event)
-                    RETURN e.id AS id, e.position AS position
-                    ORDER BY e.position ASC, e.id ASC
-                    """,
-                owner_id=owner_id,
-                trip_id=trip_id,
-            )
-            remaining = [dict(r) for r in ev_res]
-
-            pos_updates = [{"id": ev["id"], "position": idx} for idx, ev in enumerate(remaining)]
-            if pos_updates:
-                tx.run(
-                    """
-                        UNWIND $updates AS u
-                        MATCH (e:Event {id: u.id})
-                        SET e.position = u.position
-                        """,
-                    updates=pos_updates,
-                ).consume()
-
-            # Rebuild NEXT edges
-            tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id})-[:HAS_EVENT]->(e1:Event)-[r:NEXT]->(e2:Event)
-                    DELETE r
-                    """,
-                trip_id=trip_id,
-            ).consume()
-
-            pairs = [
-                {"from_id": remaining[i]["id"], "to_id": remaining[i + 1]["id"]}
-                for i in range(len(remaining) - 1)
-            ]
-            if pairs:
-                tx.run(
-                    """
-                        UNWIND $pairs AS p
-                        MATCH (e1:Event {id: p.from_id})
-                        MATCH (e2:Event {id: p.to_id})
-                        CREATE (e1)-[:NEXT]->(e2)
-                        """,
-                    pairs=pairs,
-                ).consume()
-
-            # Increment trip version
-            tx.run(
-                """
-                    MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})
-                    SET t.version = t.version + 1
-                    """,
-                trip_id=trip_id,
-                owner_id=owner_id,
-            ).consume()
-
+        current = self.get_event(owner_id, event_id)
+        if not current:
+            raise TravelNotFoundError("找不到指定的足跡。")
+        with self.driver.session(database=self.database) as session, session.begin_transaction() as tx:
+            trip_id = current.get("trip_id")
+            if trip_id:
+                self._locked_trip(tx, owner_id, trip_id)
+            event = self._locked_event(tx, owner_id, event_id)
+            if event.get("trip_id") != trip_id or event["version"] != version:
+                raise TravelConflictError("足跡已被修改，請重新整理後再試。")
+            tx.run("MATCH (e:Event {id:$id, owner_id:$owner}) DETACH DELETE e",
+                   id=event_id, owner=owner_id).consume()
+            if trip_id:
+                self._set_trip_order(tx, owner_id, trip_id, self._trip_event_rows(tx, owner_id, trip_id))
             tx.commit()
+
+    @optimistic_write
+    def attach_event_to_trip(self, owner_id: str, event_id: str, data: dict) -> dict:
+        from backend.photo_store import sync_event_photo_trip
+
+        with self.driver.session(database=self.database) as session, session.begin_transaction() as tx:
+            event = self._locked_event(tx, owner_id, event_id)
+            if event.get("trip_id") or event["version"] != data["version"]:
+                raise TravelConflictError("足跡已被修改或已屬於手記，請重新整理後再試。")
+            trip_id = data["trip_id"]
+            trip = self._locked_trip(tx, owner_id, trip_id)
+            if trip["version"] != data["trip_version"]:
+                raise TravelConflictError("手記已被修改，請重新整理後再試。")
+            rows = self._trip_event_rows(tx, owner_id, trip_id)
+            position = validate_attachment(event, trip, rows, data.get("before_event_id"))
+            rows.insert(position, {"id":event_id,"date":event["date"]})
+            tx.run("""MATCH (t:Trip {id:$trip, owner_id:$owner}), (e:Event {id:$id, owner_id:$owner})
+                      CREATE (t)-[:HAS_EVENT]->(e)
+                      SET e.trip_id=$trip, e.record_scope='trip', e.timezone=$zone,
+                          e.version=e.version+1, e.embedding_status='pending'
+                      REMOVE e.__standalone_lock""",
+                   owner=owner_id, id=event_id, trip=trip_id, zone=trip.get("timezone", "Asia/Taipei")).consume()
+            sync_event_photo_trip(tx, owner_id, event_id, trip_id)
+            self._set_trip_order(tx, owner_id, trip_id, rows)
+            event.update(trip_id=trip_id, timezone=trip.get("timezone", "Asia/Taipei"), record_scope="trip",
+                         version=event["version"]+1, position=position, embedding_status="pending")
+            tx.commit()
+            return format_event(event)
 
     def reorder_events(
         self, owner_id: str, trip_id: str, version: int, event_ids: list[str]

@@ -321,6 +321,7 @@ class FootprintStore:
                 position = find_event_insert_index(existing, item["date"])
                 existing.insert(position, {"id": event_id, "date": item["date"]})
                 event = {"id": event_id, "owner_id": owner, "trip_id": trip_id, "place_id": place_id,
+                             "timezone": trip.get("timezone", "Asia/Taipei"), "record_scope": "trip",
                              "place_name": item["place_name"], "city": item.get("city", ""), "address": item.get("address", ""),
                              "category": category, "date": item["date"], "time": item.get("time"), "notes": item.get("notes", ""),
                              "version": 1, "position": position, "embedding_status": "pending", "embedded_version": 0}
@@ -334,6 +335,7 @@ class FootprintStore:
                     MERGE (u)-[:OWNS_CATEGORY]->(c)
                     CREATE (e:Event) SET e=$event
                     CREATE (t)-[:HAS_EVENT]->(e)
+                    CREATE (u)-[:OWNS_EVENT]->(e)
                     CREATE (e)-[:AT]->(p)
                     CREATE (e)-[:HAS_CATEGORY]->(c)
                     """, trip=trip_id, owner=owner, place=place_id, name=event["place_name"], city=event["city"],

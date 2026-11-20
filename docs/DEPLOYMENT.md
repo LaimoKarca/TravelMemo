@@ -44,6 +44,7 @@ E5 僅載入一份、CPU最多兩個編碼執行緒、批次最多8筆。模型�
 archive 解壓縮到 `releases\<version>`，其下保留 repo 目錄。
 從 release 的 repo 根目錄執行（填實際私人設定絕對路徑）。
 既有站台升級前先依 [備份與還原](BACKUP_RESTORE.md)建立並驗證備份，記下原 RELEASE_ID。
+升級至支援日常足跡的版本時，API 啟動會補齊既有足跡的擁有者關係、時區及搜尋範圍，必要時重建向量索引定義。資料量較大時，請等待健康檢查就緒，並依回退流程使用升級前的備份。
 
 ```powershell
 $env:RELEASE_ID = '<release-tag>'

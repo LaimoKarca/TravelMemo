@@ -32,9 +32,26 @@ def trip_question(text):
     ))
 
 
+def standalone_question(text: str) -> bool:
+    mentions_standalone = re.search(r"日常足跡|\bstandalone (?:footprints|visits)\b", text, re.IGNORECASE)
+    mentions_journals = re.search(r"旅行手記|旅程手記|\b(?:journals?|trips?)\b", text, re.IGNORECASE)
+    return bool(mentions_standalone and not mentions_journals)
+
+
+def standalone_listing(text: str) -> bool:
+    question = text.strip().rstrip("？?。！!").strip()
+    return bool(re.fullmatch(
+        r"(?:我)?最近(?:記了哪些|有什麼|有哪些|的)?日常足跡|"
+        r"列出(?:我(?:的)?)?(?:最近的?)?日常足跡|"
+        r"(?:我的)?日常足跡(?:有哪些|有什麼)|"
+        r"(?:list |what are )?(?:my )?recent standalone (?:footprints|visits)",
+        question, re.IGNORECASE,
+    ))
+
+
 class ToolCall(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    name: Literal["list_trips", "get_trip", "search_events", "search_photos"]
+    name: Literal["list_trips", "get_trip", "list_standalone_events", "search_events", "search_photos"]
     arguments: dict = Field(default_factory=dict)
 
 
@@ -49,6 +66,11 @@ class TripArgs(BaseModel):
     trip_id: str = Field(min_length=1, max_length=100)
 
 
+class RecentArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int = Field(default=8, ge=1, le=8)
+
+
 def tool_definitions():
     def function(name, description, parameters):
         return {"type": "function", "name": name, "description": description, "parameters": parameters, "strict": True}
@@ -57,8 +79,12 @@ def tool_definitions():
     return [
         function("list_trips", "List this user's travel journals, including journals with no recorded visits. Query matches journal names and descriptions.", search_schema),
         function("get_trip", "Read this user's journal header and notes by its journal ID. A journal does not prove any unrecorded visit.", {"type": "object", "properties": {"trip_id": {"type": "string"}}, "required": ["trip_id"], "additionalProperties": False}),
+        function(
+            "list_standalone_events", "List up to eight of this user's recent independent visits in date order.",
+            {"type": "object", "properties": {"limit": {"type": "integer"}}, "required": ["limit"], "additionalProperties": False},
+        ),
         function("search_events", "Search this user's verified recorded visits using text clues.", search_schema),
-        function("search_photos", "Search this user's journal-attached photos by their stored analysis text, not visual similarity.", search_schema),
+        function("search_photos", "Search photos attached to this user's records by stored analysis text, not visual similarity.", search_schema),
     ]
 
 
@@ -80,6 +106,15 @@ class AssistantTools:
             args = TripArgs.model_validate(call.arguments)
             trip = self.repository.get_trip(owner, args.trip_id) if self.repository else None
             return {"trip": self.trip_data(trip) if trip else None}
+        if call.name == "list_standalone_events":
+            args = RecentArgs.model_validate(call.arguments)
+            get_recent = getattr(self.repository, "list_standalone_events", None)
+            result = get_recent(owner, limit=args.limit) if get_recent else {"items": []}
+            fields = ("id", "trip_id", "date", "time", "place_name", "version", "record_scope")
+            return {
+                "events": [{field: event.get(field) for field in fields} for event in result["items"][:args.limit]],
+                "has_more": result.get("next_offset") is not None,
+            }
         args = SearchArgs.model_validate(call.arguments)
         if call.name == "list_trips":
             trips = self.repository.get_trips(owner) if self.repository else []
@@ -96,7 +131,38 @@ class AssistantTools:
         results = photos.search(owner, query=args.query, limit=min(args.limit, 8)) if photos else []
         return {"photos": [{"id": r["photo"]["id"], "caption": r["photo"].get("caption", "")[:200]} for r in results[:8]]}
 
+    def answer_recent_events(self, service, owner, cid):
+        result = self.execute(owner, {
+            "name": "list_standalone_events", "arguments": {"limit": min(8, max(1, service.evidence_limit))},
+        })
+        lines, citations = [], []
+        for event in result["events"]:
+            citation = service._verify_citation(owner, {
+                "event_id": event["id"], "trip_id": None, "date": event["date"],
+                "place_name": event["place_name"], "version": event["version"],
+            })
+            if citation["state"] != "current" or citation["trip_id"] is not None:
+                continue
+            timestamp = f"{event['date']} {event['time']}" if event["time"] else event["date"]
+            lines.append(f"• {event['place_name']}（{timestamp}）")
+            citations.append(citation)
+        if lines:
+            text = "最近的日常足跡\n" + "\n".join(lines)
+            if result["has_more"]:
+                text += "\n更多紀錄可在日常足跡分頁查看。"
+        elif result["events"]:
+            text = "日常足跡剛才有變更，請再問一次以取得最新紀錄。"
+        else:
+            text = "目前還沒有日常足跡。可以到日常足跡記下一次到訪。"
+        return service.store.add_message(
+            owner, cid, "assistant", text, status="answered",
+            created_at=service._iso_now(), citations=citations,
+            answer_scope="memory" if citations else "general",
+        )
+
     def answer(self, service, owner, cid, question, previous):
+        if self.repository and standalone_listing(question):
+            return self.answer_recent_events(service, owner, cid)
         last_sources = []
         for message in reversed(previous):
             if message.get("role") == "assistant":

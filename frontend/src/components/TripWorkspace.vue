@@ -41,6 +41,8 @@ import TripDialog from './TripDialog.vue'
 import EventDialog from './EventDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import RecallSearch from './RecallSearch.vue'
+import StandaloneFootprints from './StandaloneFootprints.vue'
+import type { EventDestination } from '../types/travel'
 import ConversationView from './ConversationView.vue'
 import SourceDetailModal from './SourceDetailModal.vue'
 import TravelDivider from './TravelDivider.vue'
@@ -61,20 +63,22 @@ const emit = defineEmits<{
 const { isTabWashing, triggerTabWash, handleActionClick } = useTravelMotion()
 
 // Workspace active tab navigation
-type WorkspaceTab = 'trips' | 'search' | 'chat'
+type WorkspaceTab = 'trips' | 'footprints' | 'search' | 'chat'
 const activeTab = ref<WorkspaceTab>('trips')
 
 interface WorkspaceTabItem {
   id: WorkspaceTab
   label: string
+  shortLabel: string
   tabId: string
   panelId: string
 }
 
 const TABS: WorkspaceTabItem[] = [
-  { id: 'trips', label: '旅行手記', tabId: 'workspace-tab-trips', panelId: 'workspace-panel-trips' },
-  { id: 'search', label: '回憶搜尋', tabId: 'workspace-tab-search', panelId: 'workspace-panel-search' },
-  { id: 'chat', label: 'AI 對話', tabId: 'workspace-tab-chat', panelId: 'workspace-panel-chat' }
+  { id: 'trips', label: '旅行手記', shortLabel: '手記', tabId: 'workspace-tab-trips', panelId: 'workspace-panel-trips' },
+  { id: 'footprints', label: '日常足跡', shortLabel: '足跡', tabId: 'workspace-tab-footprints', panelId: 'workspace-panel-footprints' },
+  { id: 'search', label: '回憶搜尋', shortLabel: '搜尋', tabId: 'workspace-tab-search', panelId: 'workspace-panel-search' },
+  { id: 'chat', label: 'AI 助理', shortLabel: 'AI', tabId: 'workspace-tab-chat', panelId: 'workspace-panel-chat' }
 ]
 
 const tabButtonRefs = ref<(HTMLButtonElement | null)[]>([])
@@ -83,6 +87,7 @@ function setTabRef(el: any, index: number) {
 }
 
 function switchTab(tab: WorkspaceTab) {
+  if (tab !== 'footprints') focusedStandaloneId.value = null
   if (tab === 'trips') {
     activeTab.value = tab
     backToTripList()
@@ -121,11 +126,16 @@ const showSourceModal = ref(false)
 const sourceModalEventId = ref<string | null>(null)
 const sourceModalInitialEvent = ref<SearchEvent | null>(null)
 const highlightedEventId = ref<string | null>(null)
+const focusedStandaloneId = ref<string | null>(null)
+
+function handleViewEvent(event: SearchEvent) {
+  sourceModalInitialEvent.value = event
+  sourceModalEventId.value = event.id
+  showSourceModal.value = true
+}
 
 function handleViewSearchSource(item: SearchItem) {
-  sourceModalInitialEvent.value = item.event
-  sourceModalEventId.value = item.event.id
-  showSourceModal.value = true
+  handleViewEvent(item.event)
 }
 
 function handleViewCitation(cite: Citation) {
@@ -134,7 +144,14 @@ function handleViewCitation(cite: Citation) {
   showSourceModal.value = true
 }
 
-async function handleJumpToTrip(payload: { tripId: string; eventId?: string }) {
+async function handleJumpToTrip(payload: EventDestination) {
+  if (!payload.tripId) {
+    if (!payload.eventId) return
+    switchTab('footprints')
+    focusedStandaloneId.value = payload.eventId
+    return
+  }
+  focusedStandaloneId.value = null
   activeTab.value = 'trips'
   await selectTrip(payload.tripId)
   if (activeTripId.value !== payload.tripId) return
@@ -143,7 +160,7 @@ async function handleJumpToTrip(payload: { tripId: string; eventId?: string }) {
   await nextTick()
   const el = document.getElementById(`event-${payload.eventId}`)
   if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
   }
 }
 
@@ -311,7 +328,7 @@ const timelineGroups = computed<DayGroup[]>(() => {
     if (a.date !== b.date) {
       return direction * a.date.localeCompare(b.date)
     }
-    return direction * (a.position - b.position || a.id.localeCompare(b.id))
+    return direction * ((a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id))
   })
 
   for (const evt of sorted) {
@@ -395,7 +412,7 @@ async function selectTrip(tripId: string) {
     currentTrip.value = res.trip
     currentEvents.value = (res.events || []).sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date)
-      return a.position - b.position
+      return (a.position ?? 0) - (b.position ?? 0)
     })
   } catch (err: any) {
     if (generation !== detailGeneration) return
@@ -767,6 +784,7 @@ function resetFilters() {
             <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
             <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
           </svg>
+          <AppIcon v-else-if="t.id === 'footprints'" name="pin" />
           <svg v-else-if="t.id === 'search'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -1254,7 +1272,11 @@ function resetFilters() {
           </section>
         </div>
 
-        <!-- TAB 2: Recall Search View -->
+        <div v-else-if="activeTab === 'footprints'" id="workspace-panel-footprints" role="tabpanel" aria-labelledby="workspace-tab-footprints" class="tabpanel-container" tabindex="0">
+          <StandaloneFootprints :focus-id="focusedStandaloneId" @view="handleViewEvent" @jump="handleJumpToTrip" @notice="showAlert" @unfocus="focusedStandaloneId = null" />
+        </div>
+
+        <!-- Recall Search View -->
         <div
           v-else-if="activeTab === 'search'"
           id="workspace-panel-search"
@@ -1289,7 +1311,7 @@ function resetFilters() {
       </div>
     </main>
 
-    <!-- Mobile Bottom Navigation Bar (Three functions) -->
+    <!-- Mobile bottom navigation -->
     <nav class="mobile-bottom-nav" aria-label="行動快捷功能">
       <TravelDivider orientation="horizontal" />
       <button
@@ -1297,6 +1319,7 @@ function resetFilters() {
         :key="t.id"
         type="button"
         class="mobile-nav-btn"
+        :aria-label="t.label"
         :class="{ 'is-active': activeTab === t.id }"
         :aria-pressed="activeTab === t.id"
         @click="(e) => { handleActionClick(e); switchTab(t.id); }"
@@ -1305,6 +1328,7 @@ function resetFilters() {
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
           <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
         </svg>
+        <AppIcon v-else-if="t.id === 'footprints'" name="pin" />
         <svg v-else-if="t.id === 'search'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -1312,7 +1336,7 @@ function resetFilters() {
         <svg v-else-if="t.id === 'chat'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        <span>{{ t.label }}</span>
+        <span>{{ t.shortLabel }}</span>
       </button>
     </nav>
 
@@ -2383,19 +2407,20 @@ function resetFilters() {
   }
 
   .workspace-content-pane.is-chat-pane {
-    padding: 0.75rem 0.875rem calc(56px + 0.75rem);
+    padding: 0.75rem 0.875rem calc(56px + 0.75rem + env(safe-area-inset-bottom, 0px));
     height: calc(100vh - 56px);
   }
 
-  /* Mobile bottom 3-tab navigation */
+  /* Mobile bottom navigation */
   .mobile-bottom-nav {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    height: 56px;
+    height: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background-color: var(--color-paper);
     border-top: none;
     z-index: 10;

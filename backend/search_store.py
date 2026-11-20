@@ -151,6 +151,10 @@ def passes_filters(event: dict[str, Any], filters: dict[str, Any] | None) -> boo
         return True
     if filters.get("trip_id") and event.get("trip_id") != filters["trip_id"]:
         return False
+    scope = filters.get("record_scope")
+    event_scope = event.get("record_scope") or ("trip" if event.get("trip_id") else "standalone")
+    if scope and scope != "all" and scope != event_scope:
+        return False
     if filters.get("date_from") and event.get("date", "") < filters["date_from"]:
         return False
     if filters.get("date_to") and event.get("date", "") > filters["date_to"]:
@@ -229,7 +233,7 @@ class MemorySearchStore:
     ) -> list[dict[str, Any]]:
         with self.repository.lock:
             anchor = self.repository.events.get(anchor_id)
-            if not anchor or anchor.get("owner_id") != owner_id:
+            if not anchor or anchor.get("owner_id") != owner_id or not anchor.get("trip_id"):
                 return []
 
             trip_events = [
@@ -390,6 +394,7 @@ class Neo4jSearchStore:
                 "embedding",
                 "owner_id",
                 "trip_id",
+                "record_scope",
                 "date",
                 "city",
                 "category",
@@ -417,7 +422,7 @@ class Neo4jSearchStore:
                 CYPHER 25
                 CREATE VECTOR INDEX event_embeddings IF NOT EXISTS
                 FOR (e:Event) ON (e.embedding)
-                WITH [e.owner_id, e.trip_id, e.date, e.city, e.category, e.embedding_status, e.embedding_model_revision]
+                WITH [e.owner_id, e.trip_id, e.record_scope, e.date, e.city, e.category, e.embedding_status, e.embedding_model_revision]
                 OPTIONS {indexConfig: {
                   `vector.dimensions`: 384,
                   `vector.similarity_function`: 'cosine'
@@ -461,6 +466,9 @@ class Neo4jSearchStore:
         if filters.get("trip_id"):
             predicates.append("e.trip_id = $trip_id")
             params["trip_id"] = filters["trip_id"]
+        if filters.get("record_scope") in ("trip", "standalone"):
+            predicates.append("e.record_scope = $record_scope")
+            params["record_scope"] = filters["record_scope"]
         if filters.get("city"):
             predicates.append("e.city = $city")
             params["city"] = filters["city"]
@@ -486,6 +494,9 @@ class Neo4jSearchStore:
         )
         SCORE AS score
         WHERE e.embedded_version = e.version
+          AND EXISTS {{
+            MATCH (:User {{id: $owner_id}})-[:OWNS_EVENT]->(e)
+          }}
         RETURN e, score
         ORDER BY score DESC, e.id ASC
         """
@@ -503,8 +514,9 @@ class Neo4jSearchStore:
     ) -> list[tuple[dict[str, Any], float]]:
         filters = filters or {}
         cypher = """
-        MATCH (e:Event {owner_id: $owner_id})
+        MATCH (:User {id: $owner_id})-[:OWNS_EVENT]->(e:Event {owner_id: $owner_id})
         WHERE ($trip_id IS NULL OR e.trip_id = $trip_id)
+          AND ($record_scope IS NULL OR e.record_scope = $record_scope)
           AND ($date_from IS NULL OR e.date >= $date_from)
           AND ($date_to IS NULL OR e.date <= $date_to)
           AND ($city IS NULL OR e.city = $city)
@@ -515,6 +527,7 @@ class Neo4jSearchStore:
         params = {
             "owner_id": owner_id,
             "trip_id": filters.get("trip_id"),
+            "record_scope": filters.get("record_scope") if filters.get("record_scope") in ("trip", "standalone") else None,
             "date_from": filters.get("date_from"),
             "date_to": filters.get("date_to"),
             "city": filters.get("city"),
@@ -539,23 +552,20 @@ class Neo4jSearchStore:
         anchor_id: str,
         direction: str = "next",
     ) -> list[dict[str, Any]]:
-        if direction == "next":
-            cypher = """
-            MATCH (a:Event {id: $anchor_id, owner_id: $owner_id})-[:NEXT]->(t:Event {owner_id: $owner_id})
-            RETURN t
-            """
-        else:
-            cypher = """
-            MATCH (t:Event {owner_id: $owner_id})-[:NEXT]->(a:Event {id: $anchor_id, owner_id: $owner_id})
-            RETURN t
-            """
+        edge = "-[:NEXT]->" if direction == "next" else "<-[:NEXT]-"
+        cypher = f"""
+        MATCH (u:User {{id: $owner_id}})-[:OWNS_EVENT]->(a:Event {{id: $anchor_id, owner_id: $owner_id}})
+        MATCH (a){edge}(t:Event {{owner_id: $owner_id}})<-[:OWNS_EVENT]-(u)
+        WHERE a.trip_id IS NOT NULL AND t.trip_id = a.trip_id
+        RETURN DISTINCT t
+        """
         with self.driver.session(database=self.database) as session:
             res = session.run(cypher, parameters={"anchor_id": anchor_id, "owner_id": owner_id}).data()
             return [dict(r["t"]) for r in res]
 
     def get_owned_categories(self, owner_id: str) -> set[str]:
         cypher = """
-        MATCH (e:Event {owner_id: $owner_id})
+        MATCH (:User {id: $owner_id})-[:OWNS_EVENT]->(e:Event {owner_id: $owner_id})
         WHERE e.category IS NOT NULL AND e.category <> ''
         RETURN DISTINCT e.category AS category
         """

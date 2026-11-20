@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
+from backend.assistant_tools import standalone_question
 from backend.llm import BaseLLM, LLMResult
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,7 @@ CRITICAL SECURITY AND FACTUAL RULES:
 5. If evidence is insufficient to answer the question, set status="insufficient_evidence", explain what is missing in content, and leave citations empty.
 6. If the question is ambiguous (e.g. refers to an unclear photo or multiple possible places), set status="needs_clarification", ask the user to clarify, and leave citations empty.
 7. Only cite photo IDs and event IDs that actually exist in the provided EVIDENCE section.
+8. Independent visits have no journal. Do not infer a trip or an itinerary sequence from unrelated visits or their dates.
 """
 
 
@@ -339,6 +341,7 @@ def build_photo_prompt_envelope(
 
     def _serialize(s: str, h: list[dict[str, Any]], p: list[dict[str, Any]], ev: list[dict[str, Any]]) -> str:
         bounded_h = []
+        allowed_event_ids = {item["id"] for item in ev}
         for m in h:
             role = str(m.get("role", "user"))
             c = str(m.get("content", ""))[:800]
@@ -359,6 +362,7 @@ def build_photo_prompt_envelope(
                     "place_candidates": item.get("place_candidates", []),
                     "date_candidate": item.get("date_candidate", ""),
                     "uncertainties": item.get("uncertainties", []),
+                    "attached_event_ids": [eid for eid in item.get("attached_event_ids", []) if eid in allowed_event_ids],
                 }
                 for item in p
             ],
@@ -370,6 +374,7 @@ def build_photo_prompt_envelope(
                     "time": item.get("time", ""),
                     "city": item.get("city", ""),
                     "category": item.get("category", ""),
+                    "record_scope": "trip" if item.get("trip_id") else "standalone",
                     "notes": str(item.get("notes", ""))[:1500],
                 }
                 for item in ev
@@ -490,6 +495,30 @@ def handle_photo_conversation(
     # 3. Retrieve potential travel event evidence from SearchService
     # Never manufacture events from photo; memory facts require fresh Event citations
     candidates_event_map: dict[str, dict[str, Any]] = {}
+    only_standalone = standalone_question(content)
+    if search_service:
+        for photo, photo_data in zip(processed_photos, photos_data, strict=True):
+            attached_ids = []
+            for binding in photo.get("bindings", []):
+                if binding.get("kind") != "event":
+                    continue
+                event_id = binding["target_id"]
+                if event_id in candidates_event_map:
+                    attached_ids.append(event_id)
+                    continue
+                if len(candidates_event_map) >= evidence_limit:
+                    break
+                try:
+                    event = search_service.get_event(owner_id, event_id)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Event binding lookup during photo chat failed: %s", type(exc).__name__)
+                    break
+                if event:
+                    event = event if isinstance(event, dict) else event.model_dump()
+                    if not only_standalone or not event.get("trip_id"):
+                        candidates_event_map[event_id] = event
+                        attached_ids.append(event_id)
+            photo_data["attached_event_ids"] = attached_ids
     search_clues = []
     for p in photos_data:
         search_clues.extend(p.get("place_candidates", []))
@@ -504,13 +533,17 @@ def handle_photo_conversation(
 
     if search_query and search_service:
         try:
-            search_res = search_service.search(owner_id=owner_id, query=search_query, limit=evidence_limit)
+            kwargs = {"owner_id": owner_id, "query": search_query, "limit": evidence_limit}
+            if only_standalone:
+                kwargs["filters"] = {"record_scope": "standalone"}
+            search_res = search_service.search(**kwargs)
             items = search_res.get("items", []) if isinstance(search_res, dict) else []
             for item in items[:evidence_limit]:
                 ev = item.get("event") if isinstance(item, dict) else item
-                if ev:
+                if ev and len(candidates_event_map) < evidence_limit:
                     ev_dict = ev if isinstance(ev, dict) else (ev.model_dump() if hasattr(ev, "model_dump") else getattr(ev, "__dict__", {}))
-                    candidates_event_map[ev_dict["id"]] = ev_dict
+                    if not only_standalone or not ev_dict.get("trip_id"):
+                        candidates_event_map.setdefault(ev_dict["id"], ev_dict)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Event search during photo chat failed: %s", type(exc).__name__)
 
@@ -804,7 +837,7 @@ def handle_photo_conversation(
         verified_event_citations.append(
             {
                 "event_id": snapshot_ev["id"],
-                "trip_id": snapshot_ev.get("trip_id", ""),
+                "trip_id": snapshot_ev.get("trip_id"),
                 "date": snapshot_ev.get("date", ""),
                 "place_name": snapshot_ev.get("place_name", ""),
                 "version": snapshot_ev.get("version", 1),

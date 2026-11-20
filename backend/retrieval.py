@@ -374,25 +374,21 @@ class SearchService:
         dir_info = parse_directional_query(query)
         if not dir_info and anchor_id:
             q_lower = query.casefold().strip()
-            if any(
-                w in q_lower
-                for w in ("next", "after", "下一站", "下一個", "接著", "緊接著", "然後")
-            ):
+            next_word = re.search(r"下一站|下一個|緊接著|接著|然後|\b(?:next|after)\b", q_lower)
+            previous_word = re.search(r"上一站|上一個|之前|先前|\b(?:prev(?:ious)?|before)\b", q_lower)
+            if next_word:
                 dir_info = {
                     "anchor_query": "",
                     "direction": "next",
-                    "direction_word": "next",
+                    "direction_word": next_word[0],
                     "is_ambiguous_after": False,
                     "target_query": "",
                 }
-            elif any(
-                w in q_lower
-                for w in ("prev", "previous", "before", "上一站", "上一個", "之前", "先前")
-            ):
+            elif previous_word:
                 dir_info = {
                     "anchor_query": "",
                     "direction": "prev",
-                    "direction_word": "prev",
+                    "direction_word": previous_word[0],
                     "is_ambiguous_after": False,
                     "target_query": "",
                 }
@@ -407,6 +403,17 @@ class SearchService:
             is_eng_query = any(
                 w in dir_info.get("direction_word", "") for w in ("after", "before", "next", "prev")
             )
+            independent_visit = {
+                "items": [],
+                "clarification": (
+                    "Independent visits do not have previous or next stops."
+                    if is_eng_query
+                    else "日常足跡各自獨立，沒有上一站或下一站。"
+                ),
+                "vector_status": vector_status,
+            }
+            if filters.get("record_scope") == "standalone":
+                return independent_visit
             if dir_info["is_ambiguous_after"]:
                 clarification = (
                     "Do you mean the immediately adjacent stop, or later events after this place?"
@@ -465,15 +472,16 @@ class SearchService:
             if anchor_id:
                 ev = self.get_event(owner_id, anchor_id)
                 if ev:
+                    if not ev.get("trip_id"):
+                        return independent_visit
                     selected_trip = filters.get("trip_id") if filters else None
                     if not selected_trip or ev.get("trip_id") == selected_trip:
                         anchors = [ev]
 
             # When anchor_id is absent, execute standard query-only anchor search
             if not anchors and not anchor_id:
-                anchor_filters = (
-                    {"trip_id": filters["trip_id"]} if filters and filters.get("trip_id") else None
-                )
+                # Location, category and date filters constrain the target, not the anchor.
+                anchor_filters = {key: filters[key] for key in ("trip_id", "record_scope") if filters.get(key)}
                 anchor_bm25 = self.store.query_bm25(
                     owner_id, anchor_query, filters=anchor_filters, limit=5
                 )
@@ -488,10 +496,18 @@ class SearchService:
                         logger.debug("Anchor vector query fallback: %s", exc)
                 anchors_fused = compute_rrf(anchor_bm25, anchor_vector, k=self.rrf_k)[:5]
                 anchors = [item[0] for item in anchors_fused]
+                exact_anchors = [
+                    ev for ev in anchors
+                    if str(ev.get("place_name", "")).casefold() == anchor_query.casefold()
+                ]
+                if exact_anchors and all(not ev.get("trip_id") for ev in exact_anchors):
+                    return independent_visit
 
             # Find 1-hop adjacent candidates from anchors (enforcing target_category if recognized)
             relation_candidates: dict[str, dict[str, Any]] = {}
             for rank_idx, anchor_ev in enumerate(anchors, start=1):
+                if not anchor_ev.get("trip_id"):
+                    continue
                 adj_list = self.store.get_adjacent_events(
                     owner_id, anchor_ev["id"], direction=direction
                 )

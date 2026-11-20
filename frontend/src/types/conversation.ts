@@ -25,7 +25,7 @@ export interface PhotoCitation {
 
 export interface Citation {
   event_id: string
-  trip_id: string
+  trip_id: string | null
   date: string
   place_name: string
   version: number

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Trip } from '../types/travel'
+import type { EventDestination, Trip } from '../types/travel'
 import type { SearchItem, SearchPayload, SearchResponse, SearchPhotoItem } from '../types/search'
 import type { PhotoDTO } from '../types/photo'
 import { searchRecall } from '../api/search'
@@ -15,7 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'view-source', item: SearchItem): void
-  (e: 'jump-trip', payload: { tripId: string; eventId?: string }): void
+  (e: 'jump-trip', payload: EventDestination): void
 }>()
 
 const query = ref('')
@@ -51,12 +51,14 @@ function openPhotoResult(item: SearchPhotoItem) {
   viewerVisible.value = true
 }
 
-function photoDestination(item: SearchPhotoItem): { tripId: string; eventId?: string } | null {
+function photoDestination(item: SearchPhotoItem): EventDestination | null {
   if (item.event) return { tripId: item.event.trip_id, eventId: item.event.id }
+  if (item.trip_id !== undefined) return item.trip_id ? { tripId: item.trip_id } : null
   const binding = item.photo.bindings.find(b => b.kind === 'trip' || (b.kind === 'event' && b.trip_id))
   if (!binding) return null
   return { tripId: binding.kind === 'trip' ? binding.target_id : binding.trip_id! }
 }
+function photoDestinationLabel(item: SearchPhotoItem) { return item.event && !item.event.trip_id ? '前往足跡' : '前往手記' }
 function jumpToPhotoTrip(item: SearchPhotoItem) {
   const destination = photoDestination(item)
   if (destination) emit('jump-trip', destination)
@@ -86,7 +88,9 @@ async function handleSearch() {
     payload.photo_ids = searchPhotos.value.map((p) => p.id)
   }
 
-  if (selectedTripId.value) payload.trip_id = selectedTripId.value
+  if (selectedTripId.value === ':standalone') payload.record_scope = 'standalone'
+  else if (selectedTripId.value === ':trip') payload.record_scope = 'trip'
+  else if (selectedTripId.value) payload.trip_id = selectedTripId.value
   if (selectedCity.value.trim()) payload.city = selectedCity.value.trim()
   if (selectedCategory.value.trim()) payload.category = selectedCategory.value.trim()
   if (dateFrom.value) payload.date_from = dateFrom.value
@@ -203,9 +207,11 @@ function toggleFilters() {
       <div v-show="showFilters" class="filters-grid">
         <!-- Trip scope stays with the other collapsible filters. -->
         <div class="trip-selector-wrap">
-          <label for="filter-trip" class="filter-label">指定旅程</label>
+          <label for="filter-trip" class="filter-label">回憶來源</label>
           <select id="filter-trip" v-model="selectedTripId" class="form-input filter-input trip-select" :disabled="loading">
-            <option value="">全部旅程手記</option>
+            <option value="">全部回憶</option>
+            <option value=":standalone">日常足跡</option>
+            <option value=":trip">旅行手記</option>
             <option v-for="t in trips" :key="t.id" :value="t.id">
               {{ t.name }}
             </option>
@@ -358,7 +364,7 @@ function toggleFilters() {
                 {{ pItem.photo.analysis.summary }}
               </p>
 
-              <button v-if="photoDestination(pItem)" type="button" class="icon-button jump-btn" aria-label="前往手記" title="前往手記" @click.stop="jumpToPhotoTrip(pItem)"><AppIcon name="jump" /></button>
+              <button v-if="photoDestination(pItem)" type="button" class="icon-button jump-btn" :aria-label="photoDestinationLabel(pItem)" :title="photoDestinationLabel(pItem)" @click.stop="jumpToPhotoTrip(pItem)"><AppIcon name="jump" /></button>
             </div>
           </article>
         </div>
@@ -407,7 +413,7 @@ function toggleFilters() {
 
           <div class="source-description-row">
             <p class="source-notes-excerpt">{{ item.event.notes || '尚無隨筆' }}</p>
-            <button type="button" class="icon-button jump-btn" aria-label="前往手記" title="前往手記" @click.stop="emit('jump-trip', { tripId: item.event.trip_id, eventId: item.event.id })"><AppIcon name="jump" /></button>
+            <button type="button" class="icon-button jump-btn" :aria-label="item.event.trip_id ? '前往手記' : '前往足跡'" :title="item.event.trip_id ? '前往手記' : '前往足跡'" @click.stop="emit('jump-trip', { tripId: item.event.trip_id, eventId: item.event.id })"><AppIcon name="jump" /></button>
           </div>
         </article>
       </div>

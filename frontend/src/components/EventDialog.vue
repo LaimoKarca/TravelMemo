@@ -7,11 +7,12 @@ import JournalNote from './JournalNote.vue'
 import AppIcon from './AppIcon.vue'
 import PhotoGallery from './PhotoGallery.vue'
 import PhotoPicker from './PhotoPicker.vue'
+import { getTimezoneOptions, getTripLocalDate, normalizeTimezoneInput } from '../utils/timezones'
 
 const props = withDefaults(
   defineProps<{
     visible: boolean
-    trip: Trip
+    trip?: Trip | null
     event?: Event | null
     categories?: string[]
     loading?: boolean
@@ -44,12 +45,14 @@ const address = ref('')
 const category = ref('景點')
 const eventDate = ref('')
 const eventTime = ref('')
+const timezone = ref('Asia/Taipei')
+const timezoneOptions = computed(() => getTimezoneOptions())
 const notes = ref('')
 
 const clientValidationError = ref('')
 
 const isEdit = computed(() => !!props.event)
-const dialogTitle = computed(() => (isEdit.value ? '編輯旅行足跡' : '記錄旅行足跡'))
+const dialogTitle = computed(() => `${isEdit.value ? '編輯' : '記錄'}${props.trip ? '旅行' : '日常'}足跡`)
 
 const addedCategories = ref<string[]>([])
 const addingCategory = ref(false)
@@ -85,14 +88,14 @@ async function fetchEventPhotos(eventId: string) {
 async function handleEventPhotoUploaded(photo: PhotoDTO) {
   if (props.event) {
     try {
-      await bindPhoto(photo.id, 'event', props.event.id)
-      eventPhotos.value.push(photo)
+      const bound = await bindPhoto(photo.id, 'event', props.event.id)
+      eventPhotos.value.push(bound)
       eventPhotoPickerRef.value?.removePhoto(photo.id)
       if (eventPhotoPickerRef.value?.stagedPhotos?.length === 0) {
         eventPhotoPickerRef.value?.clear()
       }
     } catch {
-      // Non-blocking
+      emit('notice', '無法將照片加入足跡。', 'error')
     }
   }
 }
@@ -129,6 +132,7 @@ async function handleUpdateEventPhotoCaption(payload: { photoId: string; caption
 }
 
 function handleCancel() {
+  if (props.loading) return
   stagedPhotos.value = []
   emit('cancel')
 }
@@ -138,12 +142,13 @@ const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]
 function resetFormFromProps() {
   clientValidationError.value = ''
   addingCategory.value = false
-  moreDetails.value = !!(props.event && (props.event.city || props.event.address || props.event.time))
+  moreDetails.value = !!(props.trip && props.event && (props.event.city || props.event.address || props.event.time))
+  timezone.value = props.event?.timezone || props.trip?.timezone || 'Asia/Taipei'
   if (props.event) {
     placeName.value = props.event.place_name
     city.value = props.event.city || ''
     address.value = props.event.address || ''
-    category.value = props.event.category || '景點'
+    category.value = props.event.category || (props.trip ? '景點' : '未分類')
     eventDate.value = props.event.date
     eventTime.value = props.event.time || ''
     notes.value = props.event.notes || ''
@@ -151,8 +156,8 @@ function resetFormFromProps() {
     placeName.value = ''
     city.value = ''
     address.value = ''
-    category.value = '景點'
-    eventDate.value = props.trip.start_date
+    category.value = props.trip ? '景點' : '未分類'
+    eventDate.value = props.trip?.start_date || getTripLocalDate(new Date(), timezone.value)
     eventTime.value = ''
     notes.value = ''
   }
@@ -164,7 +169,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
   if (event.key === 'Escape') {
     event.preventDefault()
-    emit('cancel')
+    handleCancel()
     return
   }
 
@@ -210,7 +215,7 @@ watch(
         eventPhotos.value = []
       }
       nextTick(() => {
-        if (isEdit.value) { dialogRef.value?.focus({ preventScroll: true }); return }
+        if (isEdit.value || !props.trip) { dialogRef.value?.focus({ preventScroll: true }); return }
         const firstInput = dialogRef.value?.querySelector<HTMLElement>('#event-place-name')
         const firstFocusable = dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
         ;(firstInput || firstFocusable)?.focus()
@@ -272,7 +277,7 @@ function handleSubmit() {
     return
   }
 
-  if (eventDate.value < props.trip.start_date || eventDate.value > props.trip.end_date) {
+  if (props.trip && (eventDate.value < props.trip.start_date || eventDate.value > props.trip.end_date)) {
     clientValidationError.value = `造訪日期必須在旅程區間內（${props.trip.start_date} 至 ${props.trip.end_date}）。`
     return
   }
@@ -286,9 +291,11 @@ function handleSubmit() {
   const old = props.event
   const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '') && trimmedAddress === (old.address || '')
   const placeIdToSubmit = unchangedPlace ? old.place_id : null
+  const localTimezone = props.trip ? {} : { timezone: normalizeTimezoneInput(timezone.value) || 'Asia/Taipei' }
 
   if (isEdit.value && props.event) {
     const payload: UpdateEventPayload = {
+      ...localTimezone,
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
@@ -302,6 +309,7 @@ function handleSubmit() {
     emit('submit', payload)
   } else {
     const payload: CreateEventPayload = {
+      ...localTimezone,
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
@@ -332,7 +340,7 @@ onBeforeUnmount(() => {
     v-if="visible"
     class="dialog-backdrop"
     role="presentation"
-    @click.self="emit('cancel')"
+    @click.self="handleCancel"
   >
     <div
       ref="dialogRef"
@@ -348,7 +356,8 @@ onBeforeUnmount(() => {
           type="button"
           class="close-button"
           aria-label="關閉視窗"
-          @click="emit('cancel')"
+          :disabled="loading"
+          @click="handleCancel"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -385,7 +394,7 @@ onBeforeUnmount(() => {
           <label for="event-place-name" class="form-label">地點名稱 <span class="required-star">*</span></label>
           <input id="event-place-name" v-model="placeName" class="form-input" placeholder="這一站去了哪裡？" maxlength="200" required :disabled="loading" />
         </div>
-        <div class="form-row essential-row">
+        <div v-if="trip" class="form-row essential-row">
           <div class="form-group flex-1">
             <label for="event-date" class="form-label">日期 <span class="required-star">*</span></label>
             <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip.start_date" :max="trip.end_date" required :disabled="loading" />
@@ -395,13 +404,22 @@ onBeforeUnmount(() => {
             <select id="event-category" v-model="category" class="form-input" :disabled="loading" required aria-label="回憶分類"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
           </div>
         </div>
-        <div v-if="addingCategory" class="category-select-row">
+        <div v-if="trip && addingCategory" class="category-select-row">
           <input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" />
           <button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button>
         </div>
         <details class="more-details" :open="moreDetails" @toggle="moreDetails = ($event.target as HTMLDetailsElement).open">
           <summary>更多細節</summary>
           <div class="detail-fields">
+            <div v-if="!trip" class="form-row">
+              <div class="form-group flex-1"><label for="event-date" class="form-label">日期</label><input id="event-date" v-model="eventDate" type="date" class="form-input" :disabled="loading" /></div>
+              <div class="form-group flex-1"><label for="event-timezone" class="form-label">時區</label><input id="event-timezone" v-model="timezone" class="form-input" list="footprint-timezones" :disabled="loading" /><datalist id="footprint-timezones"><option v-for="opt in timezoneOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option></datalist></div>
+            </div>
+            <div v-if="!trip" class="form-group">
+              <div class="category-label"><label for="event-category" class="form-label">分類</label><button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 標籤</button></div>
+              <select id="event-category" v-model="category" class="form-input" :disabled="loading"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
+              <div v-if="addingCategory" class="category-select-row"><input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" /><button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button></div>
+            </div>
             <div class="form-row">
               <div class="form-group flex-1"><label for="event-city" class="form-label">城市／地區</label><input id="event-city" v-model="city" class="form-input" maxlength="200" :disabled="loading" /></div>
               <div class="form-group flex-1"><label for="event-time" class="form-label">抵達時間</label><input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" /></div>
@@ -409,7 +427,7 @@ onBeforeUnmount(() => {
             <div class="form-group"><label for="event-address" class="form-label">地址</label><input id="event-address" v-model="address" class="form-input" maxlength="1000" :disabled="loading" /></div>
           </div>
         </details>
-        <JournalNote id="event-notes" v-model="notes" kind="event" label="旅途隨筆" placeholder="留下餐點、沿途風景或旅途感受…" :disabled="loading" :maxlength="20000" />
+        <JournalNote id="event-notes" v-model="notes" kind="event" :label="trip ? '旅途隨筆' : '隨筆'" :placeholder="trip ? '留下餐點、沿途風景或旅途感受…' : '此刻想記下什麼？'" :disabled="loading" :maxlength="20000" />
 
         <section class="event-photo-section" aria-label="足跡相片">
           <div class="event-photo-heading"><h4>足跡相片</h4>

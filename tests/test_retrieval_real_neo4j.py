@@ -288,3 +288,67 @@ def test_real_neo4j_vector_ann_isolation_and_graph():
             database_=db,
         )
         driver.close()
+
+
+@pytest.mark.skipif(os.getenv("TRAVELMEMO_INTEGRATION") != "1", reason="Local Neo4j opt-in")
+def test_real_neo4j_standalone_scope_and_ownership():
+    settings = Settings()
+    owner, foreign_owner = (f"scope-{uuid.uuid4().hex}" for _ in range(2))
+    db = settings.neo4j_database
+    with GraphDatabase.driver(
+        settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password), connection_timeout=5,
+    ) as driver:
+        repository = Neo4jTravelRepository(driver, db)
+        repository.initialize()
+        embedder = RealTestEmbedder()
+        store = Neo4jSearchStore(driver, db, embedder=embedder)
+        store.initialize()
+        try:
+            trip = repository.create_trip(owner, {
+                "name": "Scope trip", "start_date": "2026-10-01", "end_date": "2026-10-05",
+                "timezone": "Asia/Taipei",
+            })
+            visit = {"place_name": "Sunset pier", "city": "Taipei", "category": "散步", "date": "2026-10-02"}
+            trip_event = repository.create_event(owner, trip["id"], visit)
+            standalone = repository.create_standalone_event(owner, visit)
+            foreign = repository.create_standalone_event(foreign_owner, visit)
+            query = [1.0, 0.0] + [0.0] * (E5_DIMENSION - 2)
+            lower_ranked = [0.8, 0.6] + [0.0] * (E5_DIMENSION - 2)
+            store.update_embeddings([
+                {
+                    "id": event["id"], "owner_id": event_owner,
+                    "version": event["version"], "embedding": vector, "revision": E5_REVISION,
+                }
+                for event, event_owner, vector in (
+                    (trip_event, owner, query),
+                    (standalone, owner, lower_ranked),
+                    (foreign, foreign_owner, query),
+                )
+            ])
+            scope = {"record_scope": "standalone"}
+            assert store.query_vector(owner, query, limit=1)[0][0]["id"] == trip_event["id"]
+            assert store.query_vector(owner, query, filters=scope, limit=1)[0][0]["id"] == standalone["id"]
+            assert store.query_bm25(owner, "Sunset pier", filters=scope, limit=1)[0][0]["id"] == standalone["id"]
+            assert repository.get_event(owner, foreign["id"]) is None
+
+            # Even an invalid edge linking an independent record to a journal visit cannot prove order.
+            driver.execute_query(
+                "MATCH (source:Event {id: $source}), (target:Event {id: $target}) CREATE (source)-[:NEXT]->(target)",
+                source=standalone["id"], target=trip_event["id"], database_=db,
+            )
+            assert store.get_adjacent_events(owner, standalone["id"], "next") == []
+            assert store.get_adjacent_events(owner, trip_event["id"], "prev") == []
+
+            # A matching owner property alone does not grant read access.
+            driver.execute_query(
+                "MATCH (:User {id: $owner})-[r:OWNS_EVENT]->(:Event {id: $event}) DELETE r",
+                owner=owner, event=standalone["id"], database_=db,
+            )
+            assert repository.get_event(owner, standalone["id"]) is None
+            assert store.query_bm25(owner, "Sunset pier", filters=scope, limit=1) == []
+            assert store.query_vector(owner, query, filters=scope, limit=1) == []
+        finally:
+            driver.execute_query(
+                "MATCH (n) WHERE n.owner_id IN $owners OR (n:User AND n.id IN $owners) DETACH DELETE n",
+                owners=[owner, foreign_owner], database_=db,
+            )

@@ -10,7 +10,7 @@
 | 資源 | 欄位與規則 |
 | --- | --- |
 | Trip | `{id,name,start_date,end_date,timezone,description,version}`；日期使用 `YYYY-MM-DD`，時區為 IANA 或固定 UTC 偏移，預設 `Asia/Taipei`。名稱 1–200 字，描述最多 10,000 字，開始日期不得晚於結束日期。 |
-| Event | `{id,trip_id,place_id,place_name,city,address,category,date,time,notes,position,version}`；日期須在旅程範圍內，時間為 `HH:mm` 或 `null`，心得最多 20,000 字。地點名稱 1–200 字，城市與類別最多 200 字，地址最多 1,000 字，類別必填。 |
+| Event | `{id,trip_id,place_id,place_name,city,address,category,date,time,notes,position,version,timezone,record_scope}`。日常足跡的 `trip_id` 與 `position` 為 `null`、`record_scope` 為 `standalone`。手記內的足跡採手記時區、日期須在旅程範圍內、`record_scope` 為 `trip`。時間為 `HH:mm` 或 `null`，心得最多 20,000 字。地點名稱 1–200 字，城市與類別最多 200 字，地址最多 1,000 字。 |
 | Place | `{id,name,city,address}`；地點屬於單一使用者，只在明確提供 `place_id` 時重用，不依同名自動合併。 |
 
 Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時，Trip 版本會增加；Event 編輯時增加自己的版本。
@@ -32,7 +32,10 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 | `DELETE /trips/{id}?version=N` | 回傳 204，刪除本人的旅程、事件及 NEXT，保留可重用的 Place。 |
 | `GET /places` | 回傳 `{items:Place[]}`。 |
 | `POST /trips/{id}/events` | 提供 `place_id?:str\|null,place_name,city,address,category,date,time,notes`，回傳 201 Event。 |
-| `PUT /events/{id}` | 提供事件欄位及 `version`，回傳 Event；不能更換所屬旅程。 |
+| `GET /events` | 只列出本人的日常足跡。可傳入 `q,city,category,date_from,date_to,limit,offset`，回傳 `{items:Event[],next_offset:int\|null}`，預設每頁二十筆。 |
+| `POST /events` | 建立日常足跡，回傳 201 Event。地點名稱必填，日期預設為所用時區的當日，時區預設 `Asia/Taipei`，分類預設「未分類」。其他事件欄位選填。 |
+| `PUT /events/{id}` | 提供事件欄位及 `version`，回傳 Event。可為日常足跡指定 `timezone`。 |
+| `POST /events/{id}/attach-trip` | 提供 `{trip_id,version,trip_version,before_event_id?}`，將日常足跡收進手記並回傳原 Event。選填的前置位置須為同日足跡 ID，省略時接在同日末尾。 |
 | `DELETE /events/{id}?version=N` | 回傳 204。 |
 | `PUT /trips/{id}/event-order` | 提供 `{version,event_ids:[...]}`，回傳與旅程詳情相同格式。須將所有事件 ID 各列一次，日期保持非遞減，同日內可調整順序。 |
 
@@ -42,6 +45,9 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 NEXT 只連接同一使用者、同一旅程內相鄰的紀錄，保留方向、可跨日、不形成循環。
 前端時間軸依旅行狀態決定正序或倒序顯示，不改寫保存順序；`event-order` 保留為 API 契約，介面不提供往上／往下移按鈕。
 資料使用實際的 User、Trip、Event、Place、Category 節點與關係，不放進登入用的 AuthRecord JSON，亦不需要 APOC。
+
+收進手記時核對事件與手記的擁有者、版本、時區及日期範圍。版本衝突回傳 409，日期、時區或插入位置不合回傳 422。
+同一交易更新事件、照片的旅程關聯、時間軸順序與 NEXT，保留事件及照片 ID。刪除手記只影響已收錄的足跡。
 
 ## 隨筆潤飾
 

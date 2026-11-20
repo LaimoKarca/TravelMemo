@@ -15,7 +15,7 @@
 
 ## 核心資料與介面
 
-User OWNS Trip HAS_EVENT Event；Event AT Place、HAS_CATEGORY Category，
+User 以 OWNS_EVENT 擁有每筆 Event。手記仍以 User OWNS Trip HAS_EVENT Event 表示歸屬；Event AT Place、HAS_CATEGORY Category，
 同一使用者同一旅程的相鄰 Event 以有向 NEXT 相連。
 同地重訪保留不同 Event ID，Place 以獨立 ID 選取，不按同名自動合併。
 Trip 含名稱、日期範圍、時區與描述。Event 含日期、選填時間、地點、城市、類別、地址、心得。
@@ -26,15 +26,18 @@ Trip 含名稱、日期範圍、時區與描述。Event 含日期、選填時間
 只表示下一筆已記錄活動。插入刪除重排在交易內重接 NEXT，防循環與跨使用者/旅程連結。
 八小時 trail 清洗僅屬 benchmark。編輯採版本檢查，衝突返回 409。
 
+日常足跡保存單次到訪，可只填地點，預設用臺北當日與「未分類」。獨立足跡有自己的時區，無手記位置與 NEXT 關係。
+可在日期及時區相符時收進手記。交易核對事件與手記的版本，保留 Event、照片及引用的識別碼，更新手記順序、NEXT 及照片歸屬。
+
 API `/api/v1`：auth/request-code、verify-code、logout、me；trips 與 events CRUD、
-trips/{id}/event-order 與 footprint-drafts；search；conversations、messages 與 requests；writing/polish；usage/me；health/live、ready。
+events/{id}/attach-trip、trips/{id}/event-order 與 footprint-drafts；search；conversations、messages 與 requests；writing/polish；usage/me；health/live、ready。
 前後端使用同網域。搜尋回傳事件、名次、理由及關係證據；對話回傳回答、引用與
 answered/insufficient_evidence/needs_clarification/unavailable 狀態。
 
 ## 檢索與生成
 
 BM25 與 multilingual-e5-small 向量模型，
-384 維正規化向量，query:/passage: 前綴。Neo4j 向量搜尋內先篩 owner，不能全站 Top-K 後過濾。
+384 維正規化向量，query:/passage: 前綴。Neo4j 向量搜尋在 Top-K 前篩選擁有者與查詢範圍。搜尋與助理皆可查獨立足跡與手記，依使用者指定的範圍限制結果。
 各取前 50，以 k=60 等權 RRF 融合，同分以 Event ID 排序。
 事件編碼只用自身欄位；完整心得保留，截斷有紀錄。
 實際文字規則解析前置地點、方向及類別，錨點前五筆沿 NEXT 一跳，按期中提案以

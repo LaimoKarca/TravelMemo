@@ -10,6 +10,7 @@ import threading
 import time
 from collections import defaultdict
 from collections.abc import Iterable
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, BinaryIO
@@ -425,38 +426,26 @@ class PhotoService:
         if kind not in {"trip", "event", "conversation", "message"}:
             raise HTTPException(status_code=422, detail="無效的綁定類型。")
 
-        trip_id = None
-        if kind == "trip" and self.travel_repository:
-            trip = self.travel_repository.get_trip(owner, target_id)
-            if not trip:
-                raise HTTPException(status_code=404, detail="找不到指定的旅程。")
-            trip_id = target_id
-        elif kind == "event" and self.travel_repository:
-            event = None
-            if hasattr(self.travel_repository, "get_event"):
-                event = self.travel_repository.get_event(owner, target_id)
-            if not event and hasattr(self.travel_repository, "get_trips"):
-                trips = self.travel_repository.get_trips(owner)
-                for t in trips:
-                    detail = self.travel_repository.get_trip_detail(owner, t["id"])
-                    if detail:
-                        for ev in detail.get("events", []):
-                            if ev.get("id") == target_id:
-                                event = ev
-                                trip_id = t["id"]
-                                break
-                    if event:
-                        break
-            if not event:
-                raise HTTPException(status_code=404, detail="找不到指定的事件。")
-            if not trip_id:
+        repository = self.travel_repository
+        # The memory repository uses the same lock when assigning an event to a trip.
+        repository_lock = getattr(repository, "lock", None) if kind == "event" else None
+        with repository_lock if repository_lock is not None else nullcontext():
+            trip_id = None
+            if kind == "trip" and repository is not None:
+                if not repository.get_trip(owner, target_id):
+                    raise HTTPException(status_code=404, detail="找不到指定的旅程。")
+                trip_id = target_id
+            elif kind == "event" and repository is not None:
+                event = repository.get_event(owner, target_id)
+                if not event:
+                    raise HTTPException(status_code=404, detail="找不到指定的事件。")
                 trip_id = event.get("trip_id")
-        elif kind == "conversation" and self.conversation_store:
-            conv = self.conversation_store.get_conversation(owner, target_id)
-            if not conv:
-                raise HTTPException(status_code=404, detail="找不到指定的對話。")
+            elif kind == "conversation" and self.conversation_store:
+                conv = self.conversation_store.get_conversation(owner, target_id)
+                if not conv:
+                    raise HTTPException(status_code=404, detail="找不到指定的對話。")
 
-        updated = self.store.bind(owner, id, kind, target_id, trip_id=trip_id)
+            updated = self.store.bind(owner, id, kind, target_id, trip_id=trip_id)
         if not updated:
             raise HTTPException(status_code=404, detail="找不到指定的相片。")
         return self.to_dto(updated)
@@ -695,16 +684,7 @@ class PhotoService:
                             target_exists = True
                     elif kind == "event" and self.travel_repository:
                         try:
-                            ev = None
-                            if hasattr(self.travel_repository, "get_event"):
-                                ev = self.travel_repository.get_event(owner, target_id)
-                            if not ev and hasattr(self.travel_repository, "get_trips"):
-                                for t in self.travel_repository.get_trips(owner):
-                                    dtl = self.travel_repository.get_trip_detail(owner, t["id"])
-                                    if dtl and any(e.get("id") == target_id for e in dtl.get("events", [])):
-                                        ev = True
-                                        break
-                            target_exists = bool(ev)
+                            target_exists = bool(self.travel_repository.get_event(owner, target_id))
                         except (KeyError, AttributeError, TypeError, ValueError, OSError):
                             target_exists = True
                     elif kind == "conversation" and self.conversation_store:

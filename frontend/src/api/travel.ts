@@ -1,4 +1,4 @@
-import { request, ApiError } from './auth'
+import { request } from './auth'
 import type {
   Trip,
   Event,
@@ -9,7 +9,10 @@ import type {
   UpdateTripPayload,
   CreateEventPayload,
   UpdateEventPayload,
-  ReorderEventsPayload
+  ReorderEventsPayload,
+  StandaloneEventFilters,
+  StandaloneEventPage,
+  AttachEventPayload
 } from '../types/travel'
 import type { SearchEvent } from '../types/search'
 
@@ -61,6 +64,24 @@ export async function createEvent(tripId: string, payload: CreateEventPayload): 
   return request<Event>(`/trips/${encodeURIComponent(tripId)}/events`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  })
+}
+
+export function listStandaloneEvents(filters: StandaloneEventFilters = {}): Promise<StandaloneEventPage> {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== '') query.set(key, String(value))
+  }
+  return request<StandaloneEventPage>(`/events?${query}`)
+}
+
+export function createStandaloneEvent(payload: CreateEventPayload): Promise<Event> {
+  return request<Event>('/events', { method: 'POST', body: JSON.stringify(payload) })
+}
+
+export function attachEventToTrip(eventId: string, payload: AttachEventPayload): Promise<Event> {
+  return request<Event>(`/events/${encodeURIComponent(eventId)}/attach-trip`, {
+    method: 'POST', body: JSON.stringify(payload)
   })
 }
 

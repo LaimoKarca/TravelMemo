@@ -241,6 +241,42 @@ def test_api_search_csrf_and_validation():
     assert data["vector_status"] in {"ready", "degraded"}
 
 
+def test_standalone_scope_is_applied_before_search_limits():
+    client, csrf, repo, service = setup_test_api()
+    trip = repo.create_trip("user-1", {
+        "name": "週末旅程", "start_date": "2026-01-01", "end_date": "2026-01-03",
+        "timezone": "Asia/Taipei",
+    })
+    event = {
+        "place_name": "海邊堤防", "category": "散步", "date": "2026-01-02",
+        "notes": "一起看夕陽",
+    }
+    trip_event = repo.create_event("user-1", trip["id"], event)
+    standalone = repo.create_standalone_event("user-1", event)
+    repo.create_standalone_event("user-2", event)
+    service.process_pending()
+
+    def search(scope):
+        return client.post(
+            "/api/v1/search",
+            json={"query": "海邊堤防", "record_scope": scope, "limit": 1},
+            headers={"X-CSRF-Token": csrf},
+        )
+
+    response = search("standalone")
+    assert response.status_code == 200, response.text
+    assert [hit["event"]["id"] for hit in response.json()["items"]] == [standalone["id"]]
+    assert response.json()["items"][0]["event"]["trip_id"] is None
+    assert [hit["event"]["id"] for hit in search("trip").json()["items"]] == [trip_event["id"]]
+    for method in ("bm25", "e5"):
+        results = service.search("user-1", "海邊堤防", {"record_scope": "standalone"}, 1, method)
+        assert [hit["event"]["id"] for hit in results["items"]] == [standalone["id"]]
+    directional = service.search("user-1", "下一站呢？", anchor_id=standalone["id"])
+    assert "日常足跡" in directional["clarification"]
+    assert directional["items"] == []
+    assert not service.verify_relation("user-1", standalone["id"], trip_event["id"])
+
+
 def test_api_get_event_isolation():
     client, _csrf, repo, _service = setup_test_api()
 

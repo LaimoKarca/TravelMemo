@@ -1,4 +1,5 @@
 """HTTP-level photo lifecycle with synthetic images and offline AI dependencies."""
+from contextlib import closing
 
 from io import BytesIO
 
@@ -81,7 +82,8 @@ def test_http_image_to_album_search_chat_and_shared_attachment_deletion(tmp_path
         assert response.json()["photo_citations"][0]["photo_id"] == photo["id"]
         history = client.get(f"/api/v1/conversations/{conversation['id']}/messages").json()["items"]
         assert history[0]["photos"][0]["id"] == photo["id"]
-        with TestClient(app) as other:
+        # Reuse the running app while keeping a separate cookie jar.
+        with closing(TestClient(app)) as other:
             other.post("/api/v1/auth/request-code", json={"email": "friend@example.com"})
             other_auth = other.post("/api/v1/auth/verify-code", json={"email": "friend@example.com", "code": codes[-1]}).json()
             other_headers = {"X-CSRF-Token": other_auth["csrf_token"]}

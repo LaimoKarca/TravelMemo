@@ -31,6 +31,7 @@ Python 入口固定單一 API process，模型共用並限制編碼並行；不�
 
 另可傳入 `photo_ids`，最多四張本人已完成解析的圖片。`query` 與 `photo_ids` 至少提供一項；
 純空白且沒有圖片的查詢不接受。其他欄位皆可省略；limit 為1至50。日期必須有效且起點不晚於終點。
+省略 `record_scope` 或填 `all` 會同時搜尋日常足跡與手記。使用 `standalone` 只查日常足跡，使用 `trip` 只查手記內的足跡及相簿。提供 `trip_id` 可限制在一本手記，不能同時指定 `standalone`。範圍條件在排名前生效，日常足跡不參與 NEXT 遍歷。
 
 回應為 `{items, photo_items, clarification, vector_status}`：
 
@@ -38,11 +39,11 @@ Python 入口固定單一 API process，模型共用並限制編碼並行；不�
 - relation 為 `{anchor_id,direction,anchor_date,target_date}`，direction 是 next 或 prev。
 - clarification 非空時，需先確認使用者的相鄰語意。
 - vector_status 顯示向量可用性；無法使用模型時仍回傳 BM25 結果。
-- photo_items 為圖片來源結果，每筆含 photo、score、reasons 與選填 event；只在相簿中的照片可沒有事件。
+- photo_items 為圖片來源結果，每筆含 photo、score、reasons、可空的 `trip_id` 及選填 event；只在相簿中的照片可沒有事件。
 
-`GET /events/{id}` 取得目前本人事件，額外提供 trip_name。前端來源視窗必須重新讀取，
+`GET /events/{id}` 取得目前本人事件，額外提供可空的 trip_name。前端來源視窗必須重新讀取，
 不可將先前搜尋快照當成目前紀錄。前端足跡詳情不顯示版本文字，API 的 version 仍用於更新衝突與來源驗證。
-來源跳轉使用 trip_id 與選填 event_id：有事件時定位足跡，只有旅程相簿關聯時開啟手記。
+日常足跡引用的 `trip_id` 可為空。來源跳轉以事件 ID 及當前歸屬定位足跡；只有旅程相簿關聯時直接開啟手記。
 
 照片回應的 `analysis.summary` 為繁體中文顯示摘要，生成標籤與不確定資訊也採繁中；OCR 與專有名稱保留原字。
 英文摘要副本只供後端組合檢索文字，不納入公開照片 DTO；其他搜尋回應欄位保持不變。

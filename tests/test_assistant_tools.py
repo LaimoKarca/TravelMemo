@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.assistant_tools import AssistantTools
-from backend.conversation import ConversationService
+from backend.conversation import Citation, ConversationService
 from backend.conversation_store import MemoryConversationStore
 from backend.llm import LLMResult, MockLLM, OpenAILLM
 from backend.travel_store import MemoryTravelRepository
@@ -56,6 +56,25 @@ def test_trip_answer_rejects_fabricated_trip_citations():
     assert answer.get('trip_citations', []) == []
 
 
+def test_recent_standalone_footprints_are_cited_and_follow_the_live_trip_assignment():
+    service, cid, repo, trip, _other = setup()
+    event = {
+        "id": "sunset", "trip_id": None, "date": "2026-01-01", "time": None,
+        "place_name": "海邊堤防", "version": 1, "record_scope": "standalone",
+    }
+    repo.list_standalone_events = MagicMock(return_value={"items": [dict(event)], "next_offset": None})
+    service.search_service.get_event = MagicMock(side_effect=lambda owner, _id: event if owner == "owner" else None)
+    answer = service.post_message("owner", cid, "最近記了哪些日常足跡？")
+    repo.list_standalone_events.assert_called_once_with("owner", limit=8)
+    assert answer["status"] == "answered"
+    assert "海邊堤防" in answer["content"]
+    assert Citation.model_validate(answer["citations"][0]).trip_id is None
+    event.update(trip_id=trip["id"], version=2, record_scope="trip")
+    citation = service.get_messages("owner", cid)[-1]["citations"][0]
+    assert citation["state"] == "changed"
+    assert citation["trip_id"] == trip["id"]
+
+
 @pytest.mark.parametrize('question', [
     '我的旅行去過哪些餐廳？',
     '列出我的旅程中造訪的景點',
@@ -82,5 +101,5 @@ def test_native_tool_selection_is_bounded_and_does_not_send_secret_owner_paramet
         assert calls == [{'name': 'list_trips', 'arguments': {'query': '', 'limit': 10}}]
         request = client.responses.create.call_args.kwargs
         assert request['store'] is False and request['max_output_tokens'] == 512
-        assert len(request['tools']) == 4
+        assert len(request['tools']) == 5
         assert all('owner' not in tool['parameters']['properties'] for tool in request['tools'])

@@ -52,7 +52,15 @@ class MockPhotoStore:
 class MockPhotoService:
     def __init__(self, store, travel_repository=None, settings=None):
         self.store = store
-        self.travel_repository = travel_repository or MockTravelRepository()
+        if travel_repository is None:
+            trips = {}
+            for photo in store.photos.values():
+                for binding in photo.get("bindings", []):
+                    if binding["kind"] == "trip":
+                        target = binding["target_id"]
+                        trips.setdefault(target, {"id": target, "owner_id": photo["owner_id"]})
+            travel_repository = MockTravelRepository(trips=trips)
+        self.travel_repository = travel_repository
         self.settings = settings or DummySettings()
 
     def get(self, owner, photo_id):
@@ -449,7 +457,11 @@ def test_photo_search_chatonly_and_unbound_excluded():
         },
     }
     store = MockPhotoStore(photos)
-    service = MockPhotoService(store)
+    repo = MockTravelRepository(
+        events={"ev-1": {"id": "ev-1", "owner_id": "user-1", "trip_id": "trip-1"}},
+        trips={"trip-1": {"id": "trip-1", "owner_id": "user-1"}},
+    )
+    service = MockPhotoService(store, repo)
     search_svc = PhotoSearchService(DummySettings(), service)
 
     results = search_svc.search("user-1", query="拉麵")
@@ -533,7 +545,7 @@ def test_photo_search_event_facts_filters():
             "bindings": [{"kind": "event", "target_id": "ev-temple", "trip_id": "trip-1"}],
         },
     }
-    repo = MockTravelRepository(events)
+    repo = MockTravelRepository(events, trips={"trip-1": {"owner_id": "user-1"}})
     store = MockPhotoStore(photos)
     service = MockPhotoService(store, travel_repository=repo)
     search_svc = PhotoSearchService(DummySettings(), service)
@@ -563,6 +575,44 @@ def test_photo_search_event_facts_filters():
     assert album_hit["event"] is None
 
 
+def test_photo_search_filters_the_same_live_source_before_ranking():
+    owner = "user-1"
+    repo = MockTravelRepository(
+        events={
+            "daily": {"id": "daily", "owner_id": owner, "trip_id": None, "date": "2026-05-01", "city": "淡水"},
+            "grouped": {"id": "grouped", "owner_id": owner, "trip_id": "trip-2", "date": "2026-05-02", "city": "臺南"},
+            "foreign": {"id": "foreign", "owner_id": "user-2", "trip_id": None, "date": "2026-05-03", "city": "淡水"},
+        },
+        trips={"trip-1": {"id": "trip-1", "owner_id": owner}},
+    )
+    store = MockPhotoStore({
+        "mixed": {
+            "id": "mixed", "owner_id": owner, "status": "ready", "caption": "日落",
+            "bindings": [
+                {"kind": "event", "target_id": "grouped"},
+                {"kind": "trip", "target_id": "trip-1"},
+                {"kind": "event", "target_id": "daily", "trip_id": "stale-trip"},
+            ],
+        },
+        "foreign-only": {
+            "id": "foreign-only", "owner_id": owner, "status": "ready", "caption": "日落",
+            "bindings": [{"kind": "event", "target_id": "foreign"}],
+        },
+    })
+    service = PhotoSearchService(DummySettings(), MockPhotoService(store, repo))
+
+    hits = service.search(owner, "日落", limit=1, record_scope="standalone", city="淡水")
+    assert [(hit["photo"]["id"], hit["event"]["id"], hit["trip_id"]) for hit in hits] == [
+        ("mixed", "daily", None)
+    ]
+    assert service.search(owner, "日落", record_scope="trip", city="淡水") == []
+    assert service.search(owner, "日落", trip_id="trip-1", city="臺南") == []
+    assert service.search(owner, "日落", trip_id="stale-trip") == []
+    album = service.search(owner, "日落", trip_id="trip-1")[0]
+    assert album["event"] is None
+    assert album["trip_id"] == "trip-1"
+
+
 def test_photo_search_empty_query_filter_only():
     photos = {
         "p-1": {
@@ -590,6 +640,58 @@ def test_photo_search_empty_query_filter_only():
     assert results[0]["reasons"] == ["條件篩選匹配"]
     assert results[0]["photo"]["id"] == "p-2"
     assert results[1]["photo"]["id"] == "p-1"
+
+
+def test_attaching_event_keeps_photo_and_moves_its_search_source(tmp_path):
+    from types import SimpleNamespace
+
+    import pytest
+    from fastapi import HTTPException
+
+    from backend.photo_store import MemoryPhotoStore
+    from backend.photos import PhotoService
+    from backend.travel_store import MemoryTravelRepository
+
+    owner = "user-1"
+    settings = SimpleNamespace(media_root=tmp_path)
+    store = MemoryPhotoStore()
+    travel = MemoryTravelRepository()
+    travel.photo_store = store
+    photos = PhotoService(settings, store, travel)
+    search = PhotoSearchService(settings, photos)
+    event = travel.create_standalone_event(owner, {
+        "place_name": "淡水河畔", "city": "新北", "date": "2026-05-02",
+    })
+    trip = travel.create_trip(owner, {
+        "name": "河岸週末", "start_date": "2026-05-01", "end_date": "2026-05-03",
+    })
+    store.create(owner, {
+        "id": "sunset", "caption": "日落", "status": "ready", "embedding_status": "completed",
+        "embedding_version": 1, "embedding": [0.1, 0.2],
+    })
+    store.create("other", {"id": "foreign"})
+    with pytest.raises(HTTPException) as denied:
+        photos.bind("other", "foreign", "event", event["id"])
+    assert denied.value.status_code == 404
+
+    bound = photos.bind(owner, "sunset", "event", event["id"])
+    assert photos.list(owner, trip_id=trip["id"]) == []
+    assert [hit["photo"]["id"] for hit in search.search(owner, "日落", record_scope="standalone")] == ["sunset"]
+
+    travel.attach_event_to_trip(owner, event["id"], {
+        "trip_id": trip["id"], "version": event["version"], "trip_version": trip["version"],
+    })
+
+    [photo] = photos.list(owner, trip_id=trip["id"])
+    assert photo["id"] == bound["id"]
+    assert photo["bindings"] == [{"kind": "event", "target_id": event["id"], "trip_id": trip["id"]}]
+    assert photos.list(owner, event_id=event["id"]) == [photo]
+    assert search.search(owner, "日落", record_scope="standalone") == []
+    [hit] = search.search(owner, "日落", record_scope="trip", trip_id=trip["id"])
+    assert hit["event"]["id"] == event["id"] and hit["trip_id"] == trip["id"]
+    updated = store.get(owner, "sunset")
+    assert updated["embedding"] == [0.1, 0.2]
+    assert updated["embedding_version"] == photo["version"]
 
 
 def test_photo_service_and_worker_real_store_integration():

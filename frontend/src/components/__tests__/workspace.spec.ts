@@ -103,6 +103,7 @@ describe('TripWorkspace and Travel Components', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.spyOn(travelApi, 'listTrips').mockResolvedValue({ items: [...mockTrips] })
+    vi.spyOn(travelApi, 'listStandaloneEvents').mockResolvedValue({ items: [], next_offset: null })
     vi.spyOn(travelApi, 'listPlaces').mockResolvedValue({ items: [...mockPlaces] })
     vi.spyOn(photosApi, 'listPhotos').mockResolvedValue({ items: [] })
     vi.spyOn(photosApi, 'getTripCover').mockResolvedValue({ photo_id: null })
@@ -579,29 +580,30 @@ describe('TripWorkspace and Travel Components', () => {
     wrapper.unmount()
   })
 
-  it('switches between workspace tabs: 旅行手記, 回憶搜尋, and AI 對話', async () => {
+  it('shows all four destinations in the same order and keeps the journal home', async () => {
     const wrapper = mount(TripWorkspace, {
       props: { user: mockUser }
     })
     await flushPromises()
 
     const navTabs = wrapper.findAll('.nav-tab-btn')
-    expect(navTabs.length).toBe(3)
-    expect(navTabs[0].text()).toContain('旅行手記')
-    expect(navTabs[1].text()).toContain('回憶搜尋')
-    expect(navTabs[2].text()).toContain('AI 對話')
+    expect(navTabs.map(tab => tab.text())).toEqual(['旅行手記', '日常足跡', '回憶搜尋', 'AI 助理'])
+    expect(wrapper.findAll('.mobile-nav-btn').map(tab => tab.text())).toEqual(['手記', '足跡', '搜尋', 'AI'])
 
     // Initially in trips tab
     expect(wrapper.find('.trip-list-section').exists()).toBe(true)
 
-    // Switch to Recall Search tab
     await navTabs[1].trigger('click')
+    await flushPromises()
+    expect(wrapper.find('#workspace-panel-footprints').exists()).toBe(true)
+
+    await navTabs[2].trigger('click')
     await flushPromises()
     expect(wrapper.find('.recall-search-section').exists()).toBe(true)
     expect(wrapper.find('.trip-list-section').exists()).toBe(false)
 
     // Switch to AI Conversation tab
-    await navTabs[2].trigger('click')
+    await navTabs[3].trigger('click')
     await flushPromises()
     expect(wrapper.find('.conversation-view-section').exists()).toBe(true)
     expect(wrapper.find('.recall-search-section').exists()).toBe(false)
@@ -620,7 +622,7 @@ describe('TripWorkspace and Travel Components', () => {
 
     // Switch to Recall Search tab
     const navTabs = wrapper.findAll('.nav-tab-btn')
-    await navTabs[1].trigger('click')
+    await navTabs[2].trigger('click')
     await flushPromises()
 
     // Trigger jump-trip event from RecallSearch component
@@ -651,7 +653,7 @@ describe('TripWorkspace and Travel Components', () => {
     expect(tablist.attributes('aria-label')).toBe('工作區功能切換')
 
     const tabs = wrapper.findAll('[role="tab"]')
-    expect(tabs.length).toBe(3)
+    expect(tabs.length).toBe(4)
 
     // Initial state: trips tab active, roving tabindex
     expect(tabs[0].attributes('aria-selected')).toBe('true')
@@ -660,18 +662,18 @@ describe('TripWorkspace and Travel Components', () => {
 
     expect(tabs[1].attributes('aria-selected')).toBe('false')
     expect(tabs[1].attributes('tabindex')).toBe('-1')
-    expect(tabs[1].attributes('aria-controls')).toBe('workspace-panel-search')
+    expect(tabs[1].attributes('aria-controls')).toBe('workspace-panel-footprints')
 
     expect(tabs[2].attributes('aria-selected')).toBe('false')
     expect(tabs[2].attributes('tabindex')).toBe('-1')
-    expect(tabs[2].attributes('aria-controls')).toBe('workspace-panel-chat')
+    expect(tabs[2].attributes('aria-controls')).toBe('workspace-panel-search')
 
     const initialPanel = wrapper.find('#workspace-panel-trips')
     expect(initialPanel.exists()).toBe(true)
     expect(initialPanel.attributes('role')).toBe('tabpanel')
     expect(initialPanel.attributes('aria-labelledby')).toBe('workspace-tab-trips')
 
-    // Navigate with ArrowRight from trips (0) to search (1)
+    // Navigate with ArrowRight from trips to footprints.
     await tabs[0].trigger('keydown', { key: 'ArrowRight' })
     await flushPromises()
 
@@ -679,44 +681,48 @@ describe('TripWorkspace and Travel Components', () => {
     expect(tabs[1].attributes('tabindex')).toBe('0')
     expect(tabs[0].attributes('aria-selected')).toBe('false')
     expect(tabs[0].attributes('tabindex')).toBe('-1')
-    expect(wrapper.find('#workspace-panel-search').exists()).toBe(true)
+    expect(wrapper.find('#workspace-panel-footprints').exists()).toBe(true)
     expect(document.activeElement).toBe(tabs[1].element)
 
-    // Navigate with ArrowRight from search (1) to chat (2)
+    // Continue through search to chat.
     await tabs[1].trigger('keydown', { key: 'ArrowRight' })
     await flushPromises()
 
     expect(tabs[2].attributes('aria-selected')).toBe('true')
     expect(tabs[2].attributes('tabindex')).toBe('0')
-    expect(wrapper.find('#workspace-panel-chat').exists()).toBe(true)
+    expect(wrapper.find('#workspace-panel-search').exists()).toBe(true)
     expect(document.activeElement).toBe(tabs[2].element)
+    await tabs[2].trigger('keydown', { key: 'ArrowRight' })
+    await flushPromises()
+    expect(wrapper.find('#workspace-panel-chat').exists()).toBe(true)
+    expect(document.activeElement).toBe(tabs[3].element)
 
     // ArrowRight on last tab wraps around to first tab (0)
-    await tabs[2].trigger('keydown', { key: 'ArrowRight' })
+    await tabs[3].trigger('keydown', { key: 'ArrowRight' })
     await flushPromises()
 
     expect(tabs[0].attributes('aria-selected')).toBe('true')
     expect(tabs[0].attributes('tabindex')).toBe('0')
     expect(document.activeElement).toBe(tabs[0].element)
 
-    // ArrowLeft on first tab wraps around to last tab (2)
+    // ArrowLeft on first tab wraps around to chat.
     await tabs[0].trigger('keydown', { key: 'ArrowLeft' })
+    await flushPromises()
+
+    expect(tabs[3].attributes('aria-selected')).toBe('true')
+    expect(tabs[3].attributes('tabindex')).toBe('0')
+    expect(document.activeElement).toBe(tabs[3].element)
+
+    // ArrowLeft from chat to search.
+    await tabs[3].trigger('keydown', { key: 'ArrowLeft' })
     await flushPromises()
 
     expect(tabs[2].attributes('aria-selected')).toBe('true')
     expect(tabs[2].attributes('tabindex')).toBe('0')
     expect(document.activeElement).toBe(tabs[2].element)
 
-    // ArrowLeft from chat (2) to search (1)
-    await tabs[2].trigger('keydown', { key: 'ArrowLeft' })
-    await flushPromises()
-
-    expect(tabs[1].attributes('aria-selected')).toBe('true')
-    expect(tabs[1].attributes('tabindex')).toBe('0')
-    expect(document.activeElement).toBe(tabs[1].element)
-
     // Home key jumps to first tab (0)
-    await tabs[1].trigger('keydown', { key: 'Home' })
+    await tabs[2].trigger('keydown', { key: 'Home' })
     await flushPromises()
 
     expect(tabs[0].attributes('aria-selected')).toBe('true')
@@ -727,9 +733,9 @@ describe('TripWorkspace and Travel Components', () => {
     await tabs[0].trigger('keydown', { key: 'End' })
     await flushPromises()
 
-    expect(tabs[2].attributes('aria-selected')).toBe('true')
-    expect(tabs[2].attributes('tabindex')).toBe('0')
-    expect(document.activeElement).toBe(tabs[2].element)
+    expect(tabs[3].attributes('aria-selected')).toBe('true')
+    expect(tabs[3].attributes('tabindex')).toBe('0')
+    expect(document.activeElement).toBe(tabs[3].element)
 
     wrapper.unmount()
   })

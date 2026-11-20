@@ -242,7 +242,9 @@ def evaluate_ann(settings, events, queries, exact_rankings, model):
             "MERGE (t:Trip {id:e.trip_id}) ON CREATE SET t.owner_id=e.owner_id, "
             "t.name=e.trip_id, t.start_date=e.date, t.end_date=e.date, "
             "t.version=1, t.timezone='Asia/Tokyo' "
-            "MERGE (u)-[:OWNS]->(t) MERGE (t)-[:HAS_EVENT]->(e)"
+            "SET e.record_scope='trip', e.timezone=t.timezone "
+            "MERGE (u)-[:OWNS]->(t) MERGE (t)-[:HAS_EVENT]->(e) "
+            "MERGE (u)-[:OWNS_EVENT]->(e)"
         )
         driver.execute_query(
             "MATCH (a:Event), (b:Event) WHERE a.owner_id=b.owner_id "

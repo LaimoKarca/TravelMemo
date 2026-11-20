@@ -770,7 +770,7 @@ function handleCitationClick(citation: Citation) {
               v-if="msg.role === 'assistant' && msg.citations && msg.citations.length > 0"
               class="citations-container"
             >
-              <span class="citations-heading">引用手記足跡：</span>
+              <span class="citations-heading">足跡來源</span>
               <div class="citations-flat-list">
                 <div
                   v-for="cite in msg.citations"
@@ -793,7 +793,7 @@ function handleCitationClick(citation: Citation) {
               v-if="msg.role === 'assistant' && msg.photo_citations && msg.photo_citations.length > 0"
               class="photo-citations-container"
             >
-              <span class="citations-heading">引用手記照片：</span>
+              <span class="citations-heading">照片來源</span>
               <div class="photo-citations-list">
                 <div
                   v-for="pCite in msg.photo_citations"

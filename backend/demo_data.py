@@ -112,7 +112,8 @@ def build_plan(package: dict, owner_id: str, anchor_date: str, package_root: Pat
                                        "name": category, "normalized_name": category}
             event.update(key=event_key, id=resource_id(owner_id, pack, "event", event_key),
                          owner_id=owner_id, trip_id=trip["id"], place_id=place["id"],
-                         category_id=category_id, position=position)
+                         category_id=category_id, position=position,
+                         timezone=trip["timezone"], record_scope="trip")
             trip["events"].append(event)
             event_by_key[event_key] = event
         trip["version"] = 1 + len(trip["events"])
@@ -252,10 +253,11 @@ class Neo4jDemoRepository:
         category_by_name = {c["normalized_name"]: c["id"] for c in plan["categories"]}
         rows = [{"props": e, "category_id": category_by_name[e["category"]]} for e in events]
         tx.run(
-            "UNWIND $rows AS row MATCH (t:Trip {id:row.props.trip_id, owner_id:$owner}) "
+            "MATCH (u:User {id:$owner}) UNWIND $rows AS row MATCH (t:Trip {id:row.props.trip_id, owner_id:$owner}) "
             "MATCH (p:Place {id:row.props.place_id, owner_id:$owner}) "
             "MATCH (c:Category {id:row.category_id, owner_id:$owner}) "
             "CREATE (e:Event) SET e=row.props CREATE (t)-[:HAS_EVENT]->(e) "
+            "CREATE (u)-[:OWNS_EVENT]->(e) "
             "CREATE (e)-[:AT]->(p) CREATE (e)-[:HAS_CATEGORY]->(c)", owner=owner, rows=rows,
         ).consume()
         tx.run(

@@ -10,7 +10,7 @@ export interface Trip {
 
 export interface Event {
   id: string
-  trip_id: string
+  trip_id: string | null
   place_id: string
   place_name: string
   city: string
@@ -19,7 +19,9 @@ export interface Event {
   date: string
   time: string | null
   notes: string
-  position: number
+  position: number | null
+  timezone?: string
+  record_scope?: 'standalone' | 'trip'
   version: number
 }
 
@@ -67,6 +69,7 @@ export interface UpdateTripPayload {
 }
 
 export interface CreateEventPayload {
+  timezone?: string
   place_id?: string | null
   place_name: string
   city: string
@@ -78,6 +81,7 @@ export interface CreateEventPayload {
 }
 
 export interface UpdateEventPayload {
+  timezone?: string
   place_id?: string | null
   place_name: string
   city: string
@@ -92,4 +96,31 @@ export interface UpdateEventPayload {
 export interface ReorderEventsPayload {
   version: number
   event_ids: string[]
+}
+
+export interface StandaloneEventFilters {
+  q?: string
+  city?: string
+  category?: string
+  date_from?: string
+  date_to?: string
+  offset?: number
+  limit?: number
+}
+
+export interface StandaloneEventPage {
+  items: Event[]
+  next_offset: number | null
+}
+
+export interface AttachEventPayload {
+  trip_id: string
+  version: number
+  trip_version: number
+  before_event_id?: string | null
+}
+
+export interface EventDestination {
+  tripId: string | null
+  eventId?: string
 }

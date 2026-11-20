@@ -1,4 +1,5 @@
 """Public API integration, with an injected store for fast ownership checks."""
+from contextlib import closing
 
 from fastapi.testclient import TestClient
 
@@ -13,7 +14,8 @@ def test_private_crud_order_and_optimistic_conflicts():
     )
     sent = {}
     app = create_app(settings, MemoryStore(), lambda email, code: sent.update({email: code}))
-    with TestClient(app) as a, TestClient(app) as b:
+    # A second cookie jar uses the same running app without starting its workers again.
+    with TestClient(app) as a, closing(TestClient(app)) as b:
         for client, email in [(a, "a@example.com"), (b, "b@example.com")]:
             assert (
                 client.post("/api/v1/auth/request-code", json={"email": email}).status_code == 202

@@ -1,7 +1,7 @@
 """FastAPI router for search and event retrieval."""
 
 import datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -16,6 +16,7 @@ class SearchInput(BaseModel):
     query: str = Field(default="", max_length=500)
     photo_ids: list[str] = Field(default_factory=list, max_length=4)
     trip_id: str | None = Field(default=None, max_length=100)
+    record_scope: Literal["all", "standalone", "trip"] = "all"
     date_from: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     date_to: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     city: str | None = Field(default=None, max_length=200)
@@ -44,6 +45,8 @@ class SearchInput(BaseModel):
             raise ValueError("查詢字串不得為空白，或請選擇圖片。")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise ValueError("起始日期不得晚於結束日期。")
+        if self.record_scope == "standalone" and self.trip_id:
+            raise ValueError("日常足跡範圍不能同時指定旅程手記。")
         return self
 
 
@@ -95,6 +98,8 @@ def create_search_router(auth: AuthService, service: Any, prefix: str = "/api/v1
             "city": body.city,
             "category": body.category,
         }
+        if body.record_scope != "all":
+            filters["record_scope"] = body.record_scope
         query = body.query
         if body.photo_ids:
             if photo_search is None:

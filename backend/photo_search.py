@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from functools import cache
 from typing import Any
 
 from backend.photo_analysis import build_photo_search_text
@@ -363,58 +364,6 @@ class PhotoSearchService:
 
         return []
 
-    def _trip_exists(self, owner_id: str, trip_id: str) -> bool:
-        """Checks if a trip exists as a live target in travel_repository."""
-        repo = getattr(self.photo_service, "travel_repository", None)
-        if repo is None:
-            return True
-        if hasattr(repo, "trips") and isinstance(repo.trips, dict):
-            if not repo.trips:
-                return True
-            t = repo.trips.get(trip_id)
-            return bool(t and t.get("owner_id") == owner_id)
-        if hasattr(repo, "get_trip"):
-            try:
-                res = repo.get_trip(owner_id, trip_id)
-                return res is not None
-            except Exception:  # noqa: BLE001
-                return True
-        return True
-
-    def _event_exists(self, owner_id: str, event_id: str) -> bool:
-        """Checks if an event exists as a live target in travel_repository."""
-        repo = getattr(self.photo_service, "travel_repository", None)
-        if repo is None:
-            return True
-        if hasattr(repo, "events") and isinstance(repo.events, dict):
-            if not repo.events:
-                return True
-            ev = repo.events.get(event_id)
-            return bool(ev and ev.get("owner_id") == owner_id)
-        if hasattr(repo, "get_event"):
-            try:
-                res = repo.get_event(owner_id, event_id)
-                return res is not None
-            except Exception:  # noqa: BLE001
-                return True
-        return True
-
-    def _get_event(self, owner_id: str, event_id: str) -> dict[str, Any] | None:
-        """Looks up event from travel_repository if available."""
-        repo = getattr(self.photo_service, "travel_repository", None)
-        if repo is None:
-            return None
-        if hasattr(repo, "get_event"):
-            try:
-                return repo.get_event(owner_id, event_id)
-            except Exception:  # noqa: BLE001, S110
-                pass
-        if hasattr(repo, "events") and isinstance(repo.events, dict):
-            ev = repo.events.get(event_id)
-            if ev and ev.get("owner_id") == owner_id:
-                return ev
-        return None
-
     def search(
         self,
         owner_id: str,
@@ -425,6 +374,7 @@ class PhotoSearchService:
         date_to: str | None = None,
         city: str | None = None,
         category: str | None = None,
+        record_scope: str | None = "all",
     ) -> list[dict[str, Any]]:
         """Searches owned trip/event-attached ready photos using BM25 and E5 RRF.
 
@@ -437,88 +387,68 @@ class PhotoSearchService:
         limit = max(1, min(limit, 50))
         trimmed_query = (query or "").strip()
         has_event_filters = bool(date_from or date_to or city or category)
+        repository = getattr(self.photo_service, "travel_repository", None)
+        if repository is None:
+            return []
+
+        @cache
+        def get_event(event_id: str) -> dict[str, Any] | None:
+            return repository.get_event(owner_id, event_id)
+
+        @cache
+        def trip_exists(album_id: str) -> bool:
+            return repository.get_trip(owner_id, album_id) is not None
 
         raw_candidates = self._fetch_owner_candidates(owner_id)
         matched_photos: list[dict[str, Any]] = []
-        matched_events_map: dict[str, dict[str, Any] | None] = {}
+        matched_sources: dict[str, tuple[dict[str, Any] | None, str | None]] = {}
 
         for photo in raw_candidates:
-            # Must belong to owner and be ready
-            if photo.get("owner_id") != owner_id:
-                continue
-            if photo.get("status") != "ready":
+            if photo.get("owner_id") != owner_id or photo.get("status") != "ready":
                 continue
 
-            # Must be attached to live trip or event (chat-only / unbound / deleted targets strictly excluded)
-            bindings = photo.get("bindings") or []
-            live_attached_bindings = []
-            for b in bindings:
-                k = b.get("kind")
-                tid = b.get("target_id", "")
-                if (k == "trip" and self._trip_exists(owner_id, tid)) or (
-                    k == "event" and self._event_exists(owner_id, tid)
-                ):
-                    live_attached_bindings.append(b)
-
-            if not live_attached_bindings:
-                continue
-
-            # Trip filter with live target validation
-            if trip_id is not None:
-                matches_trip = False
-                for b in live_attached_bindings:
+            matched_event = None
+            source_trip = None
+            for binding in photo.get("bindings") or []:
+                target = binding.get("target_id", "")
+                if binding.get("kind") == "trip":
                     if (
-                        b.get("kind") == "trip"
-                        and (b.get("target_id") == trip_id or b.get("trip_id") == trip_id)
-                        and self._trip_exists(owner_id, trip_id)
+                        source_trip is None
+                        and record_scope != "standalone"
+                        and not has_event_filters
+                        and (trip_id is None or target == trip_id)
+                        and trip_exists(target)
                     ):
-                        matches_trip = True
-                        break
-                    if b.get("kind") == "event":
-                        target_ev_id = b.get("target_id", "")
-                        ev = self._get_event(owner_id, target_ev_id)
-                        if ev and ev.get("trip_id") == trip_id:
-                            matches_trip = True
-                            break
-                        if b.get("trip_id") == trip_id and self._trip_exists(owner_id, trip_id):
-                            matches_trip = True
-                            break
-                if not matches_trip:
+                        source_trip = target
+                    continue
+                if binding.get("kind") != "event":
                     continue
 
-            # Event facts filters: date_from, date_to, city, category
-            event_bindings = [b for b in live_attached_bindings if b.get("kind") == "event"]
-            if has_event_filters:
-                # Album photos with no facts excluded for filters requiring events
-                if not event_bindings:
+                event = get_event(target)
+                if event is None:
                     continue
-
-                matched_event: dict[str, Any] | None = None
-                for eb in event_bindings:
-                    ev = self._get_event(owner_id, eb.get("target_id", ""))
-                    if not ev:
-                        continue
-                    if date_from and str(ev.get("date", "")) < date_from:
-                        continue
-                    if date_to and str(ev.get("date", "")) > date_to:
-                        continue
-                    if city and str(ev.get("city", "")).casefold() != city.casefold():
-                        continue
-                    if category and str(ev.get("category", "")).casefold() != category.casefold():
-                        continue
-                    matched_event = ev
-                    break
-
-                if matched_event is None:
+                event_trip = event.get("trip_id")
+                if trip_id is not None and event_trip != trip_id:
                     continue
-                matched_events_map[photo["id"]] = matched_event
-            else:
-                first_event = None
-                if event_bindings:
-                    first_event = self._get_event(owner_id, event_bindings[0].get("target_id", ""))
-                matched_events_map[photo["id"]] = first_event
+                if record_scope == "standalone" and event_trip is not None:
+                    continue
+                if record_scope == "trip" and event_trip is None:
+                    continue
+                if date_from and str(event.get("date", "")) < date_from:
+                    continue
+                if date_to and str(event.get("date", "")) > date_to:
+                    continue
+                if city and str(event.get("city", "")).casefold() != city.casefold():
+                    continue
+                if category and str(event.get("category", "")).casefold() != category.casefold():
+                    continue
+                matched_event, source_trip = event, event_trip
+                break
 
+            if matched_event is None and source_trip is None:
+                continue
             matched_photos.append(photo)
+            matched_sources[photo["id"]] = matched_event, source_trip
 
         if not matched_photos:
             return []
@@ -606,12 +536,13 @@ class PhotoSearchService:
             results: list[dict[str, Any]] = []
             for p, sc, rsn in fused[:limit]:
                 dto = _to_photo_dto(p, self.photo_service, owner_id)
-                ev = matched_events_map.get(p["id"])
+                event, source_trip = matched_sources[p["id"]]
                 results.append({
                     "photo": dto,
                     "score": round(float(sc), 4),
                     "reasons": rsn,
-                    "event": _safe_format_event(ev),
+                    "event": _safe_format_event(event),
+                    "trip_id": source_trip,
                 })
             return results
 
@@ -623,11 +554,12 @@ class PhotoSearchService:
         results = []
         for p in matched_photos[:limit]:
             dto = _to_photo_dto(p, self.photo_service, owner_id)
-            ev = matched_events_map.get(p["id"])
+            event, source_trip = matched_sources[p["id"]]
             results.append({
                 "photo": dto,
                 "score": 1.0,
                 "reasons": ["條件篩選匹配"],
-                "event": _safe_format_event(ev),
+                "event": _safe_format_event(event),
+                "trip_id": source_trip,
             })
         return results

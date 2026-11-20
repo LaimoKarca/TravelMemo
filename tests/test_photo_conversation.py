@@ -253,6 +253,31 @@ def test_mixed_response_verified_photo_and_event_citations():
     assert msg["citations"][0]["state"] == "current"
 
 
+def test_photo_attached_to_standalone_event_can_be_cited_without_text_match():
+    llm = MockLLM(
+        default_status="answered",
+        default_content="這張照片附在你 2026 年 11 月 2 日的日常足跡。",
+        default_answer_scope="mixed",
+        default_cited_photo_ids=["photo-1"],
+        default_cited_event_ids=["standalone-1"],
+    )
+    service, photo_svc, search_svc, _ = setup_services(llm)
+    photo_svc.add_mock_photo("photo-1", place_candidates=["沙灘"])
+    photo_svc.photos["photo-1"]["bindings"] = [
+        {"kind": "event", "target_id": "standalone-1"},
+    ]
+    search_svc.add_event("standalone-1", place_name="海邊散步", date="2026-11-02", trip_id=None)
+    conversation = service.create_conversation("user-1", "照片回憶")
+    message = service.post_message(
+        "user-1", conversation["id"], "這張照片是哪一天的日常足跡？", photo_ids=["photo-1"],
+    )
+    assert message["status"] == "answered"
+    assert [citation["photo_id"] for citation in message["photo_citations"]] == ["photo-1"]
+    assert [(citation["event_id"], citation["trip_id"]) for citation in message["citations"]] == [
+        ("standalone-1", None),
+    ]
+
+
 def test_invalid_photo_cite_fails_closed():
     """If LLM cites photo not in provided evidence, must fail closed."""
     llm = MockLLM(

@@ -24,12 +24,14 @@ export interface SearchPhotoItem {
   score: number
   reasons: string[]
   event?: SearchEvent | null
+  trip_id?: string | null
 }
 
 export interface SearchPayload {
   query?: string
   photo_ids?: string[]
   trip_id?: string
+  record_scope?: 'all' | 'standalone' | 'trip'
   date_from?: string
   date_to?: string
   city?: string

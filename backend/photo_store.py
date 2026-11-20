@@ -17,6 +17,64 @@ TARGET_LABELS: dict[str, str] = {
 }
 
 
+def _lock_event_target(tx: Any, owner: str, event_id: str) -> Any:
+    return tx.run(
+        """
+        MATCH (:User {id: $owner})-[:OWNS_EVENT]->(e:Event {id: $id, owner_id: $owner})
+        SET e.__standalone_lock = coalesce(e.__standalone_lock, 0) + 1
+        REMOVE e.__standalone_lock
+        RETURN e.trip_id AS trip_id
+        """,
+        owner=owner,
+        id=event_id,
+    ).single()
+
+
+def _update_event_binding_trip(bindings: list[dict], event_id: str, trip_id: str) -> bool:
+    for binding in bindings:
+        if binding.get("kind") == "event" and binding.get("target_id") == event_id:
+            if binding.get("trip_id") == trip_id:
+                return False
+            binding["trip_id"] = trip_id
+            return True
+    return False
+
+
+def sync_event_photo_trip(tx: Any, owner: str, event_id: str, trip_id: str) -> None:
+    """Refresh album membership inside the transaction moving an owned event."""
+    photos = tx.run(
+        """
+        MATCH (u:User {id: $owner})-[:OWNS_EVENT]->(e:Event {id: $event_id, owner_id: $owner})
+        MATCH (e)-[:HAS_PHOTO]->(p:Photo {owner_id: $owner})<-[:OWNS]-(u)
+        WITH DISTINCT p ORDER BY p.id
+        SET p.__binding_lock = true
+        REMOVE p.__binding_lock
+        RETURN p.id AS id, p.bindings_json AS bindings
+        """,
+        owner=owner,
+        event_id=event_id,
+    ).data()
+    changed = []
+    for photo in photos:
+        bindings = json.loads(photo["bindings"] or "[]")
+        if _update_event_binding_trip(bindings, event_id, trip_id):
+            changed.append({"id": photo["id"], "bindings": json.dumps(bindings)})
+    if changed:
+        tx.run(
+            """
+            UNWIND $changed AS item
+            MATCH (p:Photo {id: item.id, owner_id: $owner})
+            WITH p, item, p.version AS previous_version, p.embedding_version AS previous_embedding_version
+            SET p.bindings_json = item.bindings,
+                p.embedding_version = CASE WHEN previous_embedding_version = previous_version
+                                           THEN previous_version + 1 ELSE previous_embedding_version END,
+                p.version = previous_version + 1
+            """,
+            owner=owner,
+            changed=changed,
+        ).consume()
+
+
 class MemoryPhotoStore:
     """In-memory thread-safe store for photo metadata, bindings, and orders."""
 
@@ -259,6 +317,17 @@ class MemoryPhotoStore:
                 datetime.datetime.now(datetime.UTC).isoformat().replace("+00:00", "Z")
             )
             return copy.deepcopy(rec)
+
+    def sync_event_trip(self, owner: str, event_id: str, trip_id: str) -> None:
+        with self.lock:
+            for photo in self.photos.values():
+                if photo.get("owner_id") != owner:
+                    continue
+                if _update_event_binding_trip(photo.get("bindings", []), event_id, trip_id):
+                    version = photo["version"]
+                    photo["version"] = version + 1
+                    if photo.get("embedding_version") == version:
+                        photo["embedding_version"] = version + 1
 
     def unbind(
         self,
@@ -732,8 +801,11 @@ class Neo4jPhotoStore:
         with self.driver.session(database=self.database) as session:
             result = session.run(
                 """
-                MATCH (p:Photo {id: $id, version: $expected_version})
+                MATCH (p:Photo {id: $id})
                 WHERE ($owner IS NULL OR p.owner_id = $owner)
+                SET p.__binding_lock = true
+                REMOVE p.__binding_lock
+                WITH p WHERE p.version = $expected_version
                 SET p += $changes,
                     p.version = p.version + 1,
                     p.updated_at = $updated_at
@@ -778,7 +850,9 @@ class Neo4jPhotoStore:
                 """
                 MATCH (p:Photo {id: $id})
                 WHERE ($owner IS NULL OR p.owner_id = $owner)
-                  AND ($expected_version IS NULL OR p.version = $expected_version)
+                SET p.__binding_lock = true
+                REMOVE p.__binding_lock
+                WITH p WHERE ($expected_version IS NULL OR p.version = $expected_version)
                   AND (NOT $only_if_unbound OR p.bindings_json = '[]' OR p.bindings_json IS NULL)
                 DETACH DELETE p
                 RETURN count(p) AS cnt
@@ -823,9 +897,17 @@ class Neo4jPhotoStore:
 
         with self.driver.session(database=self.database) as session:  # noqa: SIM117
             with session.begin_transaction() as tx:
+                if kind == "event":
+                    target = _lock_event_target(tx, owner, target_id)
+                    if target is None:
+                        return None
+                    # The event can have moved after the service-level ownership check.
+                    trip_id = target["trip_id"]
                 p_res = tx.run(
                     """
-                    MATCH (u:User {id: $owner})-[:OWNS]->(p:Photo {id: $id})
+                    MATCH (:User {id: $owner})-[:OWNS]->(p:Photo {id: $id, owner_id: $owner})
+                    SET p.__binding_lock = true
+                    REMOVE p.__binding_lock
                     RETURN p
                     """,
                     owner=owner,
@@ -843,6 +925,8 @@ class Neo4jPhotoStore:
                     if b.get("kind") == kind and b.get("target_id") == target_id:
                         if trip_id is not None:
                             b["trip_id"] = trip_id
+                        elif kind == "event":
+                            b.pop("trip_id", None)
                         already_bound = True
                         break
 
@@ -871,7 +955,7 @@ class Neo4jPhotoStore:
                 elif kind == "event":
                     e_match = tx.run(
                         """
-                        MATCH (u:User {id: $owner})-[:OWNS]->(:Trip)-[:HAS_EVENT]->(target:Event {id: $target_id})
+                        MATCH (u:User {id: $owner})-[:OWNS_EVENT]->(target:Event {id: $target_id, owner_id: $owner})
                         MATCH (u)-[:OWNS]->(p:Photo {id: $id, version: $ver})
                         MERGE (target)-[:HAS_PHOTO]->(p)
                         RETURN target.id AS eid
@@ -963,9 +1047,13 @@ class Neo4jPhotoStore:
         )
         with self.driver.session(database=self.database) as session:  # noqa: SIM117
             with session.begin_transaction() as tx:
+                if kind == "event":
+                    _lock_event_target(tx, owner, target_id)
                 p_res = tx.run(
                     """
-                    MATCH (u:User {id: $owner})-[:OWNS]->(p:Photo {id: $id})
+                    MATCH (:User {id: $owner})-[:OWNS]->(p:Photo {id: $id, owner_id: $owner})
+                    SET p.__binding_lock = true
+                    REMOVE p.__binding_lock
                     RETURN p
                     """,
                     owner=owner,
