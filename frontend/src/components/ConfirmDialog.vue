@@ -131,7 +131,7 @@ onBeforeUnmount(() => {
           :key="action"
           type="button"
           class="btn"
-          :class="action === 'cancel' ? 'btn-secondary cancel-action' : danger ? 'btn-danger' : 'btn-primary'"
+          :class="action === 'cancel' ? 'btn-primary cancel-action' : danger ? 'btn-secondary btn-danger' : 'btn-secondary'"
           :disabled="loading"
           @click="action === 'cancel' ? emit('cancel') : emit('confirm')"
         >
@@ -207,12 +207,12 @@ onBeforeUnmount(() => {
 }
 
 .btn-danger {
-  background-color: var(--color-error-text);
-  color: #FFFFFF;
+  background-color: transparent;
+  color: var(--color-error-text);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: #A01C00;
+  background-color: var(--color-error-bg);
 }
 
 .spinner-small {

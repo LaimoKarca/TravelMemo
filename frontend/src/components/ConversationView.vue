@@ -924,7 +924,8 @@ function handleCitationClick(citation: Citation) {
       aria-modal="true"
       aria-label="存入旅行手記"
     >
-      <div class="save-modal-card">
+      <div class="save-modal-card editor-dialog">
+        <div class="dialog-form-body">
         <h3 class="save-modal-title">存入旅行手記</h3>
         <p class="save-modal-desc">選擇要將這張照片加入的旅程手記或足跡：</p>
 
@@ -964,12 +965,13 @@ function handleCitationClick(citation: Citation) {
           {{ saveErrorMessage }}
         </div>
 
+        </div>
         <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="savingToJournal"
-            aria-label="取消" title="取消"
+            aria-label="返回" title="返回"
             @click="closeSaveModal"
           >
             <AppIcon name="back" />
@@ -1879,11 +1881,6 @@ function handleCitationClick(citation: Citation) {
   border: 1px solid var(--color-success-border);
 }
 
-.dialog-footer {
-  align-items: center;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
 
 /* Minimal Spinners */
 .page-spinner {

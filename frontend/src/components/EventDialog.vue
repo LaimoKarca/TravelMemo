@@ -336,7 +336,7 @@ onBeforeUnmount(() => {
   >
     <div
       ref="dialogRef"
-      class="dialog-card"
+      class="dialog-card editor-dialog"
       role="dialog"
       aria-modal="true"
       :aria-labelledby="'event-dialog-title'"
@@ -380,6 +380,7 @@ onBeforeUnmount(() => {
       </div>
 
       <form class="dialog-form" @submit.prevent="handleSubmit">
+        <div class="dialog-form-body">
         <div class="form-group">
           <label for="event-place-name" class="form-label">地點名稱 <span class="required-star">*</span></label>
           <input id="event-place-name" v-model="placeName" class="form-input" placeholder="這一站去了哪裡？" maxlength="200" required :disabled="loading" />
@@ -418,12 +419,13 @@ onBeforeUnmount(() => {
           <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
         </section>
 
+        </div>
         <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="loading"
-            aria-label="取消" title="取消"
+            aria-label="返回" title="返回"
             @click="handleCancel"
           >
             <AppIcon name="back" />
@@ -717,10 +719,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.dialog-footer {
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
 
 .photos-sub-wrapper {
   margin-top: 0.75rem;

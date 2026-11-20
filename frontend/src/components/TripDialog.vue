@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
   >
     <div
       ref="dialogRef"
-      class="dialog-card"
+      class="dialog-card editor-dialog"
       role="dialog"
       aria-modal="true"
       :aria-labelledby="'trip-dialog-title'"
@@ -294,6 +294,7 @@ onBeforeUnmount(() => {
       </div>
 
       <form class="dialog-form" @submit.prevent="handleSubmit">
+        <div class="dialog-form-body">
         <div class="form-group">
           <label for="trip-name-input" class="form-label">
             旅程名稱 <span class="required-star">*</span>
@@ -376,12 +377,13 @@ onBeforeUnmount(() => {
           <details @toggle="loadAlbum"><summary>從旅程相簿選擇</summary><div class="cover-options"><button v-for="photo in albumPhotos" :key="photo.id" type="button" :disabled="loading || coverBusy" :aria-label="`選為封面：${photo.caption || '相簿照片'}`" :aria-pressed="currentCover === photo.id" @click="chooseCover(photo.id)"><img :src="photo.thumbnail_url" :alt="photo.caption || '相簿照片'" loading="lazy" /></button></div></details>
           <small>封面變更會即時儲存。</small><p v-if="coverError" role="alert" class="cover-error">{{ coverError }}</p>
         </section>
+        </div>
         <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="loading"
-            aria-label="取消" title="取消"
+            aria-label="返回" title="返回"
             @click="emit('cancel')"
           >
             <AppIcon name="back" />
@@ -551,10 +553,6 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 
-.dialog-footer {
-  gap: 0.75rem;
-  margin-top: 0.5rem;
-}
 
 .spinner-small {
   width: 14px;
