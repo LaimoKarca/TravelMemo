@@ -4,6 +4,7 @@ import type { Trip, Event, CreateEventPayload, UpdateEventPayload } from '../typ
 import type { PhotoDTO } from '../types/photo'
 import { listPhotos, bindPhoto, deletePhoto, retryPhoto, updatePhoto } from '../api/photos'
 import JournalNote from './JournalNote.vue'
+import AppIcon from './AppIcon.vue'
 import PhotoGallery from './PhotoGallery.vue'
 import PhotoPicker from './PhotoPicker.vue'
 
@@ -417,22 +418,26 @@ onBeforeUnmount(() => {
           <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
         </section>
 
-        <footer class="dialog-footer">
+        <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="loading"
+            aria-label="取消" title="取消"
             @click="handleCancel"
           >
-            取消
+            <AppIcon name="back" />
           </button>
           <button
             type="submit"
             class="btn btn-primary"
             :disabled="loading"
+            :aria-label="loading ? '儲存中' : isEdit ? '儲存修改' : '記錄足跡'"
+            :title="isEdit ? '儲存修改' : '記錄足跡'"
+            :aria-busy="loading"
           >
             <span v-if="loading" class="spinner-small" aria-hidden="true"></span>
-            <span>{{ loading ? '儲存中...' : (isEdit ? '儲存修改' : '記錄足跡') }}</span>
+            <AppIcon v-else name="save" />
           </button>
         </footer>
       </form>
@@ -668,11 +673,6 @@ onBeforeUnmount(() => {
   flex: 2;
 }
 
-/* Safari date/time controls must shrink with their flex column. */
-.form-input { min-width: 0; max-width: 100%; box-sizing: border-box; }
-input[type="date"], input[type="time"] { display: block; width: 100%; min-width: 0; max-width: 100%; appearance: none; -webkit-appearance: none; }
-input[type="date"]::-webkit-date-and-time-value,
-input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
 
 .form-label {
   font-size: 0.875rem;
@@ -718,8 +718,6 @@ input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-align: left
 }
 
 .dialog-footer {
-  display: flex;
-  justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 0.5rem;
 }

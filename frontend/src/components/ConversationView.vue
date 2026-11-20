@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppIcon from './AppIcon.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type {
   ConversationSummary,
@@ -963,22 +964,25 @@ function handleCitationClick(citation: Citation) {
           {{ saveErrorMessage }}
         </div>
 
-        <footer class="dialog-footer">
+        <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="savingToJournal"
+            aria-label="取消" title="取消"
             @click="closeSaveModal"
           >
-            關閉
+            <AppIcon name="back" />
           </button>
           <button
             type="button"
             class="btn btn-primary"
             :disabled="savingToJournal || !saveSelectedTripId"
+            :aria-label="savingToJournal ? '儲存中' : '確認加入手記'" title="加入手記"
+            :aria-busy="savingToJournal"
             @click="confirmSaveToJournal"
           >
-            {{ savingToJournal ? '儲存中...' : '確認加入手記' }}
+            <span v-if="savingToJournal" class="spinner-small" aria-hidden="true"></span><AppIcon v-else name="save" />
           </button>
         </footer>
       </div>
@@ -1876,9 +1880,7 @@ function handleCitationClick(citation: Citation) {
 }
 
 .dialog-footer {
-  display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.5rem;
 }

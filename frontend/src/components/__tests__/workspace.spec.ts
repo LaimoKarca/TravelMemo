@@ -391,6 +391,23 @@ describe('TripWorkspace and Travel Components', () => {
     wrapper.unmount()
   })
 
+  it('opens journal editing without input autofocus and keeps footer actions icon-only', async () => {
+    const wrapper = mount(TripDialog, { props: { visible: true, trip: mockTrips[0] }, attachTo: document.body })
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('[role="dialog"]').element)
+    const buttons = wrapper.findAll('.dialog-icon-actions button')
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['取消', '儲存修改'])
+    expect(buttons.every(b => !b.text() && b.find('svg').exists())).toBe(true)
+  })
+
+  it('keeps journal deletion confirmation before cancel', async () => {
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    await wrapper.findAll('.trip-card')[0].get('button[aria-label="刪除手記"]').trigger('click')
+    const dialog = wrapper.findAllComponents(ConfirmDialog).find(c => c.props('visible'))!
+    expect(dialog.findAll('.dialog-actions button').map(b => b.text())).toEqual(['確定', '取消'])
+  })
+
   it('TripDialog validates form fields and successfully emits submit on save', async () => {
     const wrapper = mount(TripDialog, {
       props: { visible: true, trip: null }

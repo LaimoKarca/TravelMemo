@@ -155,6 +155,9 @@ describe('Media Frontend Integration', () => {
 
     // Confirm save to journal
     const confirmBtn = wrapper.findAll('.save-modal-card .btn-primary')[0]
+    expect(confirmBtn.text()).toBe('')
+    expect(confirmBtn.find('svg').exists()).toBe(true)
+    expect(confirmBtn.attributes('aria-label')).toBe('確認加入手記')
     await confirmBtn.trigger('click')
     await flushPromises()
 

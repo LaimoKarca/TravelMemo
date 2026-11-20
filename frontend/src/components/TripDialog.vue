@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import JournalNote from './JournalNote.vue'
+import AppIcon from './AppIcon.vue'
 import PhotoPicker from './PhotoPicker.vue'
 import { bindPhoto, listPhotos, setTripCover } from '../api/photos'
 import type { PhotoDTO } from '../types/photo'
@@ -148,6 +149,7 @@ watch(
         resetFormFromProps()
       }
       nextTick(() => {
+        if (isEdit.value) { dialogRef.value?.focus({ preventScroll: true }); return }
         const firstInput = dialogRef.value?.querySelector<HTMLElement>('#trip-name-input')
         const firstFocusable = dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
         ;(firstInput || firstFocusable)?.focus()
@@ -374,22 +376,26 @@ onBeforeUnmount(() => {
           <details @toggle="loadAlbum"><summary>從旅程相簿選擇</summary><div class="cover-options"><button v-for="photo in albumPhotos" :key="photo.id" type="button" :disabled="loading || coverBusy" :aria-label="`選為封面：${photo.caption || '相簿照片'}`" :aria-pressed="currentCover === photo.id" @click="chooseCover(photo.id)"><img :src="photo.thumbnail_url" :alt="photo.caption || '相簿照片'" loading="lazy" /></button></div></details>
           <small>封面變更會即時儲存。</small><p v-if="coverError" role="alert" class="cover-error">{{ coverError }}</p>
         </section>
-        <footer class="dialog-footer">
+        <footer class="dialog-footer dialog-icon-actions">
           <button
             type="button"
             class="btn btn-secondary"
             :disabled="loading"
+            aria-label="取消" title="取消"
             @click="emit('cancel')"
           >
-            取消
+            <AppIcon name="back" />
           </button>
           <button
             type="submit"
             class="btn btn-primary"
             :disabled="loading"
+            :aria-label="loading ? '儲存中' : isEdit ? '儲存修改' : '建立旅程'"
+            :title="isEdit ? '儲存修改' : '建立旅程'"
+            :aria-busy="loading"
           >
             <span v-if="loading" class="spinner-small" aria-hidden="true"></span>
-            <span>{{ loading ? '儲存中...' : (isEdit ? '儲存修改' : '建立旅程') }}</span>
+            <AppIcon v-else name="save" />
           </button>
         </footer>
       </form>
@@ -412,11 +418,13 @@ onBeforeUnmount(() => {
 .dialog-backdrop {
   position: fixed;
   inset: 0;
+  height: 100dvh;
+  box-sizing: border-box;
   background-color: rgba(69, 58, 50, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem 1rem;
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
   z-index: 1000;
   overflow-y: auto;
 }
@@ -424,6 +432,10 @@ onBeforeUnmount(() => {
 .dialog-card {
   width: 100%;
   max-width: 540px;
+  min-height: 0;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background-color: var(--color-paper);
   border-radius: var(--radius-lg);
   box-shadow: 0 16px 36px rgba(69, 58, 50, 0.15);
@@ -504,12 +516,14 @@ onBeforeUnmount(() => {
 }
 
 .form-group {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
 }
 
 .form-row {
+  min-width: 0;
   display: flex;
   gap: 1rem;
 }
@@ -538,8 +552,6 @@ onBeforeUnmount(() => {
 }
 
 .dialog-footer {
-  display: flex;
-  justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 0.5rem;
 }

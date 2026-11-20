@@ -1349,7 +1349,7 @@ function resetFilters() {
       :title="confirmDialogTitle"
       :message="confirmDialogMessage"
       :loading="actionInProgress"
-      :confirm-first="confirmDialogTitle === '確認刪除旅行足跡'"
+      confirm-first
       @confirm="confirmAction && confirmAction()"
       @cancel="confirmDialogVisible = false"
     />
