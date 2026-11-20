@@ -226,7 +226,7 @@ function handleJump() {
 
       </div>
 
-      <footer class="dialog-footer">
+      <footer v-if="currentEvent && !isDeleted" class="dialog-footer">
         <button
           v-if="currentEvent && !isDeleted"
           type="button"
@@ -401,15 +401,19 @@ function handleJump() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem;
-  border-top: 1px solid var(--color-border);
+  padding: 0;
+  flex: 0 0 auto;
   background-color: var(--color-paper);
 }
 
 .jump-btn {
   display: inline-flex;
   gap: 0.5rem;
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: 0;
+  justify-content: center;
 }
 
 .error-banner {
@@ -470,7 +474,7 @@ function handleJump() {
   }
 
   .dialog-footer {
-    padding: 0.75rem 1rem;
+    padding: 0;
     flex-direction: column-reverse;
   }
 

@@ -246,6 +246,7 @@ const eventModalConflict = ref(false)
 
 // Confirm dialog state
 const confirmDialogVisible = ref(false)
+const confirmationResource = ref<{ id: string; name: string; kind: 'trip' | 'event' } | null>(null)
 const confirmDialogTitle = ref('')
 const confirmDialogMessage = ref('')
 const confirmAction = ref<(() => Promise<void>) | null>(null)
@@ -599,6 +600,7 @@ async function refreshTripFromModal() {
 
 // --- Trip Delete ---
 function promptDeleteTrip(trip: Trip) {
+  confirmationResource.value = { id: trip.id, name: trip.name, kind: 'trip' }
   confirmDialogTitle.value = '確認刪除旅行手記'
   confirmDialogMessage.value = `確定要刪除「${trip.name}」嗎？這將一併移除此旅程記錄的所有足跡。已記錄的地點將被保留以供未來其他旅程使用。`
   confirmAction.value = async () => {
@@ -703,6 +705,7 @@ async function refreshEventFromModal() {
 
 // --- Event Delete ---
 function promptDeleteEvent(event: Event) {
+  confirmationResource.value = { id: event.id, name: event.place_name, kind: 'event' }
   confirmDialogTitle.value = '確認刪除旅行足跡'
   confirmDialogMessage.value = `確定要從旅程中移除「${event.place_name}」這處足跡紀錄嗎？`
   confirmAction.value = async () => {
@@ -1349,7 +1352,10 @@ function resetFilters() {
       :title="confirmDialogTitle"
       :message="confirmDialogMessage"
       :loading="actionInProgress"
-      confirm-first
+      :confirm-text="confirmationResource?.kind === 'trip' ? '刪除手記' : '刪除足跡'"
+      :confirmation-mode="confirmationResource?.kind === 'trip' ? 'name' : 'keyword'"
+      :confirmation-name="confirmationResource?.name"
+      :target-key="confirmationResource?.id"
       @confirm="confirmAction && confirmAction()"
       @cancel="confirmDialogVisible = false"
     />

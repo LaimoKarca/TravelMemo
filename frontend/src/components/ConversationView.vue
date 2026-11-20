@@ -1004,6 +1004,9 @@ function handleCitationClick(citation: Citation) {
     <ConfirmDialog
       :visible="showDeleteConfirm"
       title="確認刪除對話"
+      confirm-text="刪除對話"
+      confirmation-mode="keyword"
+      :target-key="conversationToDelete?.id"
       :message="`確定要刪除「${conversationToDelete?.title || '此對話'}」嗎？此動作將清除對話內的問答紀錄。`"
       :loading="deletingConversation"
       @confirm="handleConfirmDelete"

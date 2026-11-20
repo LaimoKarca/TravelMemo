@@ -356,7 +356,9 @@ onBeforeUnmount(() => {
       :visible="confirmDialogVisible"
       :title="confirmDialogTitle"
       :message="confirmDialogMessage"
-      confirm-first
+      confirm-text="刪除照片"
+      confirmation-mode="keyword"
+      :target-key="pendingDeletePhoto?.photoId"
       @confirm="handleConfirmDelete"
       @cancel="handleCancelDelete"
     />

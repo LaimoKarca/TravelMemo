@@ -71,11 +71,11 @@ describe('compact journal interactions', () => {
     expect(w.emitted('dismiss')).toHaveLength(2)
   })
 
-  it('places destructive confirmation before cancel while initially focusing cancel', async () => {
-    const w = mount(ConfirmDialog, { props: { visible: true, title: '刪除照片', message: '刪除無法復原', confirmFirst: true }, attachTo: document.body })
+  it('places cancel before destructive confirmation and initially focuses cancel', async () => {
+    const w = mount(ConfirmDialog, { props: { visible: true, title: '刪除照片', message: '刪除無法復原' }, attachTo: document.body })
     await flushPromises()
     const buttons = w.findAll('button')
-    expect(buttons.map(b => b.text())).toEqual(['確定', '取消'])
-    expect(document.activeElement).toBe(buttons[1].element)
+    expect(buttons.map(b => b.text())).toEqual(['取消', '確定'])
+    expect(document.activeElement).toBe(buttons[0].element)
   })
 })

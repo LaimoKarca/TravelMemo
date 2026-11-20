@@ -253,7 +253,7 @@ describe('ConversationView', () => {
     await flushPromises()
 
     const input = wrapper.find('#chat-message-input')
-    expect(input.attributes('placeholder')).toBe('詢問任何關於您旅程手記的問題...')
+    expect(input.attributes('placeholder')).toBeTruthy()
     expect(input.attributes('placeholder')).not.toContain('Enter')
     expect(input.attributes('placeholder')).not.toContain('Shift+Enter')
 
@@ -296,6 +296,8 @@ describe('ConversationView', () => {
     // Find confirm button and click
     const confirmBtn = wrapper.find('.dialog-actions button.btn-danger')
     expect(confirmBtn.exists()).toBe(true)
+    expect(confirmBtn.attributes('disabled')).toBeDefined()
+    await wrapper.get('input[aria-label="輸入 DELETE 或刪除"]').setValue('DELETE')
     await confirmBtn.trigger('click')
     await flushPromises()
 

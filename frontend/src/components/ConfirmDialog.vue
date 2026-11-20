@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch, ref, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { watch, ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -10,7 +10,9 @@ const props = withDefaults(
     cancelText?: string
     loading?: boolean
     danger?: boolean
-    confirmFirst?: boolean
+    confirmationMode?: 'none' | 'keyword' | 'name'
+    confirmationName?: string
+    targetKey?: string
   }>(),
   {
     confirmText: '確定',
@@ -27,6 +29,29 @@ const emit = defineEmits<{
 
 const dialogRef = ref<HTMLElement | null>(null)
 const launcherRef = ref<HTMLElement | null>(null)
+const confirmationInput = ref('')
+const submitted = ref(false)
+const canConfirm = computed(() => {
+  const input = confirmationInput.value.trim()
+  if (props.confirmationMode === 'keyword') return input === '刪除' || input.toUpperCase() === 'DELETE'
+  if (props.confirmationMode === 'name') return !!props.confirmationName?.trim() && input === props.confirmationName.trim()
+  return true
+})
+function handleConfirm() {
+  if (!props.visible || props.loading || submitted.value || !canConfirm.value) return
+  submitted.value = true
+  emit('confirm')
+}
+function handleCancel() {
+  if (props.loading || submitted.value) return
+  emit('cancel')
+}
+watch(() => [props.visible, props.targetKey, props.title, props.message, props.confirmationMode, props.confirmationName], () => {
+  confirmationInput.value = ''
+  submitted.value = false
+  if (props.visible) nextTick(() => dialogRef.value?.querySelector<HTMLElement>('.cancel-action')?.focus())
+})
+watch(() => props.loading, (value, previous) => { if (previous && !value) submitted.value = false })
 
 const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
@@ -35,7 +60,7 @@ function handleKeyDown(event: KeyboardEvent) {
 
   if (event.key === 'Escape') {
     event.preventDefault()
-    emit('cancel')
+    handleCancel()
     return
   }
 
@@ -100,7 +125,7 @@ onBeforeUnmount(() => {
     v-if="visible"
     class="dialog-backdrop confirmation-backdrop"
     role="presentation"
-    @click.self="emit('cancel')"
+    @click.self="handleCancel"
   >
     <div
       ref="dialogRef"
@@ -123,17 +148,21 @@ onBeforeUnmount(() => {
 
       <div class="dialog-body">
         <p class="dialog-message">{{ message }}</p>
+        <label v-if="confirmationMode && confirmationMode !== 'none'" class="confirmation-input-label">
+          <span>{{ confirmationMode === 'name' ? '輸入完整手記名稱' : '輸入 DELETE 或「刪除」' }}</span>
+          <input v-model="confirmationInput" class="form-input" type="text" :aria-label="confirmationMode === 'name' ? '輸入完整手記名稱' : '輸入 DELETE 或刪除'" :maxlength="confirmationMode === 'name' ? 200 : 20" autocomplete="off" autocapitalize="off" :spellcheck="false" :disabled="loading || submitted" @keydown.enter.prevent="!$event.isComposing && handleConfirm()" />
+        </label>
       </div>
 
       <footer class="dialog-actions">
         <button
-          v-for="action in (confirmFirst ? ['confirm', 'cancel'] : ['cancel', 'confirm'])"
+          v-for="action in ['cancel', 'confirm']"
           :key="action"
           type="button"
           class="btn"
-          :class="action === 'cancel' ? 'btn-primary cancel-action' : danger ? 'btn-secondary btn-danger' : 'btn-secondary'"
-          :disabled="loading"
-          @click="action === 'cancel' ? emit('cancel') : emit('confirm')"
+          :class="action === 'cancel' ? 'btn-secondary cancel-action' : danger ? 'btn-danger' : 'btn-primary'"
+          :disabled="loading || (action === 'confirm' && (submitted || !canConfirm))"
+          @click="action === 'cancel' ? handleCancel() : handleConfirm()"
         >
           <span v-if="action === 'confirm' && loading" class="spinner-small" aria-hidden="true"></span>
           <span>{{ action === 'cancel' ? cancelText : loading ? '處理中...' : confirmText }}</span>
@@ -151,7 +180,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  height: 100dvh;
+  box-sizing: border-box;
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) 1rem calc(1rem + env(safe-area-inset-bottom, 0px));
   z-index: 2000;
 }
 
@@ -162,13 +193,17 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   border: 1px solid var(--color-border);
-  padding: 1.5rem;
+  padding: 0;
+  max-height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0;
 }
 
 .dialog-header {
+  padding: 1.5rem 1.5rem 1rem;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -194,25 +229,32 @@ onBeforeUnmount(() => {
 }
 
 .dialog-body {
+  padding: 0 1.5rem 1.5rem;
+  overflow-y: auto;
+  min-height: 0;
   font-size: 0.875rem;
   color: var(--color-subtle);
   line-height: 1.5;
 }
 
 .dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 0 0 auto;
+  border-top: 1px solid var(--color-border);
 }
+.dialog-actions .btn { width: 100%; min-width: 0; min-height: 48px; border: 0; border-radius: 0; justify-content: center; }
+.dialog-actions .btn + .btn { border-left: 1px solid var(--color-border); }
+.cancel-action { background: transparent; }
+.confirmation-input-label { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; font-size: .8rem; }
 
 .btn-danger {
-  background-color: transparent;
-  color: var(--color-error-text);
+  background-color: var(--color-error-text);
+  color: white;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: var(--color-error-bg);
+  background-color: #A01C00;
 }
 
 .spinner-small {

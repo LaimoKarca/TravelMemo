@@ -405,9 +405,9 @@ describe('TripWorkspace and Travel Components', () => {
     await flushPromises()
     await wrapper.findAll('.trip-card')[0].get('button[aria-label="刪除手記"]').trigger('click')
     const dialog = wrapper.findAllComponents(ConfirmDialog).find(c => c.props('visible'))!
-    expect(dialog.findAll('.dialog-actions button').map(b => b.text())).toEqual(['確定', '取消'])
-    expect(dialog.get('.cancel-action').classes()).toContain('btn-primary')
-    expect(dialog.findAll('.dialog-actions button')[0].classes()).toContain('btn-secondary')
+    expect(dialog.findAll('.dialog-actions button').map(b => b.text())).toEqual(['取消', '刪除手記'])
+    expect(dialog.get('input').attributes('aria-label')).toBe('輸入完整手記名稱')
+    expect(dialog.findAll('.dialog-actions button')[1].attributes('disabled')).toBeDefined()
   })
 
   it('TripDialog validates form fields and successfully emits submit on save', async () => {
