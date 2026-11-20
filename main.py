@@ -7,16 +7,17 @@ def main():
     parser = argparse.ArgumentParser(description="TravelMemo")
     parser.add_argument(
         "command",
-        choices=["serve", "init-db", "check-config", "download-model", "rebuild-index", "evaluate", "seed-demo"],
+        choices=["serve", "init-db", "check-config", "download-model", "rebuild-index", "evaluate", "seed-demo", "localize-photo-summaries"],
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--benchmark-root", default="data/benchmark")
     parser.add_argument("--output", default="data/evaluation")
     parser.add_argument("--limit-queries", type=int, default=0)
-    parser.add_argument("--email", help="Target allowlisted account for seed-demo")
+    parser.add_argument("--email", help="Target account for seed-demo or photo localization")
+    parser.add_argument("--batch-size", type=int, default=25, help="Photo localization batch (1-100)")
     parser.add_argument("--anchor-date", help="First demo import base date (YYYY-MM-DD)")
-    parser.add_argument("--apply", action="store_true", help="Write seed-demo data; otherwise preview only")
+    parser.add_argument("--apply", action="store_true", help="Apply seed or localization writes; otherwise preview only")
     parser.add_argument(
         "--ann", action="store_true", help="Evaluate in a separate EVAL_NEO4J_URI database"
     )
@@ -26,7 +27,20 @@ def main():
         help="Separate immediately-after query diagnostic",
     )
     args = parser.parse_args()
-    if args.command == "seed-demo":
+    if args.command == "localize-photo-summaries":
+        import json
+
+        from backend.config import get_settings
+        from backend.photo_localization import localize_photo_summaries
+
+        try:
+            result = localize_photo_summaries(get_settings(), args.email, args.batch_size, args.apply)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from None
+        print(json.dumps(result, ensure_ascii=False))
+        if result["failed"]:
+            raise SystemExit(1)
+    elif args.command == "seed-demo":
         import json
 
         from backend.config import get_settings

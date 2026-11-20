@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
-import type { PhotoDTO } from '../types/photo'
+import type { PhotoDTO, PhotoCaptionUpdate } from '../types/photo'
+import AppIcon from './AppIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -8,6 +9,7 @@ const props = withDefaults(
     photos: PhotoDTO[]
     initialPhotoId?: string | null
     canEditCaption?: boolean
+    saveCaption?: (payload: PhotoCaptionUpdate) => Promise<void>
     coverPhotoId?: string | null
     showCoverAction?: boolean
     showDeleteAction?: boolean
@@ -25,7 +27,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'update-caption', payload: { photoId: string; caption: string; version: number }): void
   (e: 'set-cover', photoId: string): void
   (e: 'delete', payload: { photoId: string; version: number }): void
   (e: 'retry', payload: { photoId: string; version: number }): void
@@ -35,6 +36,10 @@ const emit = defineEmits<{
 const currentIndex = ref(0)
 const editingCaption = ref(false)
 const captionInput = ref('')
+const savingCaption = ref(false)
+const captionError = ref('')
+const captionVersion = ref(0)
+let captionGeneration = 0
 const dialogRef = ref<HTMLElement | null>(null)
 const launcherRef = ref<HTMLElement | null>(null)
 
@@ -54,6 +59,9 @@ const isCover = computed(() => {
 watch(
   () => props.visible,
   (val) => {
+    captionGeneration++
+    savingCaption.value = false
+    captionError.value = ''
     if (val) {
       launcherRef.value = document.activeElement as HTMLElement | null
       const idx = props.photos.findIndex((p) => p.id === props.initialPhotoId)
@@ -72,33 +80,47 @@ watch(
   { immediate: true }
 )
 
-watch(currentPhoto, (photo) => {
-  if (photo) {
+watch(currentPhoto, (photo, previous) => {
+  if (photo?.id !== previous?.id) {
+    captionGeneration++
+    savingCaption.value = false
+    editingCaption.value = false
+    captionError.value = ''
+  }
+  if (photo && !editingCaption.value) {
     captionInput.value = photo.caption || ''
   }
 })
 
 function prevPhoto() {
-  if (props.photos.length <= 1) return
+  if (props.photos.length <= 1 || savingCaption.value) return
   editingCaption.value = false
   currentIndex.value = (currentIndex.value - 1 + props.photos.length) % props.photos.length
 }
 
 function nextPhoto() {
-  if (props.photos.length <= 1) return
+  if (props.photos.length <= 1 || savingCaption.value) return
   editingCaption.value = false
   currentIndex.value = (currentIndex.value + 1) % props.photos.length
 }
 
-function handleSaveCaption() {
-  if (!currentPhoto.value) return
-  emit('update-caption', {
-    photoId: currentPhoto.value.id,
-    caption: captionInput.value.trim(),
-    version: currentPhoto.value.version
-  })
-  editingCaption.value = false
+async function handleSaveCaption() {
+  if (!currentPhoto.value || !props.saveCaption || savingCaption.value) return
+  const generation = ++captionGeneration
+  savingCaption.value = true
+  captionError.value = ''
+  try {
+    await props.saveCaption({ photoId: currentPhoto.value.id, caption: captionInput.value.trim(), version: captionVersion.value })
+    if (generation === captionGeneration) editingCaption.value = false
+  } catch {
+    if (generation === captionGeneration) captionError.value = '儲存失敗，請稍後再試。'
+  } finally {
+    if (generation === captionGeneration) savingCaption.value = false
+  }
 }
+
+function startCaptionEdit() { captionInput.value = currentPhoto.value?.caption || ''; captionVersion.value = currentPhoto.value?.version || 0; captionError.value = ''; editingCaption.value = true }
+function cancelCaptionEdit() { if (!savingCaption.value) { editingCaption.value = false; captionError.value = '' } }
 
 function handleRetry() {
   if (!currentPhoto.value) return
@@ -118,10 +140,25 @@ function handleDelete() {
 
 function handleKeyDown(e: KeyboardEvent) {
   if (!props.visible) return
+  if (document.querySelector('.confirmation-backdrop')) return
+
+  if (e.key === 'Tab' && dialogRef.value) {
+    const focusables = Array.from(dialogRef.value.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), [tabindex="0"]'))
+    const first = focusables[0]
+    const last = focusables[focusables.length - 1]
+    if (!first || !last) { e.preventDefault(); return }
+    const active = document.activeElement
+    if (!dialogRef.value.contains(active) || active === dialogRef.value || (e.shiftKey ? active === first : active === last)) {
+      e.preventDefault()
+      ;(e.shiftKey ? last : first).focus()
+    }
+    return
+  }
 
   if (e.key === 'Escape') {
     e.preventDefault()
-    emit('close')
+    if (editingCaption.value) cancelCaptionEdit()
+    else emit('close')
   } else if (e.key === 'ArrowLeft') {
     if (!editingCaption.value) {
       e.preventDefault()
@@ -140,6 +177,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  captionGeneration++
   window.removeEventListener('keydown', handleKeyDown)
 })
 </script>
@@ -183,10 +221,12 @@ onBeforeUnmount(() => {
           <button
             v-if="showDeleteAction"
             type="button"
-            class="btn btn-secondary btn-sm btn-delete-text"
+            class="viewer-icon btn-delete-text"
+            aria-label="刪除照片" title="刪除照片"
+            :disabled="savingCaption"
             @click="handleDelete"
           >
-            刪除照片
+            <AppIcon name="trash" />
           </button>
           <button
             type="button"
@@ -194,7 +234,7 @@ onBeforeUnmount(() => {
             aria-label="關閉預覽"
             @click="emit('close')"
           >
-            ✕
+            <AppIcon name="close" />
           </button>
         </div>
       </header>
@@ -241,21 +281,27 @@ onBeforeUnmount(() => {
               class="form-input caption-input"
               placeholder="新增照片說明..."
               maxlength="500"
-              @keydown.enter="handleSaveCaption"
+              aria-label="照片說明"
+              :disabled="savingCaption"
+              @keydown.enter.prevent="!$event.isComposing && handleSaveCaption()"
             />
             <button
               type="button"
-              class="btn btn-primary btn-sm"
-              @click="handleSaveCaption"
+              class="viewer-icon"
+              aria-label="返回照片說明" title="返回"
+              :disabled="savingCaption"
+              @click="cancelCaptionEdit"
             >
-              儲存說明
+              <AppIcon name="back" />
             </button>
             <button
               type="button"
-              class="btn btn-secondary btn-sm"
-              @click="editingCaption = false"
+              class="viewer-icon caption-save"
+              :aria-label="savingCaption ? '正在儲存說明' : '儲存說明'" title="儲存說明"
+              :disabled="savingCaption"
+              @click="handleSaveCaption"
             >
-              取消
+              <span v-if="savingCaption" class="spinner-small" aria-hidden="true"></span><AppIcon v-else name="save" />
             </button>
           </template>
           <template v-else>
@@ -263,15 +309,17 @@ onBeforeUnmount(() => {
               {{ currentPhoto.caption || '尚未填寫照片說明' }}
             </p>
             <button
-              v-if="canEditCaption"
+              v-if="canEditCaption && saveCaption"
               type="button"
-              class="btn-link edit-caption-btn"
-              @click="editingCaption = true"
+              class="viewer-icon edit-caption-btn"
+              aria-label="編輯照片說明" title="編輯說明"
+              @click="startCaptionEdit"
             >
-              編輯說明
+              <AppIcon name="edit" />
             </button>
           </template>
         </div>
+        <p v-if="captionError" class="caption-error" role="alert">{{ captionError }}</p>
 
         <!-- Status & Analysis Details -->
         <div class="analysis-panel">
@@ -292,7 +340,7 @@ onBeforeUnmount(() => {
           <!-- Ready Analysis Info -->
           <div v-if="currentPhoto.status === 'ready' && currentPhoto.analysis" class="analysis-content">
             <p v-if="currentPhoto.analysis.summary" class="analysis-summary">
-              <span class="analysis-label">場景摘要：</span>{{ currentPhoto.analysis.summary }}
+              <span class="analysis-label">AI 場景摘要：</span>{{ currentPhoto.analysis.summary }}
             </p>
 
             <div v-if="currentPhoto.analysis.tags && currentPhoto.analysis.tags.length > 0" class="analysis-tags">
@@ -327,7 +375,7 @@ onBeforeUnmount(() => {
   inset: 0;
   background-color: rgba(30, 24, 20, 0.88);
   backdrop-filter: blur(4px);
-  z-index: 1000;
+  z-index: 1500;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -350,7 +398,9 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1.25rem;
+  padding: .25rem .75rem;
+  min-height: 52px;
+  box-sizing: border-box;
   background-color: var(--color-paper);
   border-bottom: 1px solid var(--color-border-light);
 }
@@ -472,7 +522,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 
 .photo-caption-text {
@@ -480,18 +531,21 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: var(--color-ink);
   flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .caption-input {
-  flex: 1;
-  min-width: 200px;
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  font-size: 16px;
 }
 
-.edit-caption-btn {
-  padding: 0;
-  min-height: auto;
-  font-size: 0.8125rem;
-}
+.viewer-icon { width: 40px; height: 40px; flex: 0 0 40px; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-maple); cursor: pointer; }
+.viewer-icon:hover:not(:disabled) { background: var(--color-maple-subtle); }
+.viewer-icon:disabled { opacity: .5; cursor: wait; }
+.caption-error { font-size: .8rem; color: var(--color-error-text); }
 
 .analysis-panel {
   display: flex;

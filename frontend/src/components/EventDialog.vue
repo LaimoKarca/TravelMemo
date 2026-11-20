@@ -29,6 +29,7 @@ const emit = defineEmits<{
   (e: 'submit', payload: CreateEventPayload | UpdateEventPayload, stagedPhotoIds?: string[]): void
   (e: 'refresh'): void
   (e: 'cancel'): void
+  (e: 'notice', message: string, type: 'success' | 'error'): void
 }>()
 
 const dialogRef = ref<HTMLElement | null>(null)
@@ -119,8 +120,10 @@ async function handleUpdateEventPhotoCaption(payload: { photoId: string; caption
     const updated = await updatePhoto(payload.photoId, { caption: payload.caption, version: payload.version })
     const idx = eventPhotos.value.findIndex((p) => p.id === payload.photoId)
     if (idx !== -1) eventPhotos.value[idx] = updated
-  } catch {
-    // Non-blocking
+    emit('notice', '已更新照片說明。', 'success')
+  } catch (err) {
+    emit('notice', '更新照片說明失敗，請稍後再試。', 'error')
+    throw err
   }
 }
 
@@ -155,6 +158,7 @@ function resetFormFromProps() {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
+  if (document.querySelector('.lightbox-backdrop, .confirmation-backdrop')) return
   if (!props.visible || !dialogRef.value) return
 
   if (event.key === 'Escape') {
@@ -409,7 +413,7 @@ onBeforeUnmount(() => {
             <PhotoPicker v-if="isEdit && event" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
             <PhotoPicker v-else v-model:photos="stagedPhotos" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
           </div>
-          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" @update-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
+          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
         </section>
 
         <footer class="dialog-footer">

@@ -44,6 +44,12 @@ export interface UpdatePhotoPayload {
   caption: string
 }
 
+export interface PhotoCaptionUpdate {
+  photoId: string
+  caption: string
+  version: number
+}
+
 export interface RetryPhotoPayload {
   version: number
 }

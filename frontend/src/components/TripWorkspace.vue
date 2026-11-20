@@ -83,6 +83,12 @@ function setTabRef(el: any, index: number) {
 }
 
 function switchTab(tab: WorkspaceTab) {
+  if (tab === 'trips') {
+    activeTab.value = tab
+    backToTripList()
+    triggerTabWash(450)
+    return
+  }
   if (activeTab.value !== tab) {
     activeTab.value = tab
     clearAlert()
@@ -128,10 +134,12 @@ function handleViewCitation(cite: Citation) {
   showSourceModal.value = true
 }
 
-async function handleJumpToTrip(payload: { tripId: string; eventId: string }) {
+async function handleJumpToTrip(payload: { tripId: string; eventId?: string }) {
   activeTab.value = 'trips'
   await selectTrip(payload.tripId)
-  highlightedEventId.value = payload.eventId
+  if (activeTripId.value !== payload.tripId) return
+  highlightedEventId.value = payload.eventId || null
+  if (!payload.eventId) return
   await nextTick()
   const el = document.getElementById(`event-${payload.eventId}`)
   if (el) {
@@ -147,10 +155,12 @@ const actionInProgress = ref(false)
 // Alert notification state
 const alertMessage = ref('')
 const alertType = ref<'error' | 'success' | 'info'>('info')
+const alertSequence = ref(0)
 
 function showAlert(message: string, type: 'error' | 'success' | 'info' = 'info') {
   alertMessage.value = message
   alertType.value = type
+  alertSequence.value++
 }
 
 function clearAlert() {
@@ -192,7 +202,6 @@ async function handleFootprintsSaved() {
 }
 
 const currentEvents = ref<Event[]>([])
-const nextEdges = ref<Array<{ from_id: string; to_id: string }>>([])
 
 // Photo state
 const currentTripPhotos = ref<PhotoDTO[]>([])
@@ -327,14 +336,6 @@ const timelineGroups = computed<DayGroup[]>(() => {
   return result
 })
 
-// Check if an event has a route pointing to another event
-function getNextEventName(eventId: string): string | null {
-  const edge = nextEdges.value.find((e) => e.from_id === eventId)
-  if (!edge) return null
-  const target = currentEvents.value.find((e) => e.id === edge.to_id)
-  return target ? `${target.place_name}` : null
-}
-
 // Fetch all trips on mount
 onMounted(async () => {
   refreshClock()
@@ -344,25 +345,40 @@ onMounted(async () => {
   await fetchTrips()
 })
 onBeforeUnmount(() => {
+  tripsGeneration++
+  detailGeneration++
+  photosGeneration++
   if (clockTimer !== undefined) clearInterval(clockTimer)
   document.removeEventListener('visibilitychange', refreshClock)
   window.removeEventListener('focus', refreshClock)
 })
 
+let tripsGeneration = 0
+let detailGeneration = 0
+let photosGeneration = 0
 async function fetchTrips() {
+  const generation = ++tripsGeneration
   clearAlert()
   loadingTrips.value = true
   try {
     const res = await listTrips()
+    if (generation !== tripsGeneration) return
     trips.value = res.items || []
   } catch (err: any) {
-    showAlert(err instanceof ApiError ? err.detail : '載入旅程清單失敗，請稍後再試。', 'error')
+    if (generation === tripsGeneration) showAlert(err instanceof ApiError ? err.detail : '載入旅程清單失敗，請稍後再試。', 'error')
   } finally {
-    loadingTrips.value = false
+    if (generation === tripsGeneration) loadingTrips.value = false
   }
 }
 
 async function selectTrip(tripId: string) {
+  const generation = ++detailGeneration
+  photosGeneration++
+  currentTrip.value = null
+  currentEvents.value = []
+  currentTripPhotos.value = []
+  currentTripCoverId.value = null
+  highlightedEventId.value = null
   albumOpen.value = false
   clearAlert()
   loadingDetail.value = true
@@ -374,36 +390,39 @@ async function selectTrip(tripId: string) {
 
   try {
     const res = await getTrip(tripId)
+    if (generation !== detailGeneration || activeTripId.value !== tripId) return
     currentTrip.value = res.trip
     currentEvents.value = (res.events || []).sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date)
       return a.position - b.position
     })
-    nextEdges.value = res.next_edges || []
   } catch (err: any) {
+    if (generation !== detailGeneration) return
     showAlert(err instanceof ApiError ? err.detail : '載入旅程手記詳情失敗。', 'error')
     activeTripId.value = null
     currentTrip.value = null
   } finally {
-    loadingDetail.value = false
+    if (generation === detailGeneration) loadingDetail.value = false
   }
-  fetchTripPhotos(tripId)
+  if (generation === detailGeneration && activeTripId.value === tripId) void fetchTripPhotos(tripId)
 }
 
 async function fetchTripPhotos(tripId: string) {
+  const generation = ++photosGeneration
   loadingTripPhotos.value = true
   try {
     const [photosRes, coverRes] = await Promise.all([
       listPhotos({ trip_id: tripId }),
       getTripCover(tripId)
     ])
+    if (generation !== photosGeneration || activeTripId.value !== tripId) return
     currentTripPhotos.value = photosRes.items || []
     currentTripCoverId.value = coverRes.photo_id
     tripCovers.value[tripId] = coverRes.photo_id
   } catch {
     // Non-blocking
   } finally {
-    loadingTripPhotos.value = false
+    if (generation === photosGeneration) loadingTripPhotos.value = false
   }
 }
 
@@ -477,15 +496,26 @@ async function handleUpdateCaption(payload: { photoId: string; caption: string; 
     showAlert('已更新照片說明。', 'success')
   } catch (err: any) {
     showAlert(err instanceof ApiError ? err.detail : '更新照片說明失敗。', 'error')
+    throw err
   }
 }
 
 function backToTripList() {
+  activeTab.value = 'trips'
+  detailGeneration++
+  photosGeneration++
+  loadingDetail.value = false
+  loadingTripPhotos.value = false
+  showSourceModal.value = false
+  showTripModal.value = false
+  showEventModal.value = false
+  showFootprintAssistant.value = false
+  timelineViewerVisible.value = false
+  highlightedEventId.value = null
   clearAlert()
   activeTripId.value = null
   currentTrip.value = null
   currentEvents.value = []
-  nextEdges.value = []
   currentTripPhotos.value = []
   currentTripCoverId.value = null
   fetchTrips()
@@ -556,7 +586,6 @@ async function refreshTripFromModal() {
     if (currentTrip.value && currentTrip.value.id === detail.trip.id) {
       currentTrip.value = detail.trip
       currentEvents.value = detail.events || []
-      nextEdges.value = detail.next_edges || []
     }
     tripModalConflict.value = false
     tripModalError.value = ''
@@ -706,13 +735,13 @@ function resetFilters() {
     <!-- Desktop Left Navigation Sidebar (~208px) -->
     <aside class="workspace-sidebar" aria-label="工作區選單">
       <!-- App Brand Title -->
-      <div class="sidebar-brand">
+      <button type="button" class="sidebar-brand brand-home" aria-label="返回旅行手記" @click="backToTripList">
         <BrandMark />
         <div class="brand-text-group">
           <span class="brand-title">TravelMemo</span>
           <span class="brand-subtitle">旅程手記</span>
         </div>
-      </div>
+      </button>
 
       <!-- Navigation Tabs (Desktop) -->
       <nav class="sidebar-nav" role="tablist" aria-label="工作區功能切換">
@@ -775,7 +804,7 @@ function resetFilters() {
 
     <!-- Mobile Top Identity Bar -->
     <header class="mobile-topbar">
-      <div class="mobile-brand"><BrandMark /><span class="brand-title">TravelMemo</span></div>
+      <button type="button" class="mobile-brand brand-home" aria-label="返回旅行手記" @click="backToTripList"><BrandMark /><span class="brand-title">TravelMemo</span></button>
       <div class="mobile-user-row">
         <span class="mobile-user-email">{{ accountName }}</span>
         <button
@@ -797,7 +826,7 @@ function resetFilters() {
         :class="{ 'tab-wash-active': isTabWashing, 'is-chat-pane': activeTab === 'chat' }"
       >
         <!-- Global Alert Notification Area -->
-        <StatusAlert :message="alertMessage" :type="alertType" />
+        <StatusAlert :message="alertMessage" :type="alertType" :notice-key="alertSequence" floating @dismiss="clearAlert" />
 
         <!-- TAB 1: Trips Workspace View -->
         <div
@@ -828,34 +857,7 @@ function resetFilters() {
               </button>
             </div>
 
-            <!-- Loading Trips Skeleton -->
-            <div v-if="loadingTrips" class="loading-state" role="status" aria-live="polite">
-              <div class="page-spinner" aria-hidden="true"></div>
-              <p class="loading-text">正在載入您的旅行手記...</p>
-            </div>
-
-            <!-- Concise Empty State per brief -->
-            <div v-else-if="trips.length === 0" class="empty-state">
-              <div class="empty-icon" aria-hidden="true">
-                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="12" y1="18" x2="12" y2="12" />
-                  <line x1="9" y1="15" x2="15" y2="15" />
-                </svg>
-              </div>
-              <h3 class="empty-title">尚未記錄任何旅行手記</h3>
-              <p class="empty-desc">開啟第一本旅行手記，記錄旅程足跡。</p>
-              <button
-                type="button"
-                class="btn btn-primary"
-                @click="openCreateTripModal"
-              >
-                建立第一本手記
-              </button>
-            </div>
-
-            <form v-if="trips.length" class="trip-library-tools" role="search" @submit.prevent>
+            <form class="trip-library-tools" role="search" :aria-busy="loadingTrips" @submit.prevent>
               <div class="library-search-bar">
                 <div class="trip-query"><AppIcon name="search" /><input v-model="tripQuery" class="form-input" aria-label="搜尋旅行手記" placeholder="搜尋手記…" type="search" /></div>
                 <button type="button" class="icon-button library-filter-toggle" :class="{ 'is-active': libraryFiltersActive }" :aria-expanded="libraryFiltersOpen" aria-controls="library-filters" :aria-label="libraryFiltersActive ? '篩選手記（已套用）' : '篩選手記'" @click="libraryFiltersOpen = !libraryFiltersOpen"><AppIcon name="filter" /><span v-if="libraryFiltersActive" class="filter-active-dot" aria-hidden="true"></span></button>
@@ -866,9 +868,19 @@ function resetFilters() {
                 <button v-if="libraryFiltersActive" type="button" class="btn-link library-reset" @click="tripPeriod = 'all'; tripYear = ''">清除</button>
               </div>
             </form>
-            <p v-if="trips.length && !visibleTrips.length" class="empty-filtered-trips">沒有符合的手記。</p>
+            <div v-if="loadingTrips" class="loading-state" role="status" aria-live="polite">
+              <div class="page-spinner" aria-hidden="true"></div>
+              <p class="loading-text">正在載入您的旅行手記…</p>
+            </div>
+            <div v-else-if="trips.length === 0" class="empty-state">
+              <div class="empty-icon" aria-hidden="true"><AppIcon name="plus" /></div>
+              <h3 class="empty-title">尚未記錄任何旅行手記</h3>
+              <p class="empty-desc">開啟第一本旅行手記，記錄旅程足跡。</p>
+              <button type="button" class="btn btn-primary" @click="openCreateTripModal">建立第一本手記</button>
+            </div>
+            <p v-else-if="!visibleTrips.length" class="empty-filtered-trips">沒有符合的手記。</p>
             <!-- Trips Grid with Restrained Route Mini-Art per brief -->
-            <div v-if="visibleTrips.length" class="trip-cards-grid">
+            <div v-if="!loadingTrips && visibleTrips.length" class="trip-cards-grid">
               <article
                 v-for="trip in visibleTrips"
                 :key="trip.id"
@@ -959,6 +971,10 @@ function resetFilters() {
           </section>
 
           <!-- VIEW 2: Trip Detail & Timeline View -->
+          <section v-else-if="loadingDetail" class="trip-detail-loading" aria-label="載入旅行手記">
+            <button type="button" class="btn-link back-button" @click="backToTripList"><AppIcon name="back" /><span>返回手記列表</span></button>
+            <div class="loading-state" role="status" aria-live="polite"><div class="page-spinner" aria-hidden="true"></div><p class="loading-text">載入手記中…</p></div>
+          </section>
           <section v-else-if="currentTrip" class="trip-detail-section" aria-label="旅行手記詳情與時間軸">
             <!-- Flattened Detail Navigation & Header -->
             <div class="detail-header-block">
@@ -1052,7 +1068,7 @@ function resetFilters() {
                 @reorder="handleReorderPhotos"
                 @delete="handleDeletePhoto"
                 @retry="handleRetryPhoto"
-                @update-caption="handleUpdateCaption"
+                :save-caption="handleUpdateCaption"
                 @refresh="currentTrip && fetchTripPhotos(currentTrip.id)"
               />
               </div>
@@ -1227,13 +1243,6 @@ function resetFilters() {
                         </div>
                       </div>
 
-                      <!-- Route connection indication -->
-                      <div v-if="getNextEventName(evt.id)" class="next-destination-indicator">
-                        <span class="next-arrow" aria-hidden="true">➔</span>
-                        <span class="next-label">接續足跡：</span>
-                        <span class="next-target-name">{{ getNextEventName(evt.id) }}</span>
-                      </div>
-
                     </div>
                   </article>
                 </div>
@@ -1332,6 +1341,7 @@ function resetFilters() {
       @submit="handleEventSubmit"
       @refresh="refreshEventFromModal"
       @cancel="showEventModal = false"
+      @notice="(message, type) => showAlert(message, type)"
     />
 
     <ConfirmDialog
@@ -1339,6 +1349,7 @@ function resetFilters() {
       :title="confirmDialogTitle"
       :message="confirmDialogMessage"
       :loading="actionInProgress"
+      :confirm-first="confirmDialogTitle === '確認刪除旅行足跡'"
       @confirm="confirmAction && confirmAction()"
       @cancel="confirmDialogVisible = false"
     />
@@ -1362,6 +1373,8 @@ function resetFilters() {
 </template>
 
 <style scoped>
+.brand-home { border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.brand-home:focus-visible { outline: 2px solid var(--color-maple); outline-offset: 4px; border-radius: var(--radius-sm); }
 .trip-library-tools { display: flex; flex-direction: column; gap: .6rem; margin: .85rem 0 1.25rem; }
 .library-search-bar { display: flex; align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); padding-right: .2rem; }
 .trip-query { display: flex; align-items: center; flex: 1; min-width: 0; position: relative; }
@@ -2226,29 +2239,6 @@ function resetFilters() {
   padding: 0.5rem 0.75rem;
   border-radius: var(--radius-xs);
   border-left: 3px solid var(--color-maple);
-}
-
-.next-destination-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.75rem;
-  color: var(--color-maple);
-  background-color: var(--color-maple-subtle);
-  padding: 0.25rem 0.5rem;
-  border-radius: var(--radius-xs);
-}
-
-.next-arrow {
-  font-weight: bold;
-}
-
-.next-label {
-  font-weight: 500;
-}
-
-.next-target-name {
-  font-weight: 600;
 }
 
 .btn-sm {

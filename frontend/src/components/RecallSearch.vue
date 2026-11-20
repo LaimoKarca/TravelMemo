@@ -7,6 +7,7 @@ import { searchRecall } from '../api/search'
 import { ApiError } from '../api/auth'
 import PhotoPicker from './PhotoPicker.vue'
 import PhotoViewer from './PhotoViewer.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   trips: Trip[]
@@ -14,7 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'view-source', item: SearchItem): void
-  (e: 'jump-trip', payload: { tripId: string; eventId: string }): void
+  (e: 'jump-trip', payload: { tripId: string; eventId?: string }): void
 }>()
 
 const query = ref('')
@@ -46,6 +47,17 @@ function openPhotoResult(item: SearchPhotoItem) {
   viewerInitialPhotoId.value = item.photo.id
   viewerPhotos.value = (searchResult.value?.photo_items || []).map((pi) => pi.photo)
   viewerVisible.value = true
+}
+
+function photoDestination(item: SearchPhotoItem): { tripId: string; eventId?: string } | null {
+  if (item.event) return { tripId: item.event.trip_id, eventId: item.event.id }
+  const binding = item.photo.bindings.find(b => b.kind === 'trip' || (b.kind === 'event' && b.trip_id))
+  if (!binding) return null
+  return { tripId: binding.kind === 'trip' ? binding.target_id : binding.trip_id! }
+}
+function jumpToPhotoTrip(item: SearchPhotoItem) {
+  const destination = photoDestination(item)
+  if (destination) emit('jump-trip', destination)
 }
 
 // Generation counter to guard against stale search results or races with reset
@@ -323,6 +335,7 @@ function toggleFilters() {
               :aria-label="`檢視相符照片：${pItem.photo.caption || pItem.photo.analysis?.summary || '相簿照片'}`"
               @click="openPhotoResult(pItem)"
               @keydown.enter="openPhotoResult(pItem)"
+              @keydown.space.prevent="openPhotoResult(pItem)"
             >
               <img
                 :src="pItem.photo.thumbnail_url || pItem.photo.url"
@@ -339,18 +352,7 @@ function toggleFilters() {
                 {{ pItem.photo.analysis.summary }}
               </p>
 
-              <!-- Matched reasons list -->
-
-              <!-- Jump to Trip button if attached event is known -->
-              <div v-if="pItem.event" class="photo-result-actions">
-                <button
-                  type="button"
-                  class="btn btn-secondary btn-sm jump-btn"
-                  @click="emit('jump-trip', { tripId: pItem.event.trip_id, eventId: pItem.event.id })"
-                >
-                  跳至原旅程
-                </button>
-              </div>
+              <button v-if="photoDestination(pItem)" type="button" class="icon-button jump-btn" aria-label="前往手記" title="前往手記" @click.stop="jumpToPhotoTrip(pItem)"><AppIcon name="jump" /></button>
             </div>
           </article>
         </div>
@@ -363,6 +365,7 @@ function toggleFilters() {
           :key="item.event.id + '-' + idx"
           class="source-card source-row"
         >
+          <button type="button" class="source-card-open" :aria-label="`檢視足跡：${item.event.place_name}`" @click="emit('view-source', item)"></button>
           <div class="source-row-main">
             <div class="source-card-header">
               <div class="source-badge-group">
@@ -382,10 +385,6 @@ function toggleFilters() {
                 </span>
               </div>
 
-              <p v-if="item.event.notes" class="source-notes-excerpt">
-                {{ item.event.notes }}
-              </p>
-
               <!-- Reasons list: Quiet collapsed metadata -->
 
               <!-- Relation Context -->
@@ -398,22 +397,10 @@ function toggleFilters() {
             </div>
           </div>
 
-          <footer class="source-card-footer">
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              @click="emit('view-source', item)"
-            >
-              檢視詳情
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary btn-sm jump-btn"
-              @click="emit('jump-trip', { tripId: item.event.trip_id, eventId: item.event.id })"
-            >
-              跳至原旅程
-            </button>
-          </footer>
+          <div class="source-description-row">
+            <p class="source-notes-excerpt">{{ item.event.notes || '尚無隨筆' }}</p>
+            <button type="button" class="icon-button jump-btn" aria-label="前往手記" title="前往手記" @click.stop="emit('jump-trip', { tripId: item.event.trip_id, eventId: item.event.id })"><AppIcon name="jump" /></button>
+          </div>
         </article>
       </div>
     </div>
@@ -579,7 +566,7 @@ function toggleFilters() {
 
 .photo-result-info {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.35rem;
   padding: 0.625rem 0.75rem;
 }
@@ -590,9 +577,10 @@ function toggleFilters() {
   font-weight: 500;
   color: var(--color-ink);
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   overflow: hidden;
 }
 
@@ -787,14 +775,14 @@ function toggleFilters() {
 }
 
 .source-card {
+  position: relative;
   background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   padding: 1rem 1.25rem;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-direction: column;
+  gap: .35rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   width: 100%;
   box-sizing: border-box;
@@ -812,6 +800,10 @@ function toggleFilters() {
   flex-direction: column;
   gap: 0.5rem;
 }
+.source-card-open { position: absolute; inset: 0; z-index: 1; width: 100%; border: 0; background: transparent; border-radius: inherit; cursor: pointer; }
+.source-card-open:focus-visible { outline: 2px solid var(--color-maple); outline-offset: 2px; }
+.source-description-row { display: flex; align-items: center; gap: .5rem; width: 100%; min-width: 0; }
+.jump-btn { flex: 0 0 40px; min-width: 40px; min-height: 40px; border: 0; background: transparent; position: relative; z-index: 2; }
 
 .source-card-header {
   display: flex;
@@ -891,6 +883,11 @@ function toggleFilters() {
 }
 
 .source-notes-excerpt {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 0.8125rem;
   color: var(--color-subtle);
   line-height: 1.5;

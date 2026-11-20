@@ -156,7 +156,8 @@ class PhotoSearchService:
                 """
                 records = session.run(query, owner=owner_id).data()
                 for row in records:
-                    p = dict(row["p"])
+                    # Neo4j saves analysis/bindings as JSON properties, unlike memory records.
+                    p = store._record_from_node(row["p"])
                     pid = p["id"]
                     analysis = p.get("analysis")
                     if isinstance(analysis, str):
@@ -192,7 +193,7 @@ class PhotoSearchService:
 
                     session.run(
                         """
-                        MATCH (p:Photo {id: $id})
+                        MATCH (p:Photo {id: $id, owner_id: $owner, version: $version, status: 'ready'})
                         SET p.embedding = $embedding,
                             p.embedding_version = p.version,
                             p.embedding_status = $embedding_status,
@@ -200,6 +201,8 @@ class PhotoSearchService:
                             p.searchable = $searchable
                         """,
                         id=pid,
+                        owner=p["owner_id"],
+                        version=p["version"],
                         embedding=embedding,
                         embedding_status=embedding_status,
                         search_text=search_text,
@@ -299,6 +302,15 @@ class PhotoSearchService:
             summary = analysis.get("summary") or ""
             if summary and summary.strip():
                 p_parts.append(summary.strip())
+            # Evidence DTOs intentionally exclude retrieval-only fields.
+            private = None
+            store = getattr(self.photo_service, "store", None)
+            if store is not None and hasattr(store, "get"):
+                private = store.get(owner_id, p["id"])
+            internal = (private.get("analysis") or {}) if private and private.get("status") == "ready" else analysis
+            english = internal.get("summary_en") or ""
+            if english and english.strip() and english.strip() != summary.strip():
+                p_parts.append(english.strip())
             vis = analysis.get("visible_text") or []
             if isinstance(vis, list):
                 vis_text = " ".join(str(v).strip() for v in vis if v and str(v).strip())

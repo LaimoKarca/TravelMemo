@@ -112,20 +112,20 @@ describe('RecallSearch', () => {
     expect(wrapper.text()).toContain('基準日期 2026-11-19 ➔ 上一站 ➔ 目標日期 2026-11-20')
 
     // Card buttons
-    const viewBtn = wrapper.find('.source-card-footer button.btn-secondary')
-    expect(viewBtn.text()).toContain('檢視詳情')
-    await viewBtn.trigger('click')
+    expect(wrapper.text()).not.toContain('檢視詳情')
+    await wrapper.get('.source-card-open').trigger('click')
     expect(wrapper.emitted('view-source')).toBeTruthy()
     expect(wrapper.emitted('view-source')![0][0]).toEqual(mockSearchResult.items[0])
 
-    const jumpBtn = wrapper.find('.source-card-footer button.jump-btn')
-    expect(jumpBtn.text()).toContain('跳至原旅程')
+    const jumpBtn = wrapper.get('.source-card button.jump-btn')
+    expect(jumpBtn.attributes('aria-label')).toBe('前往手記')
     await jumpBtn.trigger('click')
     expect(wrapper.emitted('jump-trip')).toBeTruthy()
     expect(wrapper.emitted('jump-trip')![0][0]).toEqual({
       tripId: 't-1',
       eventId: 'e-1'
     })
+    expect(wrapper.emitted('view-source')).toHaveLength(1)
   })
 
   it('renders empty result notice when 0 items returned', async () => {

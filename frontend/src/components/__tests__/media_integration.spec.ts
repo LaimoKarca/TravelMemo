@@ -214,7 +214,7 @@ describe('Media Frontend Integration', () => {
     // Renders photo search results section
     expect(wrapper.text()).toContain('相符照片記憶 (1)')
     expect(wrapper.text()).toContain('嵐山渡月橋')
-    expect(wrapper.text()).toContain('圖片場景高度吻合「渡月橋」')
+    expect(wrapper.text()).not.toContain('圖片場景高度吻合「渡月橋」')
   })
 
   it('EventDialog stages photos on create and passes stagedPhotoIds on submit', async () => {

@@ -587,6 +587,7 @@ class PhotoService:
                 "status": "pending",
                 "analysis": cleared_analysis,
                 "analysis_version": 0,
+                "analysis_language": None,
                 "claimed_version": None,
                 "claimed_at": None,
                 "embedding": None,

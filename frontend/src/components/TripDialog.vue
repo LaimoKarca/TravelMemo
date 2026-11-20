@@ -103,6 +103,7 @@ function resetFormFromProps() {
 }
 
 function handleKeyDown(event: KeyboardEvent) {
+  if (document.querySelector('.lightbox-backdrop, .confirmation-backdrop')) return
   if (!props.visible || !dialogRef.value) return
 
   if (event.key === 'Escape') {

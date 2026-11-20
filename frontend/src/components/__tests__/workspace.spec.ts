@@ -8,6 +8,7 @@ import * as travelApi from '../../api/travel'
 import * as convApi from '../../api/conversation'
 import * as searchApi from '../../api/search'
 import * as timezones from '../../utils/timezones'
+import * as photosApi from '../../api/photos'
 import type { Trip, Event, Place } from '../../types/travel'
 
 const mockUser = {
@@ -103,6 +104,8 @@ describe('TripWorkspace and Travel Components', () => {
     vi.restoreAllMocks()
     vi.spyOn(travelApi, 'listTrips').mockResolvedValue({ items: [...mockTrips] })
     vi.spyOn(travelApi, 'listPlaces').mockResolvedValue({ items: [...mockPlaces] })
+    vi.spyOn(photosApi, 'listPhotos').mockResolvedValue({ items: [] })
+    vi.spyOn(photosApi, 'getTripCover').mockResolvedValue({ photo_id: null })
     vi.spyOn(convApi, 'listConversations').mockResolvedValue({ items: [] })
     vi.spyOn(convApi, 'getUsage').mockResolvedValue({
       date: '2026-11-20',
@@ -190,7 +193,7 @@ describe('TripWorkspace and Travel Components', () => {
     expect(wrapper.text()).toContain('清水寺')
     expect(wrapper.text()).toContain('金閣寺')
     expect(wrapper.text()).toContain('嵐山天龍寺')
-    expect(wrapper.text()).toContain('接續足跡：金閣寺')
+    expect(wrapper.find('.next-destination-indicator').exists()).toBe(false)
   })
 
   it('supports filtering events by city and category in current trip', async () => {
@@ -265,7 +268,7 @@ describe('TripWorkspace and Travel Components', () => {
     await flushPromises()
     expect(wrapper.findAll('.event-card').map(e => e.attributes('id'))).toEqual(expected)
     expect(wrapper.find('.btn-reorder').exists()).toBe(false)
-    expect(wrapper.text()).toContain('接續足跡：金閣寺')
+    expect(wrapper.find('.next-destination-indicator').exists()).toBe(false)
     await wrapper.get('#category-filter').setValue('景點')
     expect(wrapper.findAll('.event-card').map(e => e.attributes('id'))).toEqual(expected.filter(id => id !== 'event-event-3'))
     expect(reorder).not.toHaveBeenCalled()

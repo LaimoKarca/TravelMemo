@@ -1,17 +1,32 @@
 <script setup lang="ts">
-defineProps<{
+import { watch, onBeforeUnmount } from 'vue'
+import AppIcon from './AppIcon.vue'
+
+const props = defineProps<{
   type?: 'error' | 'success' | 'info'
   message: string
+  floating?: boolean
+  noticeKey?: number
 }>()
+const emit = defineEmits<{ (e: 'dismiss'): void }>()
+let timer: ReturnType<typeof setTimeout> | undefined
+watch(() => [props.message, props.type, props.noticeKey, props.floating], () => {
+  if (timer !== undefined) clearTimeout(timer)
+  if (props.floating && props.message && props.type !== 'error') {
+    timer = setTimeout(() => emit('dismiss'), 2000)
+  }
+}, { immediate: true })
+onBeforeUnmount(() => { if (timer !== undefined) clearTimeout(timer) })
 </script>
 
 <template>
+  <Teleport to="body" :disabled="!floating">
   <div
     v-if="message"
     class="status-alert"
-    :class="`status-alert--${type || 'info'}`"
-    role="status"
-    aria-live="polite"
+    :class="[`status-alert--${type || 'info'}`, { 'workspace-notice': floating }]"
+    :role="type === 'error' ? 'alert' : 'status'"
+    :aria-live="type === 'error' ? 'assertive' : 'polite'"
   >
     <div class="alert-icon" aria-hidden="true">
       <svg v-if="type === 'error'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -30,7 +45,9 @@ defineProps<{
       </svg>
     </div>
     <div class="alert-text">{{ message }}</div>
+    <button v-if="floating" type="button" class="notice-close" aria-label="關閉通知" @click="emit('dismiss')"><AppIcon name="close" /></button>
   </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -53,7 +70,25 @@ defineProps<{
 
 .alert-text {
   flex-grow: 1;
+  min-width: 0;
 }
+
+.workspace-notice {
+  position: fixed;
+  top: max(.75rem, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  width: max-content;
+  max-width: min(36rem, calc(100vw - 1.5rem));
+  box-sizing: border-box;
+  margin: 0;
+  align-items: center;
+  padding: .45rem .55rem .45rem .85rem;
+  box-shadow: var(--shadow-md);
+}
+.notice-close { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 40px; width: 40px; height: 40px; border: 0; background: transparent; color: inherit; border-radius: var(--radius-sm); cursor: pointer; }
+.notice-close:hover { background: rgba(69, 58, 50, .08); }
 
 .status-alert--error {
   color: var(--color-error-text);

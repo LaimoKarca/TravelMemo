@@ -10,6 +10,7 @@ const props = withDefaults(
     cancelText?: string
     loading?: boolean
     danger?: boolean
+    confirmFirst?: boolean
   }>(),
   {
     confirmText: '確定',
@@ -71,8 +72,7 @@ watch(
     if (val) {
       launcherRef.value = document.activeElement as HTMLElement | null
       nextTick(() => {
-        const firstFocusable = dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
-        firstFocusable?.focus()
+        dialogRef.value?.querySelector<HTMLElement>('.cancel-action')?.focus()
       })
     } else if (oldVal) {
       nextTick(() => {
@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
 <template>
   <div
     v-if="visible"
-    class="dialog-backdrop"
+    class="dialog-backdrop confirmation-backdrop"
     role="presentation"
     @click.self="emit('cancel')"
   >
@@ -127,22 +127,16 @@ onBeforeUnmount(() => {
 
       <footer class="dialog-actions">
         <button
-          type="button"
-          class="btn btn-secondary"
-          :disabled="loading"
-          @click="emit('cancel')"
-        >
-          {{ cancelText }}
-        </button>
-        <button
+          v-for="action in (confirmFirst ? ['confirm', 'cancel'] : ['cancel', 'confirm'])"
+          :key="action"
           type="button"
           class="btn"
-          :class="danger ? 'btn-danger' : 'btn-primary'"
+          :class="action === 'cancel' ? 'btn-secondary cancel-action' : danger ? 'btn-danger' : 'btn-primary'"
           :disabled="loading"
-          @click="emit('confirm')"
+          @click="action === 'cancel' ? emit('cancel') : emit('confirm')"
         >
-          <span v-if="loading" class="spinner-small" aria-hidden="true"></span>
-          <span>{{ loading ? '處理中...' : confirmText }}</span>
+          <span v-if="action === 'confirm' && loading" class="spinner-small" aria-hidden="true"></span>
+          <span>{{ action === 'cancel' ? cancelText : loading ? '處理中...' : confirmText }}</span>
         </button>
       </footer>
     </div>
@@ -158,7 +152,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  z-index: 1000;
+  z-index: 2000;
 }
 
 .dialog-card {

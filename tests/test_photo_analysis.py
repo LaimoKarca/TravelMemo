@@ -197,6 +197,7 @@ def test_openai_vision_analyzer_responses_parse_invocation():
     mock_client = MagicMock()
     mock_parsed = VisionAnalysisResult(
         summary="清水寺舞台木造建築",
+        summary_en="The wooden stage of Kiyomizu-dera Temple",
         visible_text=["清水寺"],
         tags=["temple", "kyoto"],
         place_candidates=["Kiyomizu-dera"],

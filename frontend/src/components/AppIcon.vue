@@ -1,6 +1,10 @@
 <script setup lang="ts">
-defineProps<{ name: 'image' | 'refresh' | 'wand' | 'search' | 'chevron' | 'plus' | 'filter' | 'logout' | 'edit' | 'trash' | 'camera' | 'pin' }>()
+defineProps<{ name: 'image' | 'refresh' | 'wand' | 'search' | 'chevron' | 'plus' | 'filter' | 'logout' | 'edit' | 'trash' | 'camera' | 'pin' | 'jump' | 'save' | 'back' | 'close' }>()
 const paths = {
+  jump: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
+  save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM17 21v-8H7v8M7 3v5h8V3',
+  back: 'M19 12H5m7-7-7 7 7 7',
+  close: 'M6 6l12 12M18 6 6 18',
   image: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM3 16l6-6 5 5 3-3 4 4M16 7h.01',
   refresh: 'M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 18 17',
   wand: 'm4 20 12-12 4 4L8 24M14 10l4 4M5 3v4M3 5h4M17 1v4M15 3h4M22 17v4M20 19h4',

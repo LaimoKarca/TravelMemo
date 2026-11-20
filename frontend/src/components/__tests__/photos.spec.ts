@@ -82,6 +82,20 @@ const mockPhotos: PhotoDTO[] = [
 ]
 
 describe('PhotoViewer (Lightbox)', () => {
+  it('keeps Tab navigation inside the preview', async () => {
+    const w = mount(PhotoViewer, { props: { visible: true, photos: [mockPhotos[0]], canEditCaption: true, saveCaption: async () => {} }, attachTo: document.body })
+    try {
+      await flushPromises()
+      const buttons = w.findAll('button')
+      const first = buttons[0].element as HTMLButtonElement
+      const last = buttons.at(-1)!.element as HTMLButtonElement
+      last.focus()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }))
+      expect(document.activeElement).toBe(first)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }))
+      expect(document.activeElement).toBe(last)
+    } finally { w.unmount() }
+  })
   it('renders photo details, caption, and analysis metadata', () => {
     const wrapper = mount(PhotoViewer, {
       props: {
@@ -142,27 +156,37 @@ describe('PhotoViewer (Lightbox)', () => {
     expect(wrapper.emitted('close')?.length).toBe(2)
   })
 
-  it('emits update-caption when caption is edited and saved', async () => {
+  it('waits for caption saving, preserves a failed draft and only exits after success', async () => {
+    let rejectSave!: (error: Error) => void
+    const save = vi.fn().mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject })).mockResolvedValueOnce(undefined)
     const wrapper = mount(PhotoViewer, {
       props: {
         visible: true,
         photos: mockPhotos,
         initialPhotoId: 'photo-1',
-        canEditCaption: true
+        canEditCaption: true,
+        saveCaption: save
       }
     })
 
     await wrapper.find('.edit-caption-btn').trigger('click')
     const input = wrapper.find('.caption-input')
     await input.setValue('清水寺清晨的微風')
-    await wrapper.find('.caption-row .btn-primary').trigger('click')
+    await wrapper.get('.caption-save').trigger('click')
+    expect(wrapper.get('.caption-save').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.caption-input').exists()).toBe(true)
+    rejectSave(new Error('network failure'))
+    await flushPromises()
+    expect((wrapper.get('.caption-input').element as HTMLInputElement).value).toBe('清水寺清晨的微風')
+    await wrapper.get('.caption-save').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.caption-input').exists()).toBe(false)
 
-    expect(wrapper.emitted('update-caption')).toBeTruthy()
-    expect(wrapper.emitted('update-caption')![0]).toEqual([{
+    expect(save).toHaveBeenLastCalledWith({
       photoId: 'photo-1',
       caption: '清水寺清晨的微風',
       version: 1
-    }])
+    })
   })
 
   it('emits retry and delete actions correctly', async () => {

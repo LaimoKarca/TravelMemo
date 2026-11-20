@@ -32,6 +32,15 @@ class MemoryPhotoStore:
     def close(self) -> None:
         """No-op for memory store."""
 
+    def list_localization_candidates(self, owner: str | None = None, limit: int = 25) -> list[dict]:
+        with self.lock:
+            candidates = [p for p in self.photos.values()
+                          if p.get("status") == "ready"
+                          and (owner is None or p.get("owner_id") == owner)
+                          and p.get("analysis_language") != "zh-Hant"
+                          and (p.get("analysis") or {}).get("summary")]
+            return copy.deepcopy(sorted(candidates, key=lambda p: p["id"])[:limit])
+
     def create(self, owner: str, record: dict[str, Any]) -> dict[str, Any]:
         """Creates a photo record."""
         rec = copy.deepcopy(record)
@@ -536,6 +545,17 @@ class Neo4jPhotoStore:
             rec["bindings"] = []
 
         return rec
+
+    def list_localization_candidates(self, owner: str | None = None, limit: int = 25) -> list[dict]:
+        with self.driver.session(database=self.database) as session:
+            rows = session.run("""
+                MATCH (p:Photo {status: 'ready'})
+                WHERE ($owner IS NULL OR p.owner_id = $owner)
+                  AND coalesce(p.analysis_language, '') <> 'zh-Hant'
+                  AND p.analysis_json IS NOT NULL
+                RETURN p ORDER BY p.id LIMIT $limit
+            """, owner=owner, limit=limit)
+            return [self._record_from_node(row["p"]) for row in rows]
 
     def create(self, owner: str, record: dict[str, Any]) -> dict[str, Any]:
         """Creates a photo node in Neo4j."""

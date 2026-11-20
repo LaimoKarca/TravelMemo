@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { SearchEvent } from '../types/search'
 import { getEvent } from '../api/search'
 import { ApiError } from '../api/auth'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -167,14 +168,14 @@ function handleJump() {
       aria-labelledby="source-modal-title"
     >
       <header class="dialog-header">
-        <h3 id="source-modal-title" class="dialog-title">足跡來源詳情</h3>
+        <h3 id="source-modal-title" class="dialog-title">足跡詳情</h3>
         <button
           type="button"
           class="btn-close"
           aria-label="關閉對話框"
           @click="handleClose"
         >
-          ✕
+          <AppIcon name="close" />
         </button>
       </header>
 
@@ -223,19 +224,9 @@ function handleJump() {
           <p class="notes-text">{{ currentEvent.notes }}</p>
         </div>
 
-        <div class="version-info">
-          <span>資料版本：第 {{ currentEvent.version }} 版</span>
-        </div>
       </div>
 
       <footer class="dialog-footer">
-        <button
-          type="button"
-          class="btn btn-secondary"
-          @click="handleClose"
-        >
-          關閉
-        </button>
         <button
           v-if="currentEvent && !isDeleted"
           type="button"
@@ -247,7 +238,7 @@ function handleJump() {
             <polyline points="15 3 21 3 21 9" />
             <line x1="10" y1="14" x2="21" y2="3" />
           </svg>
-          <span>跳至原旅程修訂</span>
+          <span>前往手記</span>
         </button>
       </footer>
     </div>
@@ -283,12 +274,14 @@ function handleJump() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.25rem 1.5rem;
+  padding: .25rem 1rem;
+  min-height: 52px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--color-border);
 }
 
 .dialog-title {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: var(--color-ink);
 }
@@ -462,7 +455,7 @@ function handleJump() {
   }
 
   .dialog-header {
-    padding: 1rem;
+    padding: .25rem .75rem;
   }
 
   .dialog-body {

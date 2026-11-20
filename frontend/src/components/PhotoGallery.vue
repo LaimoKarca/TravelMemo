@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import type { PhotoDTO } from '../types/photo'
+import type { PhotoDTO, PhotoCaptionUpdate } from '../types/photo'
 import PhotoViewer from './PhotoViewer.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 
@@ -13,6 +13,7 @@ const props = withDefaults(
     canReorder?: boolean
     canDelete?: boolean
     canEditCaption?: boolean
+    saveCaption?: (payload: PhotoCaptionUpdate) => Promise<void>
     emptyText?: string
     emptyHint?: string
     compactEmpty?: boolean
@@ -33,7 +34,6 @@ const emit = defineEmits<{
   (e: 'reorder', photoIds: string[]): void
   (e: 'delete', payload: { photoId: string; version: number }): void
   (e: 'retry', payload: { photoId: string; version: number }): void
-  (e: 'update-caption', payload: { photoId: string; caption: string; version: number }): void
   (e: 'refresh'): void
 }>()
 
@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
       @set-cover="emit('set-cover', $event)"
       @delete="onViewerDelete"
       @retry="emit('retry', $event)"
-      @update-caption="emit('update-caption', $event)"
+      :save-caption="saveCaption"
     />
 
     <!-- Confirm Delete Dialog (reusable component with multi-binding warning) -->
@@ -356,6 +356,7 @@ onBeforeUnmount(() => {
       :visible="confirmDialogVisible"
       :title="confirmDialogTitle"
       :message="confirmDialogMessage"
+      confirm-first
       @confirm="handleConfirmDelete"
       @cancel="handleCancelDelete"
     />

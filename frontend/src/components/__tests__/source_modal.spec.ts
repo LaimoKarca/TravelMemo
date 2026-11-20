@@ -62,7 +62,8 @@ describe('SourceDetailModal', () => {
     // Always refetched from server to get authoritative latest version
     expect(getEventSpy).toHaveBeenCalledWith('evt-101')
     expect(wrapper.text()).toContain('伺服器端最新修訂備忘')
-    expect(wrapper.text()).toContain('第 2 版')
+    expect(wrapper.text()).not.toContain('第 2 版')
+    expect(wrapper.get('h3').text()).toBe('足跡詳情')
   })
 
   it('fetches event by eventId when initialEvent is not provided', async () => {
