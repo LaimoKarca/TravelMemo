@@ -72,6 +72,7 @@ describe('RecallSearch', () => {
     const searchSpy = vi.spyOn(searchApi, 'searchRecall').mockResolvedValue(mockSearchResult)
 
     const wrapper = mount(RecallSearch, {
+      attachTo: document.body,
       props: { trips: mockTrips }
     })
 
@@ -112,6 +113,12 @@ describe('RecallSearch', () => {
     expect(wrapper.text()).toContain('基準日期 2026-11-19 ➔ 上一站 ➔ 目標日期 2026-11-20')
 
     // Card buttons
+    expect(wrapper.get('button[aria-controls="footprint-results"]').attributes('aria-expanded')).toBe('true')
+    await wrapper.get('button[aria-controls="footprint-results"]').trigger('click')
+    expect(wrapper.get('#footprint-results').isVisible()).toBe(false)
+    await wrapper.find('form.search-form-card').trigger('submit')
+    await flushPromises()
+    expect(wrapper.get('#footprint-results').isVisible()).toBe(true)
     expect(wrapper.text()).not.toContain('檢視詳情')
     await wrapper.get('.source-card-open').trigger('click')
     expect(wrapper.emitted('view-source')).toBeTruthy()
@@ -126,6 +133,7 @@ describe('RecallSearch', () => {
       eventId: 'e-1'
     })
     expect(wrapper.emitted('view-source')).toHaveLength(1)
+    wrapper.unmount()
   })
 
   it('renders empty result notice when 0 items returned', async () => {

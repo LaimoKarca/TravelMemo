@@ -480,6 +480,16 @@ describe('TripWorkspace and Travel Components', () => {
     expect(payload.timezone).toBeTruthy()
   })
 
+  it('opens footprint editing without focusing an input and preserves create autofocus', async () => {
+    const wrapper = mount(EventDialog, { props: { visible: true, trip: mockTrips[0], event: mockEvents[0] }, attachTo: document.body })
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('[role="dialog"]').element)
+    await wrapper.setProps({ visible: false, event: null })
+    await wrapper.setProps({ visible: true })
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('#event-place-name').element)
+  })
+
   it('EventDialog preserves entered values on optimistic 409 conflict and offers refresh', async () => {
     const wrapper = mount(EventDialog, {
       props: {

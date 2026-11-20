@@ -209,6 +209,7 @@ watch(
         eventPhotos.value = []
       }
       nextTick(() => {
+        if (isEdit.value) { dialogRef.value?.focus({ preventScroll: true }); return }
         const firstInput = dialogRef.value?.querySelector<HTMLElement>('#event-place-name')
         const firstFocusable = dialogRef.value?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)
         ;(firstInput || firstFocusable)?.focus()
@@ -647,12 +648,14 @@ onBeforeUnmount(() => {
 }
 
 .form-group {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.375rem;
 }
 
 .form-row {
+  min-width: 0;
   display: flex;
   gap: 1rem;
 }
@@ -664,6 +667,12 @@ onBeforeUnmount(() => {
 .flex-2 {
   flex: 2;
 }
+
+/* Safari date/time controls must shrink with their flex column. */
+.form-input { min-width: 0; max-width: 100%; box-sizing: border-box; }
+input[type="date"], input[type="time"] { display: block; width: 100%; min-width: 0; max-width: 100%; appearance: none; -webkit-appearance: none; }
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
 
 .form-label {
   font-size: 0.875rem;

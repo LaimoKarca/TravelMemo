@@ -163,7 +163,7 @@ describe('Media Frontend Integration', () => {
   })
 
   it('supports image query and displays photo search results in RecallSearch', async () => {
-    vi.spyOn(searchApi, 'searchRecall').mockResolvedValueOnce({
+    vi.spyOn(searchApi, 'searchRecall').mockResolvedValue({
       items: [],
       photo_items: [
         {
@@ -213,8 +213,15 @@ describe('Media Frontend Integration', () => {
 
     // Renders photo search results section
     expect(wrapper.text()).toContain('相符照片記憶 (1)')
+    expect(wrapper.get('button[aria-controls="photo-results"]').attributes('aria-expanded')).toBe('false')
+    expect((wrapper.get('#photo-results').element as HTMLElement).style.display).toBe('none')
+    await wrapper.get('button[aria-controls="photo-results"]').trigger('click')
+    expect((wrapper.get('#photo-results').element as HTMLElement).style.display).not.toBe('none')
     expect(wrapper.text()).toContain('嵐山渡月橋')
     expect(wrapper.text()).not.toContain('圖片場景高度吻合「渡月橋」')
+    await wrapper.find('form.search-form-card').trigger('submit')
+    await flushPromises()
+    expect((wrapper.get('#photo-results').element as HTMLElement).style.display).toBe('none')
   })
 
   it('EventDialog stages photos on create and passes stagedPhotoIds on submit', async () => {

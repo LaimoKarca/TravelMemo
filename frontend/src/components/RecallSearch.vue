@@ -33,6 +33,8 @@ const loading = ref(false)
 const errorMessage = ref('')
 const hasSearched = ref(false)
 const searchResult = ref<SearchResponse | null>(null)
+const photoResultsOpen = ref(false)
+const footprintResultsOpen = ref(true)
 
 // Image search state
 const searchPhotos = ref<PhotoDTO[]>([])
@@ -96,6 +98,8 @@ async function handleSearch() {
       return
     }
     searchResult.value = res
+    photoResultsOpen.value = false
+    footprintResultsOpen.value = true
   } catch (err: any) {
     if (currentGen !== searchGeneration) {
       return
@@ -122,6 +126,8 @@ function handleResetFilters() {
   searchLimit.value = 10
   errorMessage.value = ''
   hasSearched.value = false
+  photoResultsOpen.value = false
+  footprintResultsOpen.value = true
   searchResult.value = null
   loading.value = false
 }
@@ -283,7 +289,7 @@ function toggleFilters() {
     <!-- Results Context Toolbar: Limit moved to results context per brief -->
     <div class="results-toolbar">
       <span class="results-count">
-        {{ searchResult ? `找到 ${searchResult.items.length} 處相符足跡` : '搜尋結果' }}
+        搜尋結果
       </span>
 
       <div class="toolbar-limit-group">
@@ -321,8 +327,8 @@ function toggleFilters() {
 
       <!-- Matched Photos Section -->
       <div v-if="searchResult.photo_items && searchResult.photo_items.length > 0" class="photo-results-section">
-        <h3 class="photo-results-title">相符照片記憶 ({{ searchResult.photo_items.length }})</h3>
-        <div class="photo-results-grid">
+        <h3 class="result-section-title"><button type="button" class="result-section-toggle" :aria-expanded="photoResultsOpen" aria-controls="photo-results" @click="photoResultsOpen = !photoResultsOpen"><span>相符照片記憶 ({{ searchResult.photo_items.length }})</span><AppIcon name="chevron" :class="{ 'is-open': photoResultsOpen }" /></button></h3>
+        <div v-show="photoResultsOpen" id="photo-results" class="photo-results-grid">
           <article
             v-for="(pItem, pIdx) in searchResult.photo_items"
             :key="pItem.photo.id + '-' + pIdx"
@@ -359,7 +365,9 @@ function toggleFilters() {
       </div>
 
       <!-- Results with original sources and recorded context -->
-      <div v-if="searchResult.items.length > 0" class="source-cards-grid">
+      <section v-if="searchResult.items.length > 0" class="footprint-results-section">
+        <h3 class="result-section-title"><button type="button" class="result-section-toggle" :aria-expanded="footprintResultsOpen" aria-controls="footprint-results" @click="footprintResultsOpen = !footprintResultsOpen"><span>相符足跡 ({{ searchResult.items.length }})</span><AppIcon name="chevron" :class="{ 'is-open': footprintResultsOpen }" /></button></h3>
+      <div v-show="footprintResultsOpen" id="footprint-results" class="source-cards-grid">
         <article
           v-for="(item, idx) in searchResult.items"
           :key="item.event.id + '-' + idx"
@@ -403,6 +411,7 @@ function toggleFilters() {
           </div>
         </article>
       </div>
+      </section>
     </div>
 
     <!-- Reusable Lightbox Viewer -->
@@ -417,6 +426,13 @@ function toggleFilters() {
 </template>
 
 <style scoped>
+.result-section-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.result-section-toggle { display: flex; align-items: center; justify-content: space-between; gap: .5rem; width: 100%; min-height: 44px; padding: .25rem 0; border: 0; background: transparent; color: var(--color-ink); font: inherit; cursor: pointer; text-align: left; }
+.result-section-toggle svg { color: var(--color-subtle); transition: transform .15s ease; }
+.result-section-toggle svg.is-open { transform: rotate(180deg); }
+.result-section-toggle:focus-visible { outline: 2px solid var(--color-maple); outline-offset: 2px; border-radius: var(--radius-sm); }
+.footprint-results-section { display: flex; flex-direction: column; gap: .5rem; }
+@media(prefers-reduced-motion: reduce) { .result-section-toggle svg { transition: none; } }
 .main-query-row { position: relative; }
 .main-query-row :deep(.photo-source-options) { top: calc(100% + .4rem); bottom: auto; }
 .main-query-row :deep(.is-icon-only) { width: 44px; flex: 0 0 44px; }
