@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+      <rect width="1000" height="700" fill="#f6f1e7"/>
+      <rect x="35" y="35" width="930" height="630" rx="28" fill="#fbf8f1"/>
+      <text x="85" y="120" font-family="Microsoft JhengHei,sans-serif" font-size="58" font-weight="700" fill="#568c9b">蔚藍海岸</text>
+
+      <circle cx="455" cy="225" r="55" fill="#e0b65b"/>
+      <path d="M60 380q150-70 300-10t260 0v220H60Z" fill="#82b5bd"/>
+      <path d="M65 470q150-55 300 0t260-5M65 540q150-55 300 0t260-5" fill="none" stroke="#d8e9df" stroke-width="15"/>
+      <path d="M90 560q85-110 210-70t230 65" fill="none" stroke="#d8bd8e" stroke-width="70"/>
+      <path d="M155 515v-170m0 20h145l-25 50H155" fill="#e0b65b" stroke="#775a40" stroke-width="9" stroke-linejoin="round"/>
+
+      <path d="M650 210v340" stroke="#dcd1bf" stroke-width="3"/>
+      <text x="690" y="300" font-family="Microsoft JhengHei,sans-serif" font-size="34" fill="#453a32">步道入口</text>
+      <text x="690" y="365" font-family="Microsoft JhengHei,sans-serif" font-size="30" fill="#766859">潮汐觀景臺</text>
+      <text x="690" y="525" font-family="Microsoft JhengHei,sans-serif" font-size="22" fill="#9b8c7c">合成示意圖</text>
+      <text x="85" y="635" font-family="Microsoft JhengHei,sans-serif" font-size="20" fill="#9b8c7c">TravelMemo · 虛構旅行場景</text>
+    </svg>

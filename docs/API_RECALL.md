@@ -1,5 +1,7 @@
 # 檢索與對話 API
 
+[文件索引](README.md)
+
 本文補充 [SPEC](SPEC.md) 的實際介面。開發環境可從 /api/docs 查閱 FastAPI OpenAPI；
 正式部署停用 Swagger。所有介面位於 `/api/v1`，使用同網域 Cookie 工作階段。
 

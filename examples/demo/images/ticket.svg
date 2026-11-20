@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+      <rect width="1000" height="700" fill="#f6f1e7"/>
+      <rect x="35" y="35" width="930" height="630" rx="28" fill="#fbf8f1"/>
+      <text x="85" y="120" font-family="Microsoft JhengHei,sans-serif" font-size="58" font-weight="700" fill="#53817d">海風列車</text>
+
+      <rect x="120" y="235" width="470" height="310" rx="36" fill="#fbf8f1" stroke="#485c5b" stroke-width="10"/>
+      <path d="M130 440h450" stroke="#bd744c" stroke-width="30"/>
+      <rect x="155" y="275" width="150" height="120" rx="10" fill="#93b7bb"/>
+      <rect x="335" y="275" width="215" height="120" rx="10" fill="#93b7bb"/>
+      <circle cx="225" cy="550" r="40" fill="#485c5b"/>
+      <circle cx="495" cy="550" r="40" fill="#485c5b"/>
+      <path d="M80 610h555" stroke="#a8a08d" stroke-width="10" stroke-linecap="round"/>
+
+      <path d="M650 210v340" stroke="#dcd1bf" stroke-width="3"/>
+      <text x="690" y="300" font-family="Microsoft JhengHei,sans-serif" font-size="34" fill="#453a32">花蓮 → 臺東</text>
+      <text x="690" y="365" font-family="Microsoft JhengHei,sans-serif" font-size="30" fill="#766859">普通車</text>
+      <text x="690" y="525" font-family="Microsoft JhengHei,sans-serif" font-size="22" fill="#9b8c7c">合成示意圖</text>
+      <text x="85" y="635" font-family="Microsoft JhengHei,sans-serif" font-size="20" fill="#9b8c7c">TravelMemo · 虛構旅行場景</text>
+    </svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+      <rect width="1000" height="700" fill="#f6f1e7"/>
+      <rect x="35" y="35" width="930" height="630" rx="28" fill="#fbf8f1"/>
+      <text x="85" y="120" font-family="Microsoft JhengHei,sans-serif" font-size="58" font-weight="700" fill="#ba804c">晨光麵包屋</text>
+
+      <ellipse cx="330" cy="550" rx="225" ry="45" fill="#e1c99f"/>
+      <ellipse cx="330" cy="430" rx="175" ry="120" fill="#cf9655" stroke="#875536" stroke-width="10"/>
+      <path d="M410 440c60-90-80-140-140-85s-5 125 65 110 35-95-10-65" fill="none" stroke="#875536" stroke-width="18" stroke-linecap="round"/>
+      <path d="M210 375q140-70 235 45M210 470q130 75 240-35" fill="none" stroke="#f7e2b9" stroke-width="12" stroke-linecap="round"/>
+      <path d="M235 260q-30-30 0-60m100 60q-30-30 0-60m100 60q-30-30 0-60" fill="none" stroke="#ab9f8a" stroke-width="9" stroke-linecap="round"/>
+
+      <path d="M650 210v340" stroke="#dcd1bf" stroke-width="3"/>
+      <text x="690" y="300" font-family="Microsoft JhengHei,sans-serif" font-size="34" fill="#453a32">肉桂捲</text>
+      <text x="690" y="365" font-family="Microsoft JhengHei,sans-serif" font-size="30" fill="#766859">每日現烤</text>
+      <text x="690" y="525" font-family="Microsoft JhengHei,sans-serif" font-size="22" fill="#9b8c7c">合成示意圖</text>
+      <text x="85" y="635" font-family="Microsoft JhengHei,sans-serif" font-size="20" fill="#9b8c7c">TravelMemo · 虛構旅行場景</text>
+    </svg>

@@ -1,63 +1,84 @@
-﻿# 旅程與事件 API
+# 旅程與事件 API
 
-Scope: authenticated private trip/event CRUD, explicit Place reuse, timeline and NEXT, optimistic versions. API prefix /api/v1, JSON errors {detail:string}. All writes require X-CSRF-Token and existing session; owner derived server-side. Cross-owner IDs 404. Validation422, version409.
+[文件索引](README.md)
 
-Trip JSON: {id,name,start_date,end_date,timezone,description,version}. Dates YYYY-MM-DD required; timezone IANA or fixed UTC offset, default Asia/Taipei; name1..200, description max10000. start<=end. Versions start1, increment on every trip or contained event mutation.
-The create form defaults the end date to the following day and adjusts an end date made too early by a changed start date. Same-day trips remain valid. API validation independently rejects start>end.
-Event JSON: {id,trip_id,place_id,place_name,city,address,category,date,time,notes,position,version}. time HH:mm or null, date required in trip bounds, notes max20000; strings name1..200, city/category up to200, address1000. category required. Unknown time remains null. Each visit separate ID. Event versions start1, increment on edit only.
-Place JSON: {id,name,city,address}; owner scoped, reused only by explicit id. If supplied place_id, use authoritative existing place fields. Without place_id create fresh Place, never merge names. On editing without place_id create a new Place rather than mutate one used by another event. Category nodes owner-scoped by normalized name.
+所有路徑以 `/api/v1` 為前綴，錯誤格式為 `{detail:string}`。介面使用既有 Cookie 工作階段，寫入另須 `X-CSRF-Token`。
+擁有者由後端決定，不接受前端指定；其他帳號的資源 ID 回傳 404。格式驗證失敗回傳 422，版本衝突回傳 409。
 
-Endpoints:
-- GET /trips -> {items:Trip[]} sort start_date descending,id.
-- POST /trips body name,start_date,end_date,timezone,description ->201 Trip.
-- GET /trips/{id} -> {trip:Trip,events:Event[],next_edges:[{from_id,to_id}]}.
-- PUT /trips/{id} body same fields + version -> Trip. Reject shrinking bounds excluding existing events.
-- DELETE /trips/{id}?version=N ->204; delete own events/NEXT, retain reusable Places.
-- GET /places -> {items:Place[]}.
-- POST /trips/{id}/events body place_id?:str|null,place_name,city,address,category,date,time,notes ->201 Event.
-- PUT /events/{id} same fields +version -> Event. Keep trip fixed.
-- DELETE /events/{id}?version=N ->204.
-- PUT /trips/{id}/event-order body {version,event_ids:[...]} -> same shape as trip detail. Must include exactly all IDs once, dates nondecreasing; within day arbitrary. No cross-date reorder allowed.
+## 資料格式
 
-Create events: append after existing same-date events. Edit date: move to end of new date group; unchanged date preserves order. Unknown time never used for ordering; explicit order wins. All event mutations/reorder/delete and NEXT rebuild in one Neo4j transaction with trip node write lock then version validation. NEXT only adjacent same owner/trip, direction preserved, including cross-day, no cycle. Every transaction filters owner. Avoid using AuthRecord JSON for travel data: real Trip/Event/Place/Category nodes + User-OWNS-Trip-HAS_EVENT-Event, Event-AT-Place, Event-HAS_CATEGORY-Category, NEXT. No APOC required.
+| 資源 | 欄位與規則 |
+| --- | --- |
+| Trip | `{id,name,start_date,end_date,timezone,description,version}`；日期使用 `YYYY-MM-DD`，時區為 IANA 或固定 UTC 偏移，預設 `Asia/Taipei`。名稱 1–200 字，描述最多 10,000 字，開始日期不得晚於結束日期。 |
+| Event | `{id,trip_id,place_id,place_name,city,address,category,date,time,notes,position,version}`；日期須在旅程範圍內，時間為 `HH:mm` 或 `null`，心得最多 20,000 字。地點名稱 1–200 字，城市與類別最多 200 字，地址最多 1,000 字，類別必填。 |
+| Place | `{id,name,city,address}`；地點屬於單一使用者，只在明確提供 `place_id` 時重用，不依同名自動合併。 |
 
-## Draft polishing
+Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時，Trip 版本會增加；Event 編輯時增加自己的版本。
+每次到訪都有獨立 Event ID，未知時間保持 `null`，不補造時間。
 
-`POST /writing/polish` accepts `{text,kind}` where kind is `trip` or `event`, and returns `{text}`.
-The draft must be nonblank and at most 10,000 characters. This authenticated, CSRF-protected operation uses the configured AI model and does not create or update a Trip or Event.
-The frontend previews the result before applying it, keeps the original available for undo, and still uses the regular save endpoint to persist edits.
-Invalid input returns422, rejected content400, concurrent requests429, and unavailable AI503. Existing draft text remains available when polishing fails.
+建立手記表單預設將結束日期設為開始日隔日；開始日變動時會修正過早的結束日。當日來回仍可使用同一天，API 也會獨立驗證日期範圍。
 
-## Footprint drafts
+提供 `place_id` 時，以本人既有 Place 欄位為準；未提供時建立新 Place。
+編輯時未提供 `place_id` 也會建立新地點，不連動改寫其他事件共用的地點。Category 依擁有者及正規化名稱管理。
 
-The trip-specific assistant creates pending drafts from text. It is independent of Conversation and does not write events until explicit confirmation.
-Base path: `/trips/{trip_id}/footprint-drafts`. The usual session, CSRF and owner checks apply; foreign trip or draft IDs return404.
+## 旅程與足跡端點
 
-| Method and path | Body | Result |
+| 方法與路徑 | 請求與回應 |
+| --- | --- |
+| `GET /trips` | 回傳 `{items:Trip[]}`，依開始日期由新到舊，同分依 ID 排列。 |
+| `POST /trips` | 提供 `name,start_date,end_date,timezone,description`，回傳 201 Trip。 |
+| `GET /trips/{id}` | 回傳 `{trip:Trip,events:Event[],next_edges:[{from_id,to_id}]}`。 |
+| `PUT /trips/{id}` | 提供建立欄位及 `version`，回傳 Trip；不得縮小日期範圍而排除既有足跡。 |
+| `DELETE /trips/{id}?version=N` | 回傳 204，刪除本人的旅程、事件及 NEXT，保留可重用的 Place。 |
+| `GET /places` | 回傳 `{items:Place[]}`。 |
+| `POST /trips/{id}/events` | 提供 `place_id?:str\|null,place_name,city,address,category,date,time,notes`，回傳 201 Event。 |
+| `PUT /events/{id}` | 提供事件欄位及 `version`，回傳 Event；不能更換所屬旅程。 |
+| `DELETE /events/{id}?version=N` | 回傳 204。 |
+| `PUT /trips/{id}/event-order` | 提供 `{version,event_ids:[...]}`，回傳與旅程詳情相同格式。須將所有事件 ID 各列一次，日期保持非遞減，同日內可調整順序。 |
+
+新事件接在同日既有紀錄之後。修改日期時移到新日期群組末尾，日期未變時保留順序；精確時間不取代保存的事件順序。
+事件新增、修改、刪除、重排與 NEXT 重建均在單一 Neo4j 交易完成，先鎖定旅程節點，再檢查版本及擁有者。
+
+NEXT 只連接同一使用者、同一旅程內相鄰的紀錄，保留方向、可跨日、不形成循環。
+前端時間軸依旅行狀態決定正序或倒序顯示，不改寫保存順序；`event-order` 保留為 API 契約，介面不提供往上／往下移按鈕。
+資料使用實際的 User、Trip、Event、Place、Category 節點與關係，不放進登入用的 AuthRecord JSON，亦不需要 APOC。
+
+## 隨筆潤飾
+
+`POST /writing/polish` 接受 `{text,kind}`，`kind` 為 `trip` 或 `event`，回傳 `{text}`。
+原稿不得空白，最多 10,000 字；此操作需要登入與 CSRF，使用已設定的 AI 模型，不會直接建立或更新 Trip、Event。
+
+前端先預覽結果，再由使用者決定是否套用；原文可復原，最後仍透過一般儲存端點保存。
+輸入錯誤回傳 422，內容遭拒回傳 400，並行限制回傳 429，AI 無法使用回傳 503。潤飾失敗時保留原稿。
+
+## 足跡草稿
+
+手記內的「AI 幫我記」從文字產生待確認草稿，與 Conversation 分開；使用者確認前不寫入事件。
+以下以 `/trips/{trip_id}/footprint-drafts` 為基底路徑，登入、CSRF 及擁有者規則相同；其他帳號的旅程或草稿回傳 404。
+
+| 方法與路徑 | 請求 | 回應 |
 | --- | --- | --- |
 | `POST /` | `{record_date,text}` | 201 Draft |
-| `GET /` | — | `{items:[Draft]}` containing the latest active draft, or an empty list |
+| `GET /` | — | `{items:[Draft]}`，包含最近一份有效草稿，或空陣列 |
 | `GET /{draft_id}` | — | Draft |
-| `PATCH /{draft_id}` | `{version,record_date?,text?,items?}` | Updated Draft |
-| `POST /{draft_id}/generate` | `{version,request_id}` | 202 Draft; poll the draft for progress |
+| `PATCH /{draft_id}` | `{version,record_date?,text?,items?}` | 更新後 Draft |
+| `POST /{draft_id}/generate` | `{version,request_id}` | 202 Draft，輪詢草稿取得處理進度 |
 | `POST /{draft_id}/commit` | `{version,trip_version,request_id}` | `{events,trip_version,draft}` |
-| `DELETE /{draft_id}?version=N` | — | 204; discard the draft |
+| `DELETE /{draft_id}?version=N` | — | 204，捨棄草稿 |
 
-`request_id` is a UUID. Draft has `id`, `trip_id`, `version`, `status`, `record_date`, `text`, `items`, `issues`,
-`trip_version`, `error`, `request_id` and timestamps. Status is `editing`, `queued`, `running`, `ready`, `failed` or `committed`.
-`issues` maps item IDs to missing or invalid field messages. It helps editing and does not replace server validation at commit.
+`request_id` 使用 UUID。Draft 包含 `id,trip_id,version,status,record_date,text,items,issues,trip_version,error,request_id` 與建立、更新時間。
+狀態為 `editing`、`queued`、`running`、`ready`、`failed` 或 `committed`。`issues` 對應項目 ID 的缺漏或無效欄位訊息，不能取代確認時的伺服器驗證。
 
-Items contain `id`, `selected`, `place_name`, `date`, `time`, `city`, `address`, `category` and `notes`; item array order is the preview order.
-Place name, date and time may be null while drafting. Selected items must satisfy the regular Event creation rules before commit.
-Record date is required within the trip bounds, text is limited to10,000 characters, and generated items are limited to20.
-An empty description can be saved while editing, but generation requires nonblank text. Unselected incomplete items do not block committing the selected valid items.
-Unspecified dates use record date; relative dates use it as the anchor in the trip timezone. Unknown time stays null and unclassified items use `其他`.
+每個項目包含 `id,selected,place_name,date,time,city,address,category,notes`，陣列順序即預覽順序。
+草稿中的地點、日期與時間可暫為 `null`；勾選項目在確認前須符合一般 Event 建立規則。未勾選的不完整項目不阻擋有效項目加入。
 
-Generation saves its request and processing state, then runs outside the browser connection. One owner has at most one active assistant worker;
-the default is two assistant workers overall, adjustable by server configuration. Queued and interrupted running work can resume after startup; failed generation preserves previous items and input.
-A manual retry may call the external model again. Discard removes the draft; a late generation result cannot restore it.
+記錄日期須在旅程範圍內，描述最多 10,000 字，生成最多 20 個項目。
+編輯時可保存空描述，但生成要求非空文字。未指定日期時使用記錄日期，「今天／昨天」等相對日期以旅程時區的記錄日期為基準。
+未知時間保持 `null`，無法分類時使用「其他」。
 
-Commit validates the selected items, draft version and current Trip version. Conflicts return409 and retain the draft for review.
-The selected events, new Places, Categories, NEXT links and commit result are saved in one transaction; the Trip version advances once.
-Existing same-day events retain their order and new same-day events append in preview order. A repeated confirmation of a committed draft returns its original result,
-even when the confirmation response was lost; it does not create a second set of events. No existing events are changed by this assistant.
+生成請求與狀態先保存，再於背景處理，不依賴瀏覽器連線。每位使用者最多一個有效助手工作，預設全站同時兩個，可由伺服器調整。
+排隊及中斷的工作可在啟動後恢復；生成失敗保留先前內容。手動重試可能再次呼叫外部模型，捨棄後晚到的結果不會恢復草稿。
+
+確認時核對勾選內容、草稿版本與最新 Trip 版本，衝突回傳 409 並保留草稿供檢查。
+選定事件、新 Place、Category、NEXT 與確認結果在單一交易保存，Trip 版本增加一次。
+同日既有事件保持順序，新事件按預覽順序接在其後；重送已確認草稿會回傳原結果，不會再建立一批事件。助手不修改既有事件。

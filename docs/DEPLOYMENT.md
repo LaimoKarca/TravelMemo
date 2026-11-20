@@ -1,11 +1,13 @@
 # Docker 與 Cloudflare 部署
 
+[文件索引](README.md)
+
 第一次自行部署請先看 [Cloudflare Tunnel 逐步教學](CLOUDFLARE_TUNNEL.md)，
 包含網域替換、建立 connector 與公開路由；寄件設定見 [Gmail SMTP 教學](GMAIL_SMTP.md)。
 下文說明正式網路、版本更新與回退指引。
 
 正式部署與本機開發使用不同資料卷及私人設定。評估另用隔離資料庫，
-不把 benchmark 或開發旅程搬到正式資料庫。
+不把 benchmark 或私人開發旅程搬到正式資料庫。需要人工試用時，可明確指定一個允許名單內的測試帳號，匯入[原創示範資料](DEMO_GUIDE.md)；不會取代其他帳號或既有手記。
 
 ## 入口與網路
 

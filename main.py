@@ -7,13 +7,16 @@ def main():
     parser = argparse.ArgumentParser(description="TravelMemo")
     parser.add_argument(
         "command",
-        choices=["serve", "init-db", "check-config", "download-model", "rebuild-index", "evaluate"],
+        choices=["serve", "init-db", "check-config", "download-model", "rebuild-index", "evaluate", "seed-demo"],
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--benchmark-root", default="data/benchmark")
     parser.add_argument("--output", default="data/evaluation")
     parser.add_argument("--limit-queries", type=int, default=0)
+    parser.add_argument("--email", help="Target allowlisted account for seed-demo")
+    parser.add_argument("--anchor-date", help="First demo import base date (YYYY-MM-DD)")
+    parser.add_argument("--apply", action="store_true", help="Write seed-demo data; otherwise preview only")
     parser.add_argument(
         "--ann", action="store_true", help="Evaluate in a separate EVAL_NEO4J_URI database"
     )
@@ -23,7 +26,20 @@ def main():
         help="Separate immediately-after query diagnostic",
     )
     args = parser.parse_args()
-    if args.command == "serve":
+    if args.command == "seed-demo":
+        import json
+
+        from backend.config import get_settings
+        from backend.demo_data import DemoImportError, seed_demo
+
+        if not args.email:
+            parser.error("seed-demo requires --email")
+        try:
+            result = seed_demo(get_settings(), args.email, args.anchor_date, args.apply)
+        except (DemoImportError, ValueError) as exc:
+            raise SystemExit(str(exc)) from None
+        print(json.dumps(result, ensure_ascii=False))
+    elif args.command == "serve":
         import uvicorn
 
         from backend.config import get_settings

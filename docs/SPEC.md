@@ -1,5 +1,7 @@
 # TravelMemo 系統規格
 
+[文件索引](README.md)
+
 ## 產品與環境
 
 多人私人旅遊回憶 Web App。Python 3.12/FastAPI、Vue 3/TypeScript/Vite、Neo4j Community

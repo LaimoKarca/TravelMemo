@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700" viewBox="0 0 1000 700">
+      <rect width="1000" height="700" fill="#f6f1e7"/>
+      <rect x="35" y="35" width="930" height="630" rx="28" fill="#fbf8f1"/>
+      <text x="85" y="120" font-family="Microsoft JhengHei,sans-serif" font-size="58" font-weight="700" fill="#a95c3f">巷口夜市</text>
+
+      <path d="M100 290h500l-40-90H140Z" fill="#b35e3e" stroke="#724b38" stroke-width="8"/>
+      <path d="M165 205v80m100-80v80m100-80v80m100-80v80" stroke="#f5ddbd" stroke-width="32"/>
+      <path d="M135 300v280h440V300" fill="#d4ae71" stroke="#724b38" stroke-width="10"/>
+      <path d="M200 525 310 345" stroke="#724b38" stroke-width="12" stroke-linecap="round"/>
+      <ellipse cx="305" cy="360" rx="40" ry="80" transform="rotate(32 305 360)" fill="#e3b855" stroke="#9c6a35" stroke-width="7"/>
+      <path d="m285 315 55 35m-73-8 55 35m-73-8 55 35" stroke="#bd8c35" stroke-width="8"/>
+      <rect x="405" y="410" width="105" height="95" rx="10" fill="#f6ead4"/>
+      <path d="m410 400 80 20m-40-40 50 30" stroke="#a56c3d" stroke-width="20" stroke-linecap="round"/>
+
+      <path d="M650 210v340" stroke="#dcd1bf" stroke-width="3"/>
+      <text x="690" y="300" font-family="Microsoft JhengHei,sans-serif" font-size="34" fill="#453a32">烤玉米</text>
+      <text x="690" y="365" font-family="Microsoft JhengHei,sans-serif" font-size="30" fill="#766859">甜不辣</text>
+      <text x="690" y="525" font-family="Microsoft JhengHei,sans-serif" font-size="22" fill="#9b8c7c">合成示意圖</text>
+      <text x="85" y="635" font-family="Microsoft JhengHei,sans-serif" font-size="20" fill="#9b8c7c">TravelMemo · 虛構旅行場景</text>
+    </svg>

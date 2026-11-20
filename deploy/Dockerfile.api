@@ -6,6 +6,7 @@ RUN pip install -r requirements.lock.txt
 COPY pyproject.toml main.py README.md LICENSE ./
 COPY backend ./backend
 COPY experiments ./experiments
+COPY examples ./examples
 RUN pip install --no-deps . && useradd --uid 10001 --create-home app \
     && mkdir -p /app/data/models /app/media && chown -R app:app /app/data /app/media
 USER app

@@ -1,5 +1,7 @@
 # 本機開發與啟動
 
+[文件索引](README.md)
+
 本文件說明如何在自己的電腦啟動 TravelMemo，以及執行開發檢查。
 若要對外提供服務，請接續 [Cloudflare Tunnel 部署教學](CLOUDFLARE_TUNNEL.md)。
 已取得原始碼者，可略過下方 git clone 與 cd TravelMemo。

@@ -1,5 +1,7 @@
 # Cloudflare Tunnel 自行部署教學
 
+[文件索引](README.md)
+
 本教學以 Windows、PowerShell、Docker Desktop 的 Linux containers 為例，
 將 TravelMemo 發佈到 `https://travel.example.com`。請將範例網域換成自己的網域。
 功能操作見 [回憶搜尋與 AI 對話](RECALL.md)，資料保護見 [備份與還原](BACKUP_RESTORE.md)。
