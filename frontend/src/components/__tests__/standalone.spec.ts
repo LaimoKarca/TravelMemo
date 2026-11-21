@@ -18,6 +18,26 @@ enableAutoUnmount(afterEach)
 afterEach(() => vi.restoreAllMocks())
 
 describe('日常足跡', () => {
+  it('只開啟一個操作選單，點空白處或按 Escape 可收合', async () => {
+    vi.spyOn(travel, 'listStandaloneEvents').mockResolvedValue({
+      items: [footprint, { ...footprint, id: 'second', place_name: '海邊步道' }], next_offset: null,
+    })
+    const wrapper = mount(StandaloneFootprints, { attachTo: document.body })
+    await flushPromises()
+    const [first, second] = wrapper.findAll<HTMLButtonElement>('.daily-menu-trigger')
+    await first.trigger('click')
+    expect(first.attributes('aria-expanded')).toBe('true')
+    await second.trigger('click')
+    expect(first.attributes('aria-expanded')).toBe('false')
+    expect(second.attributes('aria-expanded')).toBe('true')
+    await wrapper.get('.daily-header').trigger('pointerdown')
+    expect(second.attributes('aria-expanded')).toBe('false')
+    await first.trigger('click')
+    await wrapper.get('.daily-menu button').trigger('keydown', { key: 'Escape' })
+    expect(first.attributes('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(first.element)
+  })
+
   it('只填地點即可記錄，保留未知抵達時間', async () => {
     const wrapper = mount(EventDialog, { props: { visible: true } })
     await wrapper.get('#event-place-name').setValue('海邊堤防')

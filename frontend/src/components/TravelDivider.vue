@@ -7,6 +7,11 @@ withDefaults(
     orientation: 'vertical'
   }
 )
+const mobileLeaves = [
+  { left: '25%', rotation: '-10deg', size: 11 },
+  { left: '50%', rotation: '5deg', size: 10 },
+  { left: '75%', rotation: '12deg', size: 11 },
+]
 </script>
 
 <template>
@@ -140,10 +145,13 @@ withDefaults(
 
     <template v-else>
       <svg
-        class="maple-accent maple-accent-h1"
+        v-for="leaf in mobileLeaves"
+        :key="leaf.left"
+        class="maple-accent"
         viewBox="0 0 24 24"
-        width="11"
-        height="11"
+        :width="leaf.size"
+        :height="leaf.size"
+        :style="{ left: leaf.left, transform: `translate(-50%, -50%) rotate(${leaf.rotation})` }"
         aria-hidden="true"
         role="presentation"
       >
@@ -153,25 +161,6 @@ withDefaults(
           fill-opacity="0.5"
           stroke="var(--color-maple)"
           stroke-opacity="0.8"
-          stroke-width="1.2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-      <svg
-        class="maple-accent maple-accent-h2"
-        viewBox="0 0 24 24"
-        width="10"
-        height="10"
-        aria-hidden="true"
-        role="presentation"
-      >
-        <path
-          d="M12 21v-3.5m0-3.5c-1.8-1.8-4.5-.9-5.4.9 0-2.7.9-5.4-.9-7.2 1.8 0 3.6.9 4.5 2.7 0-2.7.9-6.3 1.8-9 1 2.7 1.8 6.3 1.8 9 .9-1.8 2.7-2.7 4.5-2.7-1.8 1.8-.9 4.5-.9 7.2-.9-1.8-3.6-2.7-5.4-.9"
-          fill="var(--color-maple)"
-          fill-opacity="0.45"
-          stroke="var(--color-maple)"
-          stroke-opacity="0.75"
           stroke-width="1.2"
           stroke-linecap="round"
           stroke-linejoin="round"
@@ -293,16 +282,6 @@ withDefaults(
   position: absolute;
   top: 50%;
   pointer-events: none;
-}
-
-.travel-divider.is-horizontal .maple-accent-h1 {
-  left: 33%;
-  transform: translate(-50%, -50%) rotate(-10deg);
-}
-
-.travel-divider.is-horizontal .maple-accent-h2 {
-  left: 67%;
-  transform: translate(-50%, -50%) rotate(12deg);
 }
 
 @media (prefers-reduced-motion: reduce) {

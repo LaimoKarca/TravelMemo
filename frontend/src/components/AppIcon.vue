@@ -1,6 +1,8 @@
 <script setup lang="ts">
-defineProps<{ name: 'image' | 'refresh' | 'wand' | 'search' | 'chevron' | 'plus' | 'filter' | 'logout' | 'edit' | 'trash' | 'camera' | 'pin' | 'jump' | 'save' | 'back' | 'close' }>()
+defineProps<{ name: 'image' | 'refresh' | 'wand' | 'search' | 'chevron' | 'plus' | 'filter' | 'logout' | 'edit' | 'trash' | 'camera' | 'pin' | 'jump' | 'save' | 'back' | 'close' | 'more' | 'book-in' }>()
 const paths = {
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  'book-in': 'M20 12v9H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3h2M3 18a3 3 0 0 1 3-3h14M14 2v9m-4-4 4 4 4-4',
   jump: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3',
   save: 'M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2ZM17 21v-8H7v8M7 3v5h8V3',
   back: 'M19 12H5m7-7-7 7 7 7',

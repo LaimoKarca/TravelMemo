@@ -1,70 +1,106 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ApiError } from '../api/auth'
 import { attachEventToTrip, getTrip, listTrips } from '../api/travel'
 import type { Event, Trip, TripDetailResponse } from '../types/travel'
 import { normalizeTimezoneInput } from '../utils/timezones'
 import AppIcon from './AppIcon.vue'
+import TrailLoader from './TrailLoader.vue'
 
 const props = defineProps<{ event: Event }>()
 const emit = defineEmits<{ close: [stale: boolean]; attached: [Event] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const trips = ref<Trip[]>([])
+const query = ref('')
 const tripId = ref('')
 const before = ref('')
 const detail = ref<TripDetailResponse | null>(null)
-const loading = ref(true)
+const loadingTrips = ref(true)
+const loadingDetail = ref(false)
 const saving = ref(false)
-const error = ref('')
+const listError = ref(false)
+const detailError = ref('')
+const saveError = ref('')
 const conflict = ref(false)
 let generation = 0
 let active = true
 
+const eventZone = computed(() => normalizeTimezoneInput(props.event.timezone || 'Asia/Taipei'))
+function matchesDate(trip: Trip) {
+  return trip.start_date <= props.event.date && props.event.date <= trip.end_date
+}
+function matchesZone(trip: Trip) {
+  return normalizeTimezoneInput(trip.timezone) === eventZone.value
+}
+function distance(trip: Trip) {
+  if (matchesDate(trip)) return 0
+  const date = props.event.date < trip.start_date ? trip.start_date : trip.end_date
+  return Math.abs(Date.parse(date) - Date.parse(props.event.date))
+}
+function searchText(value: string) { return value.normalize('NFKC').toLocaleLowerCase() }
+const sortedTrips = computed(() => trips.value.map(trip => ({
+  trip, distance: distance(trip), zoneMatches: matchesZone(trip),
+})).sort((a, b) => a.distance - b.distance || Number(b.zoneMatches) - Number(a.zoneMatches)
+  || b.trip.start_date.localeCompare(a.trip.start_date) || a.trip.id.localeCompare(b.trip.id)))
+const visibleTrips = computed(() => {
+  const tokens = searchText(query.value).trim().split(/\s+/)
+  return sortedTrips.value.filter(({ trip }) => {
+    const text = searchText(`${trip.name} ${trip.start_date} ${trip.end_date}`)
+    return tokens.every(token => text.includes(token))
+  })
+})
+const selectedOutsideResults = computed(() => visibleTrips.value.some(({ trip }) => trip.id === tripId.value)
+  ? null : trips.value.find(trip => trip.id === tripId.value))
 const sameDay = computed(() => detail.value?.events.filter(event => event.date === props.event.date) || [])
 const incompatibility = computed(() => {
   const trip = detail.value?.trip
   if (!trip) return ''
-  if (props.event.date < trip.start_date || props.event.date > trip.end_date) return '這本手記不涵蓋足跡日期。請選另一本，或先調整日期。'
-  if (normalizeTimezoneInput(props.event.timezone || 'Asia/Taipei') !== normalizeTimezoneInput(trip.timezone)) return '手記與足跡的時區不同，請先調整其中一方。'
+  if (!matchesDate(trip)) return '這本手記不涵蓋足跡日期。請選另一本，或先調整日期。'
+  if (!matchesZone(trip)) return '手記與足跡的時區不同，請先調整其中一方。'
   return ''
 })
 
-onMounted(async () => {
+onMounted(() => {
   dialog.value?.showModal()
-  await nextTick()
-  try {
-    trips.value = (await listTrips()).items
-  } catch {
-    error.value = '無法載入手記，請稍後再試。'
-  } finally {
-    loading.value = false
-  }
+  void loadTrips()
 })
 onBeforeUnmount(() => { active = false; generation++; dialog.value?.close() })
 
-async function loadTrip() {
-  const request = ++generation
-  const selected = tripId.value
-  detail.value = null
-  before.value = ''
-  error.value = ''
-  if (!selected) { loading.value = false; return }
-  loading.value = true
+async function loadTrips() {
+  loadingTrips.value = true
+  listError.value = false
   try {
-    const result = await getTrip(selected)
-    if (request === generation) detail.value = result
-  } catch (err) {
-    if (request === generation) error.value = err instanceof ApiError ? err.detail : '無法載入手記。'
+    const result = await listTrips()
+    if (active) trips.value = result.items
+  } catch {
+    if (active) listError.value = true
   } finally {
-    if (request === generation) loading.value = false
+    if (active) loadingTrips.value = false
   }
 }
-watch(tripId, loadTrip)
+
+async function loadTrip(id: string) {
+  const request = ++generation
+  tripId.value = id
+  detail.value = null
+  before.value = ''
+  detailError.value = ''
+  saveError.value = ''
+  loadingDetail.value = true
+  try {
+    const result = await getTrip(id)
+    if (request === generation) detail.value = result
+  } catch (err) {
+    if (request === generation) detailError.value = err instanceof ApiError ? err.detail : '無法載入手記。'
+  } finally {
+    if (request === generation) loadingDetail.value = false
+  }
+}
 
 async function submit() {
-  if (!detail.value || loading.value || saving.value || incompatibility.value || conflict.value) return
+  if (!detail.value || loadingDetail.value || saving.value || incompatibility.value || conflict.value) return
   saving.value = true
-  error.value = ''
+  saveError.value = ''
   try {
     const event = await attachEventToTrip(props.event.id, {
       trip_id: detail.value.trip.id, trip_version: detail.value.trip.version,
@@ -74,9 +110,9 @@ async function submit() {
   } catch (err) {
     if (err instanceof ApiError && err.status === 409) {
       conflict.value = true
-      error.value = '足跡或手記已變更。返回列表後可重新選擇。'
+      saveError.value = '足跡或手記已變更。返回列表後可重新選擇。'
     } else {
-      error.value = err instanceof ApiError ? err.detail : '無法收進手記，請稍後再試。'
+      saveError.value = err instanceof ApiError ? err.detail : '無法收進手記，請稍後再試。'
     }
   } finally {
     saving.value = false
@@ -91,15 +127,42 @@ function close() { if (!saving.value) emit('close', conflict.value) }
       <div class="attach-body">
         <h3 id="attach-title">收進手記</h3>
         <p class="attach-event">{{ event.place_name }} <span>{{ event.date }}</span></p>
-        <label v-if="trips.length">旅行手記
-          <select v-model="tripId" class="form-input" :disabled="saving || conflict">
-            <option value="">選擇手記</option>
-            <option v-for="trip in trips" :key="trip.id" :value="trip.id">{{ trip.name }}</option>
-          </select>
-        </label>
-        <p v-else-if="!loading && !error">先建立一本手記，就能把足跡收進去。</p>
-        <p v-if="loading" role="status">載入中…</p>
-        <p v-if="error || incompatibility" class="attach-error" role="alert">{{ error || incompatibility }}</p>
+        <div v-if="loadingTrips" class="attach-loading" role="status">
+          <TrailLoader /><span class="sr-only">載入手記清單中…</span>
+        </div>
+        <div v-else-if="listError" class="attach-error-row">
+          <p class="attach-error" role="alert">無法載入手記清單。</p>
+          <button type="button" class="btn-link" @click="loadTrips">重試</button>
+        </div>
+        <p v-else-if="!trips.length">先建立一本手記，就能把足跡收進去。</p>
+        <div v-else class="attach-picker">
+          <label class="sr-only" for="attach-search">搜尋手記</label>
+          <input id="attach-search" v-model="query" type="search" class="form-input"
+            placeholder="搜尋手記名稱或日期…" :disabled="saving || conflict" @keydown.enter.prevent />
+          <ul v-if="visibleTrips.length" class="attach-choices" aria-label="旅行手記">
+            <li v-for="{ trip, distance, zoneMatches } in visibleTrips" :key="trip.id">
+              <button type="button" class="attach-choice" :aria-pressed="tripId === trip.id"
+                :disabled="saving || conflict || distance !== 0 || !zoneMatches" @click="loadTrip(trip.id)">
+                <span class="choice-name">{{ trip.name }}</span>
+                <span class="choice-meta">
+                  <span>{{ trip.start_date }} ~ {{ trip.end_date }}</span>
+                  <span v-if="distance !== 0">日期不符</span>
+                  <span v-else-if="!zoneMatches">時區不符</span>
+                </span>
+              </button>
+            </li>
+          </ul>
+          <p v-else role="status" class="attach-empty">沒有符合的手記。</p>
+          <p v-if="selectedOutsideResults" class="attach-empty">已選擇 {{ selectedOutsideResults.name }}</p>
+        </div>
+        <div v-if="loadingDetail" class="attach-loading" role="status">
+          <TrailLoader /><span class="sr-only">載入所選手記中…</span>
+        </div>
+        <div v-if="detailError" class="attach-error-row">
+          <p class="attach-error" role="alert">{{ detailError }}</p>
+          <button type="button" class="btn-link" @click="loadTrip(tripId)">重試</button>
+        </div>
+        <p v-if="saveError || incompatibility" class="attach-error" role="alert">{{ saveError || incompatibility }}</p>
         <label v-if="detail && !incompatibility">加入位置
           <select v-model="before" class="form-input" :disabled="saving || conflict">
             <option value="">{{ sameDay.length ? '當日最後一筆' : '當日第一筆' }}</option>
@@ -109,7 +172,7 @@ function close() { if (!saving.value) emit('close', conflict.value) }
       </div>
       <footer class="dialog-icon-actions">
         <button autofocus type="button" class="btn btn-secondary" :disabled="saving" aria-label="返回" title="返回" @click="close"><AppIcon name="back" /></button>
-        <button type="submit" class="btn btn-primary" :disabled="!detail || loading || saving || !!incompatibility || conflict" :aria-label="saving ? '移入中' : '確認移入手記'" title="確認移入手記"><span v-if="saving" class="pending" aria-hidden="true"></span><AppIcon v-else name="save" /></button>
+        <button type="submit" class="btn btn-primary" :disabled="!detail || loadingDetail || saving || !!incompatibility || conflict" :aria-label="saving ? '移入中' : '確認移入手記'" title="確認移入手記"><span v-if="saving" class="pending" aria-hidden="true"></span><AppIcon v-else name="save" /></button>
       </footer>
     </form>
   </dialog>
@@ -124,6 +187,17 @@ function close() { if (!saving.value) emit('close', conflict.value) }
 .attach-event { display: flex; flex-wrap: wrap; gap: .25rem .75rem; align-items: baseline; }
 .attach-event span, .attach-body label { color: var(--color-subtle); font-size: .85rem; }
 .attach-body label { display: grid; gap: .3rem; min-width: 0; }
+.attach-picker, .attach-choices { min-width: 0; }
+.attach-choices { list-style: none; margin: .4rem 0 0; padding: 0 .15rem; max-height: min(35dvh, 17rem); overflow-y: auto; }
+.attach-choice { display: grid; gap: .15rem; width: 100%; min-height: 44px; border: 0; border-radius: var(--radius-xs); background: transparent; padding: .45rem .55rem; color: var(--color-ink); font: inherit; text-align: left; cursor: pointer; }
+.attach-choice:not(:disabled):hover, .attach-choice[aria-pressed=true] { background: var(--color-maple-subtle); }
+.attach-choice:focus-visible { outline-offset: -2px; }
+.attach-choice:disabled { color: var(--color-subtle); cursor: default; }
+.choice-name, .attach-empty { overflow-wrap: anywhere; font-size: .9rem; }
+.choice-meta { display: flex; flex-wrap: wrap; gap: .2rem .65rem; color: var(--color-subtle); font-size: .75rem; font-variant-numeric: tabular-nums; }
+.attach-empty { padding-top: .45rem; color: var(--color-subtle); }
+.attach-loading { display: grid; place-items: center; min-height: 2.5rem; }
+.attach-error-row { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
 .attach-error { color: var(--color-error-text); font-size: .85rem; }
 .pending { width: 1rem; height: 1rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: attach-spin .8s linear infinite; }
 @keyframes attach-spin { to { transform: rotate(360deg); } }

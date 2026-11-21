@@ -8,6 +8,7 @@ import AppIcon from './AppIcon.vue'
 import AttachFootprintDialog from './AttachFootprintDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 import EventDialog from './EventDialog.vue'
+import TrailLoader from './TrailLoader.vue'
 
 const props = defineProps<{ focusId?: string | null }>()
 const emit = defineEmits<{
@@ -37,6 +38,9 @@ const editorConflict = ref(false)
 const deleting = ref<Event | null>(null)
 const attaching = ref<Event | null>(null)
 const listRef = ref<HTMLElement | null>(null)
+const openMenuId = ref<string | null>(null)
+const menuAbove = ref(false)
+let menuTrigger: HTMLButtonElement | null = null
 let pageGeneration = 0
 let focusGeneration = 0
 let active = true
@@ -56,11 +60,37 @@ const categories = computed(() => [...new Set(events.value.map(event => event.ca
 const filtersActive = computed(() => Boolean(city.value || category.value || dateFrom.value || dateTo.value))
 const loadingMore = computed(() => loading.value && offset.value !== null)
 
+function closeMenu(restoreFocus = false) {
+  const trigger = menuTrigger
+  menuTrigger = null
+  openMenuId.value = null
+  if (restoreFocus) trigger?.focus({ preventScroll: true })
+}
+
+function toggleMenu(event: MouseEvent, id: string) {
+  if (openMenuId.value === id) { closeMenu(); return }
+  menuTrigger = event.currentTarget as HTMLButtonElement
+  const bottomNavHeight = document.querySelector('.mobile-bottom-nav')?.getBoundingClientRect().height ?? 0
+  menuAbove.value = window.innerHeight - bottomNavHeight - menuTrigger.getBoundingClientRect().bottom < 150
+  openMenuId.value = id
+}
+
+function closeOutside(event: globalThis.Event) {
+  if (event.target instanceof Node && menuTrigger && !menuTrigger.parentElement?.contains(event.target)) closeMenu()
+}
+
+function closeOnEscape(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || !menuTrigger) return
+  event.preventDefault()
+  event.stopPropagation()
+  closeMenu(true)
+}
+
 async function loadPage(append = false) {
   if (append && (loading.value || offset.value === null)) return
   const generation = ++pageGeneration
   error.value = ''
-  if (!append) { offset.value = null; events.value = [] }
+  if (!append) { closeMenu(); offset.value = null; events.value = [] }
   if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
     error.value = '結束日期須等於或晚於開始日期。'
     loading.value = false
@@ -111,8 +141,20 @@ watch(() => props.focusId, async (id) => {
     if (generation === focusGeneration) loadingFocus.value = false
   }
 }, { immediate: true })
-onMounted(() => void loadPage())
-onBeforeUnmount(() => { active = false; pageGeneration++; focusGeneration++ })
+onMounted(() => {
+  document.addEventListener('pointerdown', closeOutside)
+  document.addEventListener('focusin', closeOutside)
+  document.addEventListener('keydown', closeOnEscape, true)
+  void loadPage()
+})
+onBeforeUnmount(() => {
+  active = false
+  pageGeneration++
+  focusGeneration++
+  document.removeEventListener('pointerdown', closeOutside)
+  document.removeEventListener('focusin', closeOutside)
+  document.removeEventListener('keydown', closeOnEscape, true)
+})
 
 function openEditor(event: Event | null) {
   editing.value = event
@@ -207,7 +249,7 @@ function closeAttach(stale: boolean) {
     </form>
     <p v-if="error" class="daily-error" role="alert">{{ error }} <button type="button" class="btn-link" @click="loadPage()">重試</button></p>
     <div v-if="(loading && !loadingMore) || loadingFocus" class="daily-loading" role="status">
-      <span class="daily-loading-trail" aria-hidden="true"></span>
+      <TrailLoader />
       <span class="sr-only">載入足跡中…</span>
     </div>
     <div v-else-if="!loading && !results.length && !error" class="daily-empty">
@@ -229,9 +271,15 @@ function closeAttach(stale: boolean) {
               </div>
             </div>
             <div class="daily-actions">
-              <button type="button" class="icon-button daily-delete" :aria-label="`刪除足跡：${event.place_name}`" title="刪除足跡" @click="deleting = event"><AppIcon name="trash" /></button>
-              <button type="button" class="icon-button" :aria-label="`編輯足跡：${event.place_name}`" title="編輯足跡" @click="openEditor(event)"><AppIcon name="edit" /></button>
-              <button type="button" class="icon-button" :aria-label="`收進手記：${event.place_name}`" title="收進手記" @click="attaching = event"><AppIcon name="jump" /></button>
+              <button type="button" class="icon-button daily-menu-trigger" title="足跡選項"
+                :aria-label="`足跡選項：${event.place_name}`" :aria-expanded="openMenuId === event.id"
+                :aria-controls="openMenuId === event.id ? `daily-menu-${event.id}` : undefined"
+                @click="toggleMenu($event, event.id)"><AppIcon name="more" /></button>
+              <div v-if="openMenuId === event.id" :id="`daily-menu-${event.id}`" class="daily-menu" :class="{ 'opens-up': menuAbove }">
+                <button type="button" @click="closeMenu(true); openEditor(event)"><AppIcon name="edit" />編輯</button>
+                <button type="button" @click="closeMenu(true); attaching = event"><AppIcon name="book-in" />收進手記</button>
+                <button type="button" class="daily-delete" @click="closeMenu(true); deleting = event"><AppIcon name="trash" />刪除</button>
+              </div>
             </div>
           </div>
           <p v-if="event.notes" class="daily-notes">{{ event.notes }}</p>
@@ -239,7 +287,7 @@ function closeAttach(stale: boolean) {
       </section>
     </div>
     <button v-if="offset !== null" type="button" class="btn btn-secondary load-more" :disabled="loading" aria-label="載入更多" @click="loadPage(true)">
-      <span v-if="loadingMore" class="daily-loading-trail" aria-hidden="true"></span>
+      <TrailLoader v-if="loadingMore" />
       <span v-else>載入更多</span>
     </button>
     <span v-if="loadingMore" class="sr-only" role="status">載入更多足跡中…</span>
@@ -287,31 +335,16 @@ function closeAttach(stale: boolean) {
 .daily-city svg { width: .9em; height: .9em; align-self: flex-start; margin-top: .3em; }
 .daily-category { padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-olive-pale); color: var(--color-olive-text); }
 .daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .1rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.daily-actions { display: flex; align-items: center; flex: 0 0 auto; }
-.daily-actions .icon-button { color: var(--color-subtle); }
-.daily-actions .icon-button:hover { color: var(--color-maple); }
-.daily-actions .daily-delete:hover { color: var(--color-error-text); }
+.daily-actions { position: relative; flex: 0 0 auto; }
+.daily-menu-trigger { color: var(--color-subtle); }
+.daily-menu-trigger:hover, .daily-menu-trigger[aria-expanded=true] { color: var(--color-maple); background: var(--color-maple-subtle); }
+.daily-menu { position: absolute; z-index: 4; top: calc(100% + .2rem); right: 0; min-width: 8.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); box-shadow: var(--shadow-sm); padding: .25rem; }
+.daily-menu.opens-up { top: auto; bottom: calc(100% + .2rem); }
+.daily-menu button { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 44px; border: 0; border-radius: var(--radius-xs); padding: .4rem .55rem; color: var(--color-ink); background: transparent; font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
+.daily-menu button:hover { background: var(--color-maple-subtle); }
+.daily-menu .daily-delete { color: var(--color-error-text); }
 .daily-error { margin: .75rem 0; font-size: .85rem; color: var(--color-error-text); }
 .daily-loading { display: grid; place-items: center; min-height: 4.5rem; }
-.daily-loading-trail { display: block; position: relative; width: 2.75rem; border-top: 1px dashed var(--color-maple); }
-.daily-loading-trail::after {
-  content: '';
-  position: absolute;
-  top: -.25rem;
-  left: 0;
-  width: .45rem;
-  height: .45rem;
-  border-radius: 50%;
-  background: var(--color-maple);
-  animation: daily-trail 1.1s ease-in-out infinite alternate;
-}
-@keyframes daily-trail {
-  from { transform: translateX(0); }
-  to { transform: translateX(2.3rem); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .daily-loading-trail::after { animation: none; left: 1.15rem; }
-}
 .daily-empty { display: grid; justify-items: center; gap: .55rem; padding: 2.75rem .5rem; color: var(--color-subtle); }
 .daily-empty > svg { width: 2rem; height: 2rem; color: var(--color-maple); }
 .load-more { display: flex; justify-content: center; min-width: 7rem; margin: 1rem auto 0; }
