@@ -215,21 +215,18 @@ function closeAttach(stale: boolean) {
       <section v-for="[date, entries] in groups" :key="date" class="daily-group">
         <h3>{{ date }}</h3>
         <article v-for="event in entries" :key="event.id" :data-focused="focusId === event.id" class="daily-entry" tabindex="-1">
-          <div class="daily-entry-main">
+          <div class="daily-entry-heading">
             <button type="button" class="daily-name" @click="emit('view', event)">{{ event.place_name }}</button>
-            <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
-              <time v-if="event.time">{{ event.time }}</time><span v-if="event.city">{{ event.city }}</span><span v-if="event.category !== '未分類'">{{ event.category }}</span>
+            <div class="daily-actions">
+              <button type="button" class="icon-button daily-delete" :aria-label="`刪除足跡：${event.place_name}`" title="刪除足跡" @click="deleting = event"><AppIcon name="trash" /></button>
+              <button type="button" class="icon-button" :aria-label="`編輯足跡：${event.place_name}`" title="編輯足跡" @click="openEditor(event)"><AppIcon name="edit" /></button>
+              <button type="button" class="icon-button" :aria-label="`收進手記：${event.place_name}`" title="收進手記" @click="attaching = event"><AppIcon name="jump" /></button>
             </div>
-            <p v-if="event.notes" class="daily-notes">{{ event.notes }}</p>
           </div>
-          <details class="daily-actions">
-            <summary aria-label="足跡選項" title="足跡選項"><AppIcon name="more" /></summary>
-            <div class="daily-menu" @click="($event.currentTarget as HTMLElement).closest('details')?.removeAttribute('open')">
-              <button type="button" @click="openEditor(event)"><AppIcon name="edit" /> 編輯</button>
-              <button type="button" @click="attaching = event"><AppIcon name="jump" /> 收進手記</button>
-              <button type="button" class="daily-error" @click="deleting = event"><AppIcon name="trash" /> 刪除</button>
-            </div>
-          </details>
+          <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
+            <time v-if="event.time">{{ event.time }}</time><span v-if="event.city">{{ event.city }}</span><span v-if="event.category !== '未分類'">{{ event.category }}</span>
+          </div>
+          <p v-if="event.notes" class="daily-notes">{{ event.notes }}</p>
         </article>
       </section>
     </div>
@@ -254,23 +251,19 @@ function closeAttach(stale: boolean) {
 .daily-filters .btn-link { justify-self: start; }
 .daily-group { margin-top: 1.25rem; }
 .daily-group h3 { font-size: .87rem; color: var(--color-subtle); padding: .25rem 0; }
-.daily-entry { display: flex; align-items: flex-start; gap: .8rem; padding: .7rem 0; border-top: 1px solid var(--color-border); scroll-margin: .75rem; }
+.daily-entry { padding: .35rem 0 .7rem; border-top: 1px solid var(--color-border); scroll-margin: .75rem; }
 .daily-entry[data-focused=true] { background: var(--color-maple-subtle); border-radius: var(--radius-sm); padding-inline: .65rem; }
-.daily-entry-main { min-width: 0; flex: 1; }
-.daily-name { border: 0; padding: .2rem 0; background: transparent; color: var(--color-ink); font: inherit; font-weight: 650; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.daily-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: .375rem; }
+.daily-name { min-width: 0; border: 0; padding: .2rem 0; background: transparent; color: var(--color-ink); font: inherit; font-weight: 650; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .daily-name:hover { color: var(--color-maple); }
 .daily-meta { display: flex; gap: .6rem; flex-wrap: wrap; font-size: .8rem; color: var(--color-subtle); margin-top: .2rem; }
 .daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .35rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.daily-actions { position: relative; flex: 0 0 auto; }
-.daily-actions summary { display: grid; place-items: center; width: 44px; height: 44px; list-style: none; cursor: pointer; border-radius: var(--radius-sm); color: var(--color-subtle); }
-.daily-actions summary::-webkit-details-marker { display: none; }
-.daily-actions[open] summary { background: var(--color-maple-subtle); color: var(--color-maple); }
-.daily-menu { position: absolute; z-index: 3; right: 0; top: 100%; width: max-content; min-width: 9rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); box-shadow: var(--shadow-sm); padding: .25rem; }
-.daily-menu button { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 42px; padding: .4rem .65rem; border: 0; border-radius: var(--radius-xs); background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.daily-menu button:hover { background: var(--color-maple-subtle); }
+.daily-actions { display: flex; align-items: center; flex: 0 0 auto; }
+.daily-actions .icon-button { color: var(--color-subtle); }
+.daily-actions .icon-button:hover { color: var(--color-maple); }
+.daily-actions .daily-delete:hover { color: var(--color-error-text); }
 .daily-status, .daily-error { margin: .75rem 0; font-size: .85rem; }
-.daily-error, .daily-menu button.daily-error { color: var(--color-error-text); }
-.daily-menu button.daily-error { margin: 0; }
+.daily-error { color: var(--color-error-text); }
 .daily-empty { display: grid; justify-items: center; gap: .55rem; padding: 2.75rem .5rem; color: var(--color-subtle); }
 .daily-empty > svg { width: 2rem; height: 2rem; color: var(--color-maple); }
 .load-more { display: flex; margin: 1rem auto 0; }
