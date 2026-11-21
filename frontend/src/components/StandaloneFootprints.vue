@@ -38,6 +38,7 @@ const editorConflict = ref(false)
 const deleting = ref<Event | null>(null)
 const attaching = ref<Event | null>(null)
 const listRef = ref<HTMLElement | null>(null)
+const filterButton = ref<HTMLButtonElement | null>(null)
 const openMenuId = ref<string | null>(null)
 const menuAbove = ref(false)
 let menuTrigger: HTMLButtonElement | null = null
@@ -58,6 +59,7 @@ const groups = computed(() => {
 })
 const categories = computed(() => [...new Set(events.value.map(event => event.category).filter(Boolean))])
 const filtersActive = computed(() => Boolean(city.value || category.value || dateFrom.value || dateTo.value))
+const showReset = computed(() => Boolean(queryInput.value || query.value || filtersActive.value))
 const loadingMore = computed(() => loading.value && offset.value !== null)
 
 function closeMenu(restoreFocus = false) {
@@ -116,6 +118,10 @@ function applyFilters() { clearFocus(); query.value = queryInput.value.trim(); v
 function resetFilters() {
   city.value = ''; category.value = ''; dateFrom.value = ''; dateTo.value = ''; queryInput.value = ''
   applyFilters()
+}
+function clearSearchAndFilters() {
+  resetFilters()
+  filterButton.value?.focus({ preventScroll: true })
 }
 async function scrollToFocus() {
   await nextTick()
@@ -234,17 +240,18 @@ function closeAttach(stale: boolean) {
       <button type="button" class="btn btn-primary quick-record" aria-label="記錄日常足跡" title="記錄日常足跡" @click="openEditor(null)"><AppIcon name="plus" /></button>
     </header>
     <form role="search" aria-label="搜尋日常足跡" @submit.prevent="applyFilters">
-      <div class="daily-search">
-        <input v-model="queryInput" type="search" class="form-input" placeholder="搜尋足跡…" aria-label="搜尋足跡" maxlength="200" />
-        <button type="button" class="icon-button" :class="{ selected: filtersActive }" aria-label="篩選足跡" aria-controls="daily-filters" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><AppIcon name="filter" /></button>
-        <button type="submit" class="btn btn-primary" aria-label="搜尋" title="搜尋"><AppIcon name="search" /></button>
+      <div class="search-bar">
+        <button type="submit" class="icon-button search-bar__lead" aria-label="搜尋" title="搜尋"><AppIcon name="search" /></button>
+        <input v-model="queryInput" type="search" class="form-input search-bar__input search-bar__input--custom-clear" placeholder="搜尋足跡…" aria-label="搜尋足跡" maxlength="200" />
+        <button v-if="showReset" type="button" class="icon-button search-bar__control search-bar__clear"
+          title="清除搜尋與篩選" aria-label="清除搜尋與篩選" @click="clearSearchAndFilters"><AppIcon name="close" /></button>
+        <button ref="filterButton" type="button" class="icon-button search-bar__control" :class="{ 'is-active': filtersActive }" aria-label="篩選足跡" aria-controls="daily-filters" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><AppIcon name="filter" /></button>
       </div>
       <div v-show="filtersOpen" id="daily-filters" class="daily-filters">
         <label>城市<input v-model="city" class="form-input" maxlength="200" /></label>
         <label>類別<input v-model="category" class="form-input" list="daily-categories" maxlength="200" /><datalist id="daily-categories"><option v-for="value in categories" :key="value" :value="value" /></datalist></label>
         <label>開始日期<input v-model="dateFrom" type="date" class="form-input" :max="dateTo || undefined" /></label>
         <label>結束日期<input v-model="dateTo" type="date" class="form-input" :min="dateFrom || undefined" /></label>
-        <button type="button" class="btn-link daily-clear" @click="resetFilters">清除</button>
       </div>
     </form>
     <p v-if="error" class="daily-error" role="alert">{{ error }} <button type="button" class="btn-link" @click="loadPage()">重試</button></p>
@@ -297,55 +304,4 @@ function closeAttach(stale: boolean) {
   </section>
 </template>
 
-<style scoped>
-.daily { width: 100%; min-width: 0; }
-.daily-header { display: flex; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: 1rem; }
-.daily-header h2 { font-size: 1.35rem; color: var(--color-ink); }
-.quick-record { width: 44px; min-height: 44px; padding: 0; justify-content: center; }
-.daily-search { display: flex; align-items: center; padding: 2px; gap: .125rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); }
-.daily-search input { border: 0; flex: 1; }
-.daily-search button { flex: 0 0 42px; min-height: 42px; padding: 0; justify-content: center; border: 0; }
-.daily-search .selected { color: var(--color-maple); background: var(--color-maple-subtle); }
-.daily-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 1rem; padding: .75rem 0; }
-.daily-filters label { display: grid; gap: .25rem; font-size: .8rem; min-width: 0; }
-.daily-clear { grid-column: 1 / -1; justify-self: end; min-height: 44px; }
-.daily-group { display: grid; gap: .55rem; margin-top: 1.25rem; }
-.daily-group h3 { display: flex; align-items: center; gap: .75rem; font-size: .87rem; font-variant-numeric: tabular-nums; color: var(--color-subtle); padding: .25rem 0; }
-.daily-group h3::after { content: ''; flex: 1; border-top: 1px solid var(--color-border); }
-.daily-entry {
-  min-width: 0;
-  padding: .25rem clamp(.55rem, 1.5vw, 1rem) .65rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-paper);
-  box-shadow: var(--shadow-sm);
-  scroll-margin: .75rem;
-}
-.daily-entry[data-focused=true] {
-  border-color: var(--color-maple);
-  box-shadow: 0 0 0 2px var(--color-maple-border);
-}
-.daily-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .375rem; }
-.daily-identity { display: flex; align-items: baseline; flex-wrap: wrap; gap: .2rem .65rem; min-width: 0; padding-block: .55rem .2rem; }
-.daily-name { min-width: 0; border: 0; padding: .2rem 0; background: transparent; color: var(--color-ink); font: inherit; font-weight: 650; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
-.daily-name:hover { color: var(--color-maple); }
-.daily-meta { display: flex; align-items: baseline; gap: .2rem .5rem; flex-wrap: wrap; min-width: 0; font-size: .8rem; color: var(--color-subtle); overflow-wrap: anywhere; }
-.daily-time { font-variant-numeric: tabular-nums; }
-.daily-city { display: inline-flex; gap: .15rem; align-items: baseline; min-width: 0; }
-.daily-city svg { width: .9em; height: .9em; align-self: flex-start; margin-top: .3em; }
-.daily-category { padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-olive-pale); color: var(--color-olive-text); }
-.daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .1rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.daily-actions { position: relative; flex: 0 0 auto; }
-.daily-menu-trigger { color: var(--color-subtle); }
-.daily-menu-trigger:hover, .daily-menu-trigger[aria-expanded=true] { color: var(--color-maple); background: var(--color-maple-subtle); }
-.daily-menu { position: absolute; z-index: 4; top: calc(100% + .2rem); right: 0; min-width: 8.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); box-shadow: var(--shadow-sm); padding: .25rem; }
-.daily-menu.opens-up { top: auto; bottom: calc(100% + .2rem); }
-.daily-menu button { display: flex; align-items: center; gap: .5rem; width: 100%; min-height: 44px; border: 0; border-radius: var(--radius-xs); padding: .4rem .55rem; color: var(--color-ink); background: transparent; font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
-.daily-menu button:hover { background: var(--color-maple-subtle); }
-.daily-menu .daily-delete { color: var(--color-error-text); }
-.daily-error { margin: .75rem 0; font-size: .85rem; color: var(--color-error-text); }
-.daily-loading { display: grid; place-items: center; min-height: 4.5rem; }
-.daily-empty { display: grid; justify-items: center; gap: .55rem; padding: 2.75rem .5rem; color: var(--color-subtle); }
-.daily-empty > svg { width: 2rem; height: 2rem; color: var(--color-maple); }
-.load-more { display: flex; justify-content: center; min-width: 7rem; margin: 1rem auto 0; }
-</style>
+<style scoped src="../assets/styles/components/StandaloneFootprints.css"></style>

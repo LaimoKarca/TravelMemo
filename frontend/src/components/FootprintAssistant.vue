@@ -232,7 +232,7 @@ onBeforeUnmount(() => { alive = false; generation++; stopPoll(); if (debounce) c
             <label for="assist-description" class="description-label">說說這一天去了哪裡</label>
             <textarea id="assist-description" v-model="description" class="form-input assist-description" rows="5" maxlength="10000" placeholder="早上去清水寺散步，下午在河邊喝抹茶，靠窗的座位能看到河景…" :disabled="busy || loading || committing" @input="change" />
             <div class="generate-row"><small>{{ saving ? '儲存草稿中…' : dirty ? '尚未儲存' : draft ? '草稿已保留' : '先選日期，再描述行程' }}</small><button type="button" class="btn btn-secondary" :disabled="busy || loading || committing || conflict || !recordDate || !description.trim()" @click="generate"><AppIcon name="wand" />{{ items.length ? '重新整理' : '整理成足跡' }}</button></div>
-            <div v-if="busy || loading" class="assist-progress" role="status"><span class="assist-spinner"></span><span>{{ busy ? '正在整理，關閉後也能回來接續' : '正在讀取…' }}</span></div>
+            <div v-if="busy || loading" class="assist-progress" role="status"><span class="assist-spinner ui-spinner"></span><span>{{ busy ? '正在整理，關閉後也能回來接續' : '正在讀取…' }}</span></div>
             <section v-if="items.length" class="draft-list" aria-label="待確認足跡"><h3>待確認足跡 <small>{{ items.length }}</small></h3><p class="draft-help">核對地點、日期與心得，再加入手記。</p>
               <article v-for="(item, index) in items" :key="item.id" class="draft-row">
                 <div class="draft-summary"><input v-model="item.selected" type="checkbox" :aria-label="`加入 ${item.place_name || '未命名足跡'}`" :disabled="busy || committing" @change="change" /><button type="button" class="draft-name" :aria-expanded="expanded === item.id" @click="expanded = expanded === item.id ? null : item.id"><strong>{{ item.place_name || '請補地點' }}</strong><small>{{ item.date || '日期未提供' }}</small></button><button type="button" class="mini-action" aria-label="足跡往上移" :disabled="busy || committing || index === 0 || items[index - 1]?.date !== item.date" @click="move(index, -1)">↑</button><button type="button" class="mini-action" aria-label="足跡往下移" :disabled="busy || committing || index === items.length - 1 || items[index + 1]?.date !== item.date" @click="move(index, 1)">↓</button></div>
@@ -257,48 +257,4 @@ onBeforeUnmount(() => { alive = false; generation++; stopPoll(); if (debounce) c
   <ConfirmDialog :style="{ zIndex: 1200 }" :visible="!!confirmAction" title="確認草稿操作" :message="confirmMessage" @confirm="confirm" @cancel="confirmAction = null" />
 </template>
 
-<style scoped>
-.footprint-backdrop { position: fixed; inset: 0; z-index: 1100; background: #453a3240; display: flex; justify-content: flex-end; }
-.footprint-panel { width: min(36rem, 100%); height: 100dvh; background: var(--color-paper); display: flex; flex-direction: column; box-shadow: -12px 0 40px #453a3212; outline: none; }
-.assist-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 1.6rem 1rem; border-bottom: 1px solid var(--color-border-light); }
-.assist-header h2 { font-size: 1.25rem; margin: 0; color: var(--color-ink); }
-.assist-header p { color: var(--color-subtle); font-size: .85rem; margin: .3rem 0 0; }
-.assist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 1.4rem 1.6rem; }
-.record-day { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1.2rem; font-size: .85rem; }
-.record-day input { width: 11rem; }
-.description-label { display: block; font-size: .9rem; margin-bottom: .5rem; }
-.assist-description { width: 100%; min-height: 8rem; resize: vertical; }
-.generate-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: .6rem; }
-.generate-row small { color: var(--color-subtle); font-size: .75rem; }
-.generate-row button { display: inline-flex; align-items: center; gap: .4rem; }
-.assist-progress { display: flex; align-items: center; gap: .6rem; color: var(--color-subtle); padding: 1.3rem 0; font-size: .85rem; }
-.assist-spinner { width: 20px; height: 20px; border: 2px solid var(--color-border); border-top-color: var(--color-maple); border-radius: 50%; animation: turning .8s linear infinite; flex-shrink: 0; }
-@keyframes turning { to { transform: rotate(360deg); } }
-.draft-list { margin-top: 1.7rem; }
-.draft-list h3 { font-size: 1rem; margin-bottom: .3rem; }
-.draft-list h3 small { color: var(--color-subtle); font-weight: 400; margin-left: .3rem; }
-.draft-help { color: var(--color-subtle); font-size: .8rem; margin: 0 0 .7rem; }
-.draft-row { padding: .85rem 0; border-bottom: 1px solid var(--color-border-light); }
-.draft-summary { display: flex; align-items: center; gap: .6rem; }
-.draft-summary input { accent-color: var(--color-maple); width: 18px; height: 18px; }
-.draft-name { flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: var(--color-ink); padding: .2rem 0; cursor: pointer; }
-.draft-name strong { display: block; font-size: .95rem; overflow-wrap: anywhere; }
-.draft-name small { display: block; color: var(--color-subtle); margin-top: .25rem; }
-.mini-action { min-width: 36px; height: 44px; border: 0; background: none; color: var(--color-maple); cursor: pointer; font-size: 1rem; }
-.mini-action:disabled { opacity: .25; cursor: default; }
-.draft-note { color: var(--color-subtle); font-size: .85rem; margin: .5rem 0 0 1.7rem; line-height: 1.7; white-space: pre-wrap; }
-.draft-invalid, .assist-error { color: var(--color-error-text); font-size: .85rem; line-height: 1.7; }
-.assist-error { padding: .7rem 0; margin-bottom: .5rem; }
-.draft-invalid { margin: .4rem 0 0 1.7rem; }
-.draft-fields { display: flex; flex-direction: column; gap: .7rem; padding: .85rem 0 0 1.7rem; }
-.draft-fields label { display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; color: var(--color-ink-secondary); min-width: 0; }
-.draft-fields .form-input { width: 100%; }
-.draft-pair { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; }
-.remove-draft { align-self: flex-start; padding: .35rem 0; background: none; border: 0; color: var(--color-subtle); cursor: pointer; font-size: .8rem; }
-.assist-footer { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem 1.6rem max(1rem, env(safe-area-inset-bottom)); border-top: 1px solid var(--color-border-light); }
-.assist-success { padding: 3rem 0; text-align: center; color: var(--color-ink); }
-.assist-success > svg { color: var(--color-maple); width: 36px; height: 36px; margin-bottom: .7rem; }
-.assist-success p { font-size: .85rem; color: var(--color-subtle); margin: .6rem 0 1rem; }
-@media(max-width: 600px) { .assist-body { padding: 1rem; } .assist-header { padding: 1.1rem 1rem .85rem; } .assist-footer { padding-left: 1rem; padding-right: 1rem; } }
-@media(prefers-reduced-motion: reduce) { .assist-spinner { animation: none; } }
-</style>
+<style scoped src="../assets/styles/components/FootprintAssistant.css"></style>

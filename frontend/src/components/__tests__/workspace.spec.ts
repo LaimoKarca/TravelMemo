@@ -159,7 +159,7 @@ describe('TripWorkspace and Travel Components', () => {
   it('keeps library filters collapsed and applies or clears them without clearing the query', async () => {
     const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
     await flushPromises()
-    const toggle = wrapper.get('.library-filter-toggle')
+    const toggle = wrapper.get('button[aria-controls="library-filters"]')
     expect(toggle.attributes('aria-expanded')).toBe('false')
     await toggle.trigger('click')
     expect(toggle.attributes('aria-expanded')).toBe('true')
@@ -234,7 +234,7 @@ describe('TripWorkspace and Travel Components', () => {
     await wrapper.findAll('.trip-card')[0].trigger('click')
     await flushPromises()
     const query = wrapper.get('input[aria-label="搜尋足跡"]')
-    expect(wrapper.get('.event-filter-toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.get('button[aria-controls="event-filter-options"]').attributes('aria-expanded')).toBe('false')
     await query.setValue('午後')
     expect(wrapper.findAll('.event-card')).toHaveLength(1)
     expect(wrapper.text()).toContain('金閣寺')

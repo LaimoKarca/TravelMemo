@@ -18,6 +18,30 @@ enableAutoUnmount(afterEach)
 afterEach(() => vi.restoreAllMocks())
 
 describe('日常足跡', () => {
+  it('搜尋列只有在有條件時才顯示清除，並可還原未篩選的清單', async () => {
+    const list = vi.spyOn(travel, 'listStandaloneEvents').mockResolvedValue({ items: [footprint], next_offset: null })
+    const wrapper = mount(StandaloneFootprints, { attachTo: document.body })
+    await flushPromises()
+    const clear = '[aria-label="清除搜尋與篩選"]'
+    expect(wrapper.find(clear).exists()).toBe(false)
+
+    const filters = wrapper.get('[aria-controls="daily-filters"]')
+    await filters.trigger('click')
+    await wrapper.get<HTMLInputElement>('input[type="search"]').setValue('夕陽')
+    await wrapper.get('#daily-filters input').setValue('臺中')
+    await wrapper.get('form[role="search"]').trigger('submit')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: '夕陽', city: '臺中' }))
+
+    await wrapper.get(clear).trigger('click')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
+      q: '', city: '', category: '', date_from: '', date_to: '', offset: 0,
+    }))
+    expect(wrapper.find(clear).exists()).toBe(false)
+    expect(document.activeElement).toBe(filters.element)
+  })
+
   it('只開啟一個操作選單，點空白處或按 Escape 可收合', async () => {
     vi.spyOn(travel, 'listStandaloneEvents').mockResolvedValue({
       items: [footprint, { ...footprint, id: 'second', place_name: '海邊步道' }], next_offset: null,

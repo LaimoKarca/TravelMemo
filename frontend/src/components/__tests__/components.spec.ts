@@ -22,16 +22,18 @@ describe('Frontend Vue Components', () => {
     expect(wrapper.find('.brand-subtitle').text()).toBe('旅程手記')
   })
 
-  it('StatusAlert displays polite status alert message', () => {
+  it('StatusAlert announces errors immediately and information politely', async () => {
     const wrapper = mount(StatusAlert, {
       props: {
         type: 'error',
         message: '驗證碼錯誤，請重試'
       }
     })
-    expect(wrapper.attributes('aria-live')).toBe('polite')
-    expect(wrapper.attributes('role')).toBe('status')
+    expect(wrapper.get('[role="alert"]').attributes('aria-live')).toBe('assertive')
     expect(wrapper.text()).toContain('驗證碼錯誤，請重試')
+    await wrapper.setProps({ type: 'info', message: '請查看信箱' })
+    expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(wrapper.text()).toContain('請查看信箱')
   })
 
   it('LoginForm renders accessible input without password field and emits submit', async () => {

@@ -175,7 +175,7 @@ async function handleLogout() {
           <StatusAlert v-if="alertMessage" :message="alertMessage" :type="alertType" />
 
           <div v-if="currentStep === 'loading_session'" class="loading-state" role="status" aria-live="polite">
-            <div class="page-spinner" aria-hidden="true"></div>
+            <div class="page-spinner ui-spinner ui-spinner--page" aria-hidden="true"></div>
             <p class="loading-text">正在確認登入狀態...</p>
           </div>
 
@@ -203,98 +203,4 @@ async function handleLogout() {
   </main>
 </template>
 
-<style scoped>
-.app-layout {
-  min-height: 100vh;
-  width: 100%;
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
-  box-sizing: border-box;
-}
-
-.app-layout.is-workspace-layout {
-  height: 100vh;
-  overflow: hidden;
-  padding: 0;
-  margin: 0;
-}
-
-/* Full-bleed two-column auth composition per brief */
-.auth-fullbleed {
-  display: grid;
-  grid-template-columns: minmax(320px, 440px) 1fr;
-  min-height: 100vh;
-  width: 100%;
-  background-color: var(--color-paper);
-  box-sizing: border-box;
-}
-
-.auth-motif {
-  height: 100vh;
-  border-right: 1px solid var(--color-border);
-  box-sizing: border-box;
-}
-
-.auth-main {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 3rem 2rem;
-  background-color: var(--color-canvas);
-  min-height: 100vh;
-  width: 100%;
-  box-sizing: border-box;
-  overflow-y: auto;
-}
-
-.auth-content {
-  width: 100%;
-  max-width: 380px;
-}
-
-.loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2.5rem 1rem;
-  gap: 1rem;
-}
-
-.page-spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid rgba(169, 85, 53, 0.2);
-  border-top-color: var(--color-maple);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.loading-text {
-  font-size: 0.875rem;
-  color: var(--color-subtle);
-}
-
-@media (max-width: 768px) {
-  .auth-fullbleed {
-    grid-template-columns: 1fr;
-  }
-
-  .auth-motif {
-    display: none;
-  }
-
-  .auth-main {
-    min-height: 100vh;
-    padding: 2.5rem 1.25rem;
-    background-color: var(--color-canvas);
-  }
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>
+<style scoped src="./assets/styles/components/App.css"></style>

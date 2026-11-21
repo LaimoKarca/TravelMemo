@@ -1,0 +1,136 @@
+.welcome-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.welcome-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background-color: var(--color-maple-subtle);
+  color: var(--color-maple);
+  flex-shrink: 0;
+}
+
+.welcome-title {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.2;
+}
+
+.user-email {
+  font-size: 0.9375rem;
+  color: var(--color-subtle);
+  word-break: break-all;
+  margin-top: 0.25rem;
+}
+
+.status-card {
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.status-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-olive-text);
+  background-color: var(--color-olive-pale);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.05em;
+}
+
+.status-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.status-card-desc {
+  font-size: 0.9375rem;
+  color: var(--color-subtle);
+  line-height: 1.5;
+}
+
+.roadmap-notice {
+  display: flex;
+  gap: 0.75rem;
+  background-color: var(--color-amber-subtle);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-sm);
+  padding: 0.875rem 1rem;
+  color: var(--color-amber-text);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin-top: 0.5rem;
+}
+
+.notice-icon {
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.session-info {
+  border-top: 1px dashed var(--color-border);
+  padding-top: 1rem;
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.info-row dt {
+  color: var(--color-subtle);
+}
+
+.info-row dd {
+  font-weight: 500;
+  color: var(--color-ink);
+  text-align: right;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.logout-btn {
+  min-width: 120px;
+}

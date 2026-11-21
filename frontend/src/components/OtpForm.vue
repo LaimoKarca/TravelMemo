@@ -105,7 +105,7 @@ defineExpose({
       class="btn btn-primary submit-btn"
       :disabled="loading || !/^\d{6}$/.test(code.trim())"
     >
-      <span v-if="loading" class="spinner" aria-hidden="true"></span>
+      <span v-if="loading" class="spinner ui-spinner ui-spinner--auth" aria-hidden="true"></span>
       <span>{{ loading ? '驗證中...' : '驗證並進入手記' }}</span>
     </button>
 
@@ -116,7 +116,7 @@ defineExpose({
         :disabled="countdown > 0 || resending || loading"
         @click="handleResend"
       >
-        <span v-if="resending" class="spinner-small" aria-hidden="true"></span>
+        <span v-if="resending" class="spinner-small ui-spinner ui-spinner--maple" aria-hidden="true"></span>
         <span v-if="countdown > 0">重新寄送 ({{ countdown }}秒)</span>
         <span v-else>重新寄送驗證碼</span>
       </button>
@@ -133,104 +133,4 @@ defineExpose({
   </form>
 </template>
 
-<style scoped>
-.otp-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-}
-
-.form-intro {
-  margin-bottom: 0.25rem;
-}
-
-.form-title {
-  font-size: 1.375rem;
-  color: var(--color-ink);
-  font-weight: 700;
-  margin-bottom: 0.35rem;
-}
-
-.form-desc {
-  font-size: 0.875rem;
-  color: var(--color-subtle);
-  line-height: 1.5;
-}
-
-.target-email {
-  color: var(--color-ink);
-  font-weight: 600;
-  word-break: break-all;
-}
-
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-ink);
-}
-
-.required-indicator {
-  color: var(--color-error-text);
-}
-
-.otp-input {
-  font-family: var(--font-mono);
-  font-size: 1.375rem;
-  letter-spacing: 0.3em;
-  text-align: center;
-  font-weight: 700;
-}
-
-.field-hint {
-  font-size: 0.75rem;
-  color: var(--color-subtle);
-}
-
-.submit-btn {
-  width: 100%;
-}
-
-.action-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  align-items: center;
-}
-
-.resend-btn {
-  width: 100%;
-}
-
-.spinner,
-.spinner-small {
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #FFFFFF;
-}
-
-.spinner-small {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(169, 85, 53, 0.3);
-  border-top-color: var(--color-maple);
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>
+<style scoped src="../assets/styles/components/OtpForm.css"></style>

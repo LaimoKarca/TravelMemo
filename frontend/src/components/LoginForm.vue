@@ -54,75 +54,10 @@ function handleSubmit() {
       class="btn btn-primary submit-btn"
       :disabled="loading || !email.trim()"
     >
-      <span v-if="loading" class="spinner" aria-hidden="true"></span>
+      <span v-if="loading" class="spinner ui-spinner ui-spinner--auth" aria-hidden="true"></span>
       <span>{{ loading ? '寄送驗證碼中...' : '取得驗證碼' }}</span>
     </button>
   </form>
 </template>
 
-<style scoped>
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-}
-
-.form-intro {
-  margin-bottom: 0.25rem;
-}
-
-.form-title {
-  font-size: 1.375rem;
-  color: var(--color-ink);
-  font-weight: 700;
-  margin-bottom: 0.35rem;
-}
-
-.form-desc {
-  font-size: 0.875rem;
-  color: var(--color-subtle);
-  line-height: 1.5;
-}
-
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.field-label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-ink);
-}
-
-.required-indicator {
-  color: var(--color-error-text);
-}
-
-.field-hint {
-  font-size: 0.75rem;
-  color: var(--color-subtle);
-}
-
-.submit-btn {
-  width: 100%;
-  margin-top: 0.25rem;
-}
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #FFFFFF;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-</style>
+<style scoped src="../assets/styles/components/LoginForm.css"></style>

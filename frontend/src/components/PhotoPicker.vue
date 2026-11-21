@@ -293,7 +293,7 @@ defineExpose({
       </button>
 
       <span v-if="isUploading" class="upload-status-text">
-        <span class="spinner-small" aria-hidden="true"></span>
+        <span class="spinner-small ui-spinner ui-spinner--current" aria-hidden="true"></span>
         <span>{{ uploadProgressText }}</span>
       </span>
 
@@ -327,7 +327,7 @@ defineExpose({
           class="staged-status-overlay is-processing"
           title="識別中..."
         >
-          <span class="spinner-tiny" aria-hidden="true"></span>
+          <span class="spinner-tiny ui-spinner ui-spinner--current" aria-hidden="true"></span>
           <span class="overlay-text">識別中</span>
         </div>
 
@@ -372,190 +372,4 @@ defineExpose({
   </div>
 </template>
 
-<style scoped>
-.native-picker-btn { min-width: 36px; width: 36px; height: 36px; padding: .4rem; }
-.picker-btn.direct-icon-btn { position: relative; width: 36px; min-width: 36px; padding: .4rem; justify-content: center; }
-.picker-btn .add-photo-plus { width: 10px; height: 10px; position: absolute; top: 3px; right: 2px; background: var(--color-paper); border-radius: 50%; }
-.photo-source-menu { position: relative; }
-.photo-source-menu summary { list-style: none; }
-.photo-source-menu summary::-webkit-details-marker { display: none; }
-.photo-source-options { position: absolute; bottom: calc(100% + .4rem); left: 0; min-width: 150px; padding: .35rem; z-index: 20; background: var(--color-paper); border: 1px solid var(--color-border); border-radius: var(--radius-md); box-shadow: 0 8px 24px #453a3215; }
-.photo-source-options button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: .65rem; color: var(--color-ink); cursor: pointer; border-radius: var(--radius-sm); }
-.photo-source-options button:hover { background: var(--color-maple-subtle); }
-.is-icon-only .picker-buttons-row { gap: 0; }
-.is-icon-only .staged-previews-grid { min-width: 150px; }
-.photo-picker-container {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-
-.picker-buttons-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.picker-btn {
-  min-height: 40px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.875rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.upload-status-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8125rem;
-  color: var(--color-maple);
-  font-weight: 500;
-}
-
-.picker-count-hint {
-  font-size: 0.75rem;
-  color: var(--color-subtle);
-}
-
-.picker-error-msg {
-  font-size: 0.8125rem;
-  color: var(--color-error-text);
-  background-color: var(--color-error-bg);
-  padding: 0.35rem 0.625rem;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--color-error-border);
-}
-
-.staged-previews-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.25rem;
-}
-
-.staged-preview-item {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  background-color: var(--color-paper);
-}
-
-.staged-thumb-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.btn-remove-photo {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 20px;
-  height: 20px;
-  background-color: rgba(30, 24, 20, 0.75);
-  color: #FFFFFF;
-  border: none;
-  border-radius: 50%;
-  font-size: 0.6875rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  line-height: 1;
-  transition: background-color 0.15s ease;
-}
-
-.btn-remove-photo:hover {
-  background-color: var(--color-error-text);
-}
-
-.staged-status-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  z-index: 1;
-  text-align: center;
-  padding: 0.15rem;
-}
-
-.staged-status-overlay.is-processing {
-  background-color: rgba(224, 182, 91, 0.85);
-  color: #3D2D0B;
-}
-
-.staged-status-overlay.is-failed {
-  background-color: rgba(166, 47, 25, 0.88);
-  color: #FFFFFF;
-}
-
-.staged-status-overlay.is-blocked {
-  background-color: rgba(69, 58, 50, 0.9);
-  color: #FFFFFF;
-}
-
-.btn-staged-retry {
-  background-color: rgba(255, 255, 255, 0.9);
-  color: var(--color-error-text);
-  border: none;
-  font-size: 0.625rem;
-  font-weight: 700;
-  padding: 0.1rem 0.35rem;
-  border-radius: 2px;
-  cursor: pointer;
-  margin-top: 0.1rem;
-}
-
-.btn-staged-retry:hover {
-  background-color: #FFFFFF;
-}
-
-.spinner-tiny {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
-  display: inline-block;
-}
-
-.spinner-small {
-  width: 14px;
-  height: 14px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.75s linear infinite;
-  display: inline-block;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.is-compact .picker-btn {
-  min-height: 34px;
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8125rem;
-}
-
-.is-compact .staged-preview-item {
-  width: 48px;
-  height: 48px;
-}
-</style>
+<style scoped src="../assets/styles/components/PhotoPicker.css"></style>

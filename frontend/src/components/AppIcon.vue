@@ -22,4 +22,4 @@ const paths = {
 }
 </script>
 <template><svg viewBox="0 0 26 26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="paths[name]" /></svg></template>
-<style scoped>svg { width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }</style>
+<style scoped src="../assets/styles/components/AppIcon.css"></style>
