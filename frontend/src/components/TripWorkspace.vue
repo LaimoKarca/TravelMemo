@@ -1769,7 +1769,7 @@ function resetFilters() {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  container: trip-card / inline-size;
   gap: 1rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
   position: relative;
@@ -1789,12 +1789,14 @@ function resetFilters() {
 .trip-card-content {
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 0.5rem;
   padding: 0 1.25rem 1rem;
 }
 
 .trip-cover {
   height: 96px;
+  flex-shrink: 0;
   background: var(--color-maple-subtle);
   color: var(--color-maple);
   position: relative;
@@ -1898,6 +1900,8 @@ function resetFilters() {
 .trip-date-pill {
   font-size: 0.75rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--color-mint-text);
   background-color: var(--color-mint);
   padding: 0.15rem 0.45rem;
@@ -1906,8 +1910,13 @@ function resetFilters() {
 
 .trip-route-art {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   opacity: 0.85;
+}
+
+@container trip-card (width < 250px) {
+  .trip-route-art { display: none; }
 }
 
 .trip-name {
@@ -1936,7 +1945,8 @@ function resetFilters() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.25rem;
+  margin-top: auto;
+  padding-top: 0.25rem;
 }
 
 .trip-tz-text {

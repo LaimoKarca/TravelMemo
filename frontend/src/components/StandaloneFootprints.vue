@@ -54,6 +54,7 @@ const groups = computed(() => {
 })
 const categories = computed(() => [...new Set(events.value.map(event => event.category).filter(Boolean))])
 const filtersActive = computed(() => Boolean(city.value || category.value || dateFrom.value || dateTo.value))
+const loadingMore = computed(() => loading.value && offset.value !== null)
 
 async function loadPage(append = false) {
   if (append && (loading.value || offset.value === null)) return
@@ -201,36 +202,47 @@ function closeAttach(stale: boolean) {
         <label>類別<input v-model="category" class="form-input" list="daily-categories" maxlength="200" /><datalist id="daily-categories"><option v-for="value in categories" :key="value" :value="value" /></datalist></label>
         <label>開始日期<input v-model="dateFrom" type="date" class="form-input" :max="dateTo || undefined" /></label>
         <label>結束日期<input v-model="dateTo" type="date" class="form-input" :min="dateFrom || undefined" /></label>
-        <button type="button" class="btn-link" @click="resetFilters">清除</button>
+        <button type="button" class="btn-link daily-clear" @click="resetFilters">清除</button>
       </div>
     </form>
     <p v-if="error" class="daily-error" role="alert">{{ error }} <button type="button" class="btn-link" @click="loadPage()">重試</button></p>
-    <p v-if="loading || loadingFocus" class="daily-status" role="status">載入足跡中…</p>
-    <div v-else-if="!results.length && !error" class="daily-empty">
+    <div v-if="(loading && !loadingMore) || loadingFocus" class="daily-loading" role="status">
+      <span class="daily-loading-trail" aria-hidden="true"></span>
+      <span class="sr-only">載入足跡中…</span>
+    </div>
+    <div v-else-if="!loading && !results.length && !error" class="daily-empty">
       <AppIcon name="pin" />
       <p>{{ query || filtersActive ? '找不到相符的足跡' : '還沒有日常足跡' }}</p>
       <button v-if="!query && !filtersActive" class="btn-link" type="button" @click="openEditor(null)">記下第一次到訪</button>
     </div>
-    <div ref="listRef">
+    <div ref="listRef" :aria-busy="loading || loadingFocus">
       <section v-for="[date, entries] in groups" :key="date" class="daily-group">
         <h3>{{ date }}</h3>
         <article v-for="event in entries" :key="event.id" :data-focused="focusId === event.id" class="daily-entry" tabindex="-1">
           <div class="daily-entry-heading">
-            <button type="button" class="daily-name" @click="emit('view', event)">{{ event.place_name }}</button>
+            <div class="daily-identity">
+              <button type="button" class="daily-name" @click="emit('view', event)">{{ event.place_name }}</button>
+              <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
+                <time v-if="event.time" class="daily-time" :datetime="event.time">{{ event.time }}</time>
+                <span v-if="event.city" class="daily-city"><AppIcon name="pin" /><span>{{ event.city }}</span></span>
+                <span v-if="event.category !== '未分類'" class="daily-category">{{ event.category }}</span>
+              </div>
+            </div>
             <div class="daily-actions">
               <button type="button" class="icon-button daily-delete" :aria-label="`刪除足跡：${event.place_name}`" title="刪除足跡" @click="deleting = event"><AppIcon name="trash" /></button>
               <button type="button" class="icon-button" :aria-label="`編輯足跡：${event.place_name}`" title="編輯足跡" @click="openEditor(event)"><AppIcon name="edit" /></button>
               <button type="button" class="icon-button" :aria-label="`收進手記：${event.place_name}`" title="收進手記" @click="attaching = event"><AppIcon name="jump" /></button>
             </div>
           </div>
-          <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
-            <time v-if="event.time">{{ event.time }}</time><span v-if="event.city">{{ event.city }}</span><span v-if="event.category !== '未分類'">{{ event.category }}</span>
-          </div>
           <p v-if="event.notes" class="daily-notes">{{ event.notes }}</p>
         </article>
       </section>
     </div>
-    <button v-if="offset !== null" type="button" class="btn btn-secondary load-more" :disabled="loading" @click="loadPage(true)">載入更多</button>
+    <button v-if="offset !== null" type="button" class="btn btn-secondary load-more" :disabled="loading" aria-label="載入更多" @click="loadPage(true)">
+      <span v-if="loadingMore" class="daily-loading-trail" aria-hidden="true"></span>
+      <span v-else>載入更多</span>
+    </button>
+    <span v-if="loadingMore" class="sr-only" role="status">載入更多足跡中…</span>
     <EventDialog :visible="editorOpen" :event="editing" :categories="categories" :loading="busy" :error-message="editorError" :has-conflict="editorConflict" @submit="save" @refresh="refreshEdit" @cancel="editorOpen = false" @notice="(message, type) => emit('notice', message, type)" />
     <ConfirmDialog :visible="!!deleting" :target-key="deleting?.id" title="刪除日常足跡" :message="`刪除「${deleting?.place_name || ''}」？`" :loading="busy" confirmation-mode="keyword" confirm-text="刪除足跡" @confirm="remove" @cancel="deleting = null" />
     <AttachFootprintDialog v-if="attaching" :event="attaching" @close="closeAttach" @attached="attached" />
@@ -248,23 +260,49 @@ function closeAttach(stale: boolean) {
 .daily-search .selected { color: var(--color-maple); background: var(--color-maple-subtle); }
 .daily-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 1rem; padding: .75rem 0; }
 .daily-filters label { display: grid; gap: .25rem; font-size: .8rem; min-width: 0; }
-.daily-filters .btn-link { justify-self: start; }
+.daily-clear { grid-column: 1 / -1; justify-self: end; min-height: 44px; }
 .daily-group { margin-top: 1.25rem; }
-.daily-group h3 { font-size: .87rem; color: var(--color-subtle); padding: .25rem 0; }
-.daily-entry { padding: .35rem 0 .7rem; border-top: 1px solid var(--color-border); scroll-margin: .75rem; }
+.daily-group h3 { display: flex; align-items: center; gap: .75rem; width: fit-content; font-size: .87rem; font-variant-numeric: tabular-nums; color: var(--color-subtle); padding: .25rem 0; }
+.daily-group h3::after { content: ''; width: 2.5rem; border-top: 1px dashed var(--color-olive); opacity: .55; }
+.daily-entry { padding: .25rem 0 .45rem; scroll-margin: .75rem; }
+.daily-entry + .daily-entry { margin-top: .65rem; }
 .daily-entry[data-focused=true] { background: var(--color-maple-subtle); border-radius: var(--radius-sm); padding-inline: .65rem; }
-.daily-entry-heading { display: flex; align-items: center; justify-content: space-between; gap: .375rem; }
+.daily-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: .375rem; }
+.daily-identity { display: flex; align-items: baseline; flex-wrap: wrap; gap: .2rem .65rem; min-width: 0; padding-block: .55rem .2rem; }
 .daily-name { min-width: 0; border: 0; padding: .2rem 0; background: transparent; color: var(--color-ink); font: inherit; font-weight: 650; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .daily-name:hover { color: var(--color-maple); }
-.daily-meta { display: flex; gap: .6rem; flex-wrap: wrap; font-size: .8rem; color: var(--color-subtle); margin-top: .2rem; }
-.daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .35rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.daily-meta { display: flex; align-items: baseline; gap: .2rem .5rem; flex-wrap: wrap; min-width: 0; font-size: .8rem; color: var(--color-subtle); overflow-wrap: anywhere; }
+.daily-time { font-variant-numeric: tabular-nums; }
+.daily-city { display: inline-flex; gap: .15rem; align-items: baseline; min-width: 0; }
+.daily-city svg { width: .9em; height: .9em; align-self: flex-start; margin-top: .3em; }
+.daily-category { padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-olive-pale); color: var(--color-olive-text); }
+.daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .1rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .daily-actions { display: flex; align-items: center; flex: 0 0 auto; }
 .daily-actions .icon-button { color: var(--color-subtle); }
 .daily-actions .icon-button:hover { color: var(--color-maple); }
 .daily-actions .daily-delete:hover { color: var(--color-error-text); }
-.daily-status, .daily-error { margin: .75rem 0; font-size: .85rem; }
-.daily-error { color: var(--color-error-text); }
+.daily-error { margin: .75rem 0; font-size: .85rem; color: var(--color-error-text); }
+.daily-loading { display: grid; place-items: center; min-height: 4.5rem; }
+.daily-loading-trail { display: block; position: relative; width: 2.75rem; border-top: 1px dashed var(--color-maple); }
+.daily-loading-trail::after {
+  content: '';
+  position: absolute;
+  top: -.25rem;
+  left: 0;
+  width: .45rem;
+  height: .45rem;
+  border-radius: 50%;
+  background: var(--color-maple);
+  animation: daily-trail 1.1s ease-in-out infinite alternate;
+}
+@keyframes daily-trail {
+  from { transform: translateX(0); }
+  to { transform: translateX(2.3rem); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .daily-loading-trail::after { animation: none; left: 1.15rem; }
+}
 .daily-empty { display: grid; justify-items: center; gap: .55rem; padding: 2.75rem .5rem; color: var(--color-subtle); }
 .daily-empty > svg { width: 2rem; height: 2rem; color: var(--color-maple); }
-.load-more { display: flex; margin: 1rem auto 0; }
+.load-more { display: flex; justify-content: center; min-width: 7rem; margin: 1rem auto 0; }
 </style>
