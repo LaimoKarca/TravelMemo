@@ -262,8 +262,8 @@ function closeAttach(stale: boolean) {
 .daily-filters label { display: grid; gap: .25rem; font-size: .8rem; min-width: 0; }
 .daily-clear { grid-column: 1 / -1; justify-self: end; min-height: 44px; }
 .daily-group { display: grid; gap: .55rem; margin-top: 1.25rem; }
-.daily-group h3 { display: flex; align-items: center; gap: .75rem; width: fit-content; font-size: .87rem; font-variant-numeric: tabular-nums; color: var(--color-subtle); padding: .25rem 0; }
-.daily-group h3::after { content: ''; width: 2.5rem; border-top: 1px dashed var(--color-olive); opacity: .55; }
+.daily-group h3 { display: flex; align-items: center; gap: .75rem; font-size: .87rem; font-variant-numeric: tabular-nums; color: var(--color-subtle); padding: .25rem 0; }
+.daily-group h3::after { content: ''; flex: 1; border-top: 1px solid var(--color-border); }
 .daily-entry {
   min-width: 0;
   padding: .25rem clamp(.55rem, 1.5vw, 1rem) .65rem;
