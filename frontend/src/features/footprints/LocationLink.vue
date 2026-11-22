@@ -7,11 +7,13 @@ const props = defineProps<{
   location: { map_url?: string | null; address?: string; city?: string; place_name?: string }
   showAddress?: boolean
   showLabel?: boolean
+  mode?: 'saved-map' | 'address'
 }>()
-const link = computed(() => mapsDestination(props.location))
+const savedMap = computed(() => validMapUrl(props.location.map_url) || validMapUrl(props.location.address))
+const link = computed(() => props.mode === 'saved-map' ? savedMap.value : mapsDestination(props.location))
 const address = computed(() => {
-  const value = props.location.address
-  return props.showAddress && value && !validMapUrl(value) ? value : ''
+  const value = props.location.address?.trim()
+  return (props.showAddress || props.mode === 'address') && value && !validMapUrl(value) ? value : ''
 })
 const label = computed(() => props.location.place_name
   ? `在 Google Maps 開啟${props.location.place_name}`
@@ -19,7 +21,12 @@ const label = computed(() => props.location.place_name
 </script>
 
 <template>
-  <span v-if="link || address" class="location-link">
+  <span v-if="mode === 'address' && address" class="location-address">
+    <a v-if="link" class="address-link" :href="link" :aria-label="`${label}：${address}`"
+      target="_blank" rel="noopener noreferrer" @click.stop @keydown.enter.stop>{{ address }}</a>
+    <template v-else>{{ address }}</template>
+  </span>
+  <span v-else-if="mode !== 'address' && (link || address)" class="location-link">
     <span v-if="address">{{ address }}</span>
     <a
       v-if="link"
@@ -32,7 +39,7 @@ const label = computed(() => props.location.place_name
       @click.stop
       @keydown.enter.stop
     >
-      <AppIcon name="pin" />
+      <AppIcon :name="mode === 'saved-map' ? 'map' : 'pin'" />
       <span v-if="showLabel">Google Maps</span>
     </a>
   </span>

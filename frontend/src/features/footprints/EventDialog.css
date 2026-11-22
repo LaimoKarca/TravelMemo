@@ -1,8 +1,9 @@
 .category-label { display: flex; align-items: center; justify-content: space-between; min-height: 24px; }
 .category-label .add-tag-button { padding: 0; font-size: .8rem; }
-.more-details summary { color: var(--color-subtle); font-size: .85rem; cursor: pointer; padding: .2rem 0; }
-.detail-fields { display: flex; flex-direction: column; gap: .8rem; padding-top: .8rem; }
-.essential-row > .form-group { min-width: 0; }
+.essential-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.event-save.is-photo-pending { position: relative; }
+.event-save.is-photo-pending::before { content: ''; position: absolute; inset: 0; background: #fff2; pointer-events: none; }
+.event-save.is-photo-pending .ui-spinner { position: relative; }
 .event-editor { --dialog-width: 600px; }
 @media (min-width: 1024px) { .event-editor { --dialog-width: 40rem; } }
 

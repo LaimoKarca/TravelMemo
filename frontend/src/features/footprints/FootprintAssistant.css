@@ -4,8 +4,10 @@
 .assist-header h2 { font-size: 1.25rem; margin: 0; color: var(--color-ink); }
 .assist-header p { color: var(--color-subtle); font-size: .85rem; margin: .3rem 0 0; }
 .assist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 1.4rem 1.6rem; }
-.record-day { display: flex; justify-content: space-between; align-items: center; gap: .75rem; margin-bottom: 1.2rem; font-size: .85rem; }
-.record-day input { width: 11rem; }
+.record-day { display: grid; grid-template-columns: max-content minmax(0, 11rem); justify-content: center; align-items: center; gap: .55rem; margin-bottom: .8rem; font-size: .85rem; }
+.record-day label { white-space: nowrap; }
+.record-day input.form-input[type="date"] { text-align: center; padding-inline: .4rem; }
+.record-day input[type="date"]::-webkit-date-and-time-value { text-align: center; }
 .description-label { display: block; font-size: .9rem; margin-bottom: .5rem; }
 .assist-description { width: 100%; min-height: 8rem; resize: vertical; }
 .generate-row { display: flex; justify-content: space-between; align-items: center; gap: .5rem; margin-top: .6rem; }

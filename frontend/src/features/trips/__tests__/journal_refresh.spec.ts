@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import TripDialog from '@/features/trips/TripDialog.vue'
+import TripJournal from '@/features/trips/TripJournal.vue'
 import JournalNote from '@/features/trips/JournalNote.vue'
 import PhotoPicker from '@/features/media/PhotoPicker.vue'
 import EventDialog from '@/features/footprints/EventDialog.vue'
@@ -8,6 +9,7 @@ import ConversationView from '@/features/chat/ConversationView.vue'
 import * as auth from '@/api/auth'
 import * as api from '@/api/conversation'
 import * as photos from '@/api/photos'
+import * as travel from '@/api/travel'
 import type { PhotoDTO } from '@/types/photo'
 
 describe('Journal editing and resumable chat', () => {
@@ -27,10 +29,46 @@ describe('Journal editing and resumable chat', () => {
     expect(wrapper.get('.cover-preview').attributes('src')).toContain(photo.id)
     wrapper.unmount()
   })
+  it('retries the cover for the already-created trip after a temporary failure', async () => {
+    const trip = { id: 'created-trip', name: '春日散步', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }
+    const photo = { id: 'selected-cover', status: 'ready', thumbnail_url: '/test.webp' } as PhotoDTO
+    const list = vi.spyOn(travel, 'listTrips').mockResolvedValue({ items: [] })
+    const create = vi.spyOn(travel, 'createTrip').mockResolvedValue(trip)
+    const detail = vi.spyOn(travel, 'getTrip').mockResolvedValue({ trip, events: [], next_edges: [] })
+    const bind = vi.spyOn(photos, 'bindPhoto').mockResolvedValue(photo)
+    vi.spyOn(photos, 'listPhotos').mockResolvedValue({ items: [photo] })
+    vi.spyOn(photos, 'getTripCover').mockResolvedValue({ photo_id: photo.id })
+    const set = vi.spyOn(photos, 'setTripCover')
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ photo_id: photo.id })
+    const wrapper = mount(TripJournal, { props: { active: true, trips: [] } })
+    await flushPromises()
+    await wrapper.get('.create-trip-btn').trigger('click')
+    const dialog = wrapper.getComponent(TripDialog)
+    await dialog.get('#trip-name-input').setValue(trip.name)
+    dialog.getComponent(PhotoPicker).vm.$emit('update:photos', [photo])
+    await dialog.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(dialog.text()).toContain('手記已建立，但封面尚未設定')
+    expect(dialog.find('form').exists()).toBe(false)
+    list.mockResolvedValue({ items: [{ ...trip, cover_photo_id: photo.id }] })
+    await dialog.get('.cover-retry-actions .btn-primary').trigger('click')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(bind).toHaveBeenCalledWith(photo.id, 'trip', trip.id)
+    expect(set.mock.calls).toEqual([[trip.id, photo.id], [trip.id, photo.id]])
+    expect(detail).toHaveBeenCalledWith(trip.id)
+    expect(wrapper.emitted('update:trips')?.at(-1)).toEqual([[{ ...trip, cover_photo_id: photo.id }]])
+    wrapper.unmount()
+  })
   it('edits location independently and preserves place identity for note-only changes', async () => {
     const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: '', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
     const wrapper = mount(EventDialog, { props: { visible: true, trip: { id: 'trip', name: '旅程', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }, event } })
-    expect(wrapper.get('.more-details').attributes('open')).toBeUndefined()
+    expect(wrapper.find('.more-details').exists()).toBe(false)
+    expect(wrapper.get('#event-time').element.parentElement?.parentElement).toBe(wrapper.get('#event-date').element.parentElement?.parentElement)
     expect(wrapper.find('#existing-place-select').exists()).toBe(false)
     await wrapper.get('#event-notes').setValue('舒服')
     await wrapper.get('form').trigger('submit')
@@ -39,7 +77,23 @@ describe('Journal editing and resumable chat', () => {
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('submit')?.[1]?.[0]).toMatchObject({ place_id: null, place_name: '山邊', version: 1 })
     await wrapper.setProps({ event: { ...event, city: '京都' } })
-    expect(wrapper.get('.more-details').attributes('open')).toBeDefined()
+    expect((wrapper.get('#event-city').element as HTMLInputElement).value).toBe('京都')
+    wrapper.unmount()
+  })
+  it('cannot submit a new footprint while a selected photo is being recognized', async () => {
+    const wrapper = mount(EventDialog, { props: { visible: true } })
+    const picker = wrapper.getComponent(PhotoPicker)
+    const photo = { id: 'pending', status: 'processing' } as PhotoDTO
+    await wrapper.get('#event-place-name').setValue('海邊')
+    picker.vm.$emit('update:photos', [photo])
+    await flushPromises()
+    expect(wrapper.get('button[type="submit"]').attributes('aria-busy')).toBe('true')
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    picker.vm.$emit('update:photos', [{ ...photo, status: 'ready' }])
+    await flushPromises()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')?.[0]?.[1]).toEqual([photo.id])
     wrapper.unmount()
   })
   it('closes the image menu outside or on Escape, but keeps internal clicks usable', async () => {

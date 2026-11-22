@@ -30,7 +30,8 @@
 .daily-city svg { width: .9em; height: .9em; align-self: flex-start; margin-top: .3em; }
 .daily-category { padding: .1rem .35rem; border-radius: var(--radius-xs); background: var(--color-olive-pale); color: var(--color-olive-text); }
 .daily-notes { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-ink-secondary); font-size: .9rem; margin-top: .1rem; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
-.daily-actions { position: relative; flex: 0 0 auto; }
+.daily-actions { display: flex; align-items: center; gap: .25rem; position: relative; flex: 0 0 auto; }
+.daily-address { color: var(--color-subtle); font-size: .8rem; overflow-wrap: anywhere; }
 .daily-menu-trigger { color: var(--color-subtle); }
 .daily-menu-trigger:hover, .daily-menu-trigger[aria-expanded=true] { color: var(--color-maple); background: var(--color-maple-subtle); }
 .daily-menu { position: absolute; z-index: 4; top: calc(100% + .2rem); right: 0; min-width: 8.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-paper); box-shadow: var(--shadow-sm); padding: .25rem; }

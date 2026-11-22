@@ -8,7 +8,8 @@ import JournalNote from '@/features/trips/JournalNote.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
 import PhotoPicker from '@/features/media/PhotoPicker.vue'
-import { getTimezoneOptions, getTripLocalDate, normalizeTimezoneInput } from '@/utils/timezones'
+import TimezoneInput from '@/components/ui/TimezoneInput.vue'
+import { getTripLocalDate, normalizeTimezoneInput } from '@/utils/timezones'
 import { locationInputError, maxMapUrlLength, validMapUrl } from '@/utils/maps'
 
 const props = withDefaults(
@@ -38,7 +39,6 @@ const emit = defineEmits<{
 }>()
 
 
-const moreDetails = ref(false)
 
 const placeName = ref('')
 const city = ref('')
@@ -48,7 +48,6 @@ const category = ref('景點')
 const eventDate = ref('')
 const eventTime = ref('')
 const timezone = ref('Asia/Taipei')
-const timezoneOptions = computed(() => getTimezoneOptions())
 const notes = ref('')
 
 const clientValidationError = ref('')
@@ -76,6 +75,11 @@ const photoLoadError = ref(false)
 const photoSession = ref(0)
 let photoLoadGeneration = 0
 const stagedPhotos = ref<PhotoDTO[]>([])
+const newPhotoPicker = ref<InstanceType<typeof PhotoPicker> | null>(null)
+const photosPending = computed(() => !isEdit.value && (
+  newPhotoPicker.value?.isUploading || stagedPhotos.value.some(photo => photo.status === 'pending' || photo.status === 'processing')
+))
+const savingEvent = computed(() => props.loading || photosPending.value)
 const eventPhotoPickerRef = ref<InstanceType<typeof PhotoPicker> | null>(null)
 
 function isPhotoSessionCurrent(session: number) {
@@ -178,7 +182,6 @@ function handleCancel() {
 function resetFormFromProps() {
   clientValidationError.value = ''
   addingCategory.value = false
-  moreDetails.value = !!(props.trip && props.event && (props.event.city || props.event.address || props.event.map_url || props.event.time))
   timezone.value = props.event?.timezone || props.trip?.timezone || 'Asia/Taipei'
   if (props.event) {
     placeName.value = props.event.place_name
@@ -220,6 +223,7 @@ watch(
 )
 
 function handleSubmit() {
+  if (savingEvent.value) return
   clientValidationError.value = ''
 
   const trimmedPlaceName = placeName.value.trim()
@@ -238,10 +242,7 @@ function handleSubmit() {
     return
   }
 
-  if (locationError.value) {
-    moreDetails.value = true
-    return
-  }
+  if (locationError.value) return
   const mapUrl = validMapUrl(location.value)
   const address = mapUrl ? '' : location.value.trim()
 
@@ -367,50 +368,51 @@ onBeforeUnmount(() => { photoSession.value++ })
           <label for="event-place-name" class="form-label">地點名稱 <span class="required-star">*</span></label>
           <input id="event-place-name" v-model="placeName" class="form-input" placeholder="這一站去了哪裡？" maxlength="200" required :disabled="loading" />
         </div>
-        <div v-if="trip" class="form-row essential-row">
-          <div class="form-group flex-1">
-            <label for="event-date" class="form-label">日期 <span class="required-star">*</span></label>
-            <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip.start_date" :max="trip.end_date" required :disabled="loading" />
+        <div class="essential-row">
+          <div class="form-group">
+            <label for="event-date" class="form-label">日期 <span v-if="trip" class="required-star">*</span></label>
+            <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip?.start_date" :max="trip?.end_date" :required="Boolean(trip)" :disabled="loading" />
           </div>
-          <div class="form-group flex-1">
-            <div class="category-label"><label for="event-category" class="form-label">分類 <span class="required-star">*</span></label><button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 標籤</button></div>
-            <select id="event-category" v-model="category" class="form-input" :disabled="loading" required aria-label="回憶分類"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
+          <div class="form-group">
+            <label for="event-time" class="form-label">抵達時間</label>
+            <input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" />
           </div>
         </div>
-        <div v-if="trip && addingCategory" class="category-select-row">
+        <div class="essential-row">
+          <div class="form-group">
+            <div class="category-label"><label for="event-city" class="form-label">地區</label></div>
+            <input id="event-city" v-model="city" class="form-input" placeholder="例如臺中市東區" maxlength="200" :disabled="loading" />
+          </div>
+          <div class="form-group">
+            <div class="category-label">
+              <label for="event-category" class="form-label">分類 <span v-if="trip" class="required-star">*</span></label>
+              <button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 標籤</button>
+            </div>
+            <select id="event-category" v-model="category" class="form-input" :disabled="loading" :required="Boolean(trip)" aria-label="回憶分類">
+              <option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option>
+            </select>
+          </div>
+        </div>
+        <div v-if="addingCategory" class="category-select-row">
           <input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" />
           <button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button>
         </div>
-        <details class="more-details" :open="moreDetails" @toggle="moreDetails = ($event.target as HTMLDetailsElement).open">
-          <summary>更多細節</summary>
-          <div class="detail-fields">
-            <div v-if="!trip" class="form-row">
-              <div class="form-group flex-1"><label for="event-date" class="form-label">日期</label><input id="event-date" v-model="eventDate" type="date" class="form-input" :disabled="loading" /></div>
-              <div class="form-group flex-1"><label for="event-timezone" class="form-label">時區</label><input id="event-timezone" v-model="timezone" class="form-input" list="footprint-timezones" :disabled="loading" /><datalist id="footprint-timezones"><option v-for="opt in timezoneOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option></datalist></div>
-            </div>
-            <div v-if="!trip" class="form-group">
-              <div class="category-label"><label for="event-category" class="form-label">分類</label><button type="button" class="add-tag-button" :aria-expanded="addingCategory" :disabled="loading" @click="addingCategory = !addingCategory">＋ 標籤</button></div>
-              <select id="event-category" v-model="category" class="form-input" :disabled="loading"><option v-for="cat in categoryOptions" :key="cat" :value="cat">{{ cat }}</option></select>
-              <div v-if="addingCategory" class="category-select-row"><input v-model="newCategory" class="form-input" aria-label="新標籤名稱" placeholder="標籤名稱" maxlength="200" :disabled="loading" @keydown.enter.prevent="addCategory" /><button type="button" class="add-tag-button" :disabled="loading || !newCategory.trim()" @click="addCategory">加入</button></div>
-            </div>
-            <div class="form-row">
-              <div class="form-group flex-1"><label for="event-city" class="form-label">城市／地區</label><input id="event-city" v-model="city" class="form-input" maxlength="200" :disabled="loading" /></div>
-              <div class="form-group flex-1"><label for="event-time" class="form-label">抵達時間</label><input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" /></div>
-            </div>
-            <div class="form-group">
-              <label for="event-address" class="form-label">地址或 Google Maps 連結</label>
-              <input id="event-address" v-model="location" class="form-input" :maxlength="maxMapUrlLength"
-                :disabled="loading" :aria-invalid="Boolean(locationError)" :aria-describedby="locationError ? 'event-location-error' : undefined" />
-              <p v-if="locationError" id="event-location-error" class="error-banner" role="alert">{{ locationError }}</p>
-            </div>
-          </div>
-        </details>
+        <div class="form-group">
+          <label for="event-address" class="form-label">地址或 Google Maps 連結</label>
+          <input id="event-address" v-model="location" class="form-input" :maxlength="maxMapUrlLength"
+            :disabled="loading" :aria-invalid="Boolean(locationError)" :aria-describedby="locationError ? 'event-location-error' : undefined" />
+          <p v-if="locationError" id="event-location-error" class="error-banner" role="alert">{{ locationError }}</p>
+        </div>
+        <div v-if="!trip" class="form-group">
+          <label for="event-timezone" class="form-label">時區</label>
+          <TimezoneInput id="event-timezone" v-model="timezone" :reference-date="eventDate" :disabled="loading" />
+        </div>
         <JournalNote id="event-notes" v-model="notes" kind="event" :label="trip ? '旅途隨筆' : '隨筆'" :placeholder="trip ? '留下餐點、沿途風景或旅途感受…' : '此刻想記下什麼？'" :disabled="loading" :maxlength="20000" />
 
         <section class="event-photo-section" aria-label="足跡相片">
           <div class="event-photo-heading photo-control-heading"><h4>足跡相片</h4>
             <PhotoPicker v-if="isEdit && event" :key="photoSession" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
-            <PhotoPicker v-else v-model:photos="stagedPhotos" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
+            <PhotoPicker v-else :key="photoSession" ref="newPhotoPicker" v-model:photos="stagedPhotos" :disabled="loading" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
           </div>
           <p v-if="photoLoadError" role="alert">無法載入足跡照片。 <button type="button" class="btn-link" @click="fetchEventPhotos">重試</button></p>
           <PhotoGallery v-else-if="isEdit && event" :key="photoSession" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="fetchEventPhotos" />
@@ -429,13 +431,14 @@ onBeforeUnmount(() => { photoSession.value++ })
           </button>
           <button
             type="submit"
-            class="btn btn-primary"
-            :disabled="loading"
-            :aria-label="loading ? '儲存中' : isEdit ? '儲存修改' : '記錄足跡'"
+            class="btn btn-primary event-save"
+            :class="{ 'is-photo-pending': photosPending }"
+            :disabled="savingEvent"
+            :aria-label="photosPending ? '等待照片處理' : loading ? '儲存中' : isEdit ? '儲存修改' : '記錄足跡'"
             :title="isEdit ? '儲存修改' : '記錄足跡'"
-            :aria-busy="loading"
+            :aria-busy="savingEvent"
           >
-            <span v-if="loading" class="spinner-small ui-spinner ui-spinner--on-primary" aria-hidden="true"></span>
+            <span v-if="savingEvent" class="spinner-small ui-spinner ui-spinner--on-primary" aria-hidden="true"></span>
             <AppIcon v-else name="save" />
           </button>
         </footer>

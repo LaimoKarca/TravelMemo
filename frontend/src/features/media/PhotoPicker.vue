@@ -55,6 +55,7 @@ const stagedPhotos = ref<PhotoDTO[]>([...(props.photos ?? props.initialPhotos)])
 const isUploading = ref(false)
 const uploadProgressText = ref('')
 const errorMessage = ref('')
+const statusTimedOut = ref(false)
 
 watch(
   () => props.photos ?? props.initialPhotos,
@@ -90,7 +91,7 @@ async function refreshStatus() {
     emit('update:photos', [...stagedPhotos.value])
   } finally {
     polling = false
-    if (statusAttempts >= 60 && pending()) errorMessage.value = '圖片仍在處理，請稍後重新整理。'
+    statusTimedOut.value = statusAttempts >= 60 && pending()
     scheduleStatus()
   }
 }
@@ -98,10 +99,19 @@ async function refreshStatus() {
 watch(pending, value => {
   if (!value) {
     statusAttempts = 0
+    statusTimedOut.value = false
     if (statusTimer) clearTimeout(statusTimer)
     statusTimer = null
   } else scheduleStatus()
 }, { immediate: true })
+
+function checkStatusAgain() {
+  if (polling || !pending()) return
+  if (statusTimer) clearTimeout(statusTimer)
+  statusAttempts = 0
+  statusTimedOut.value = false
+  void refreshStatus()
+}
 
 onBeforeUnmount(() => {
   disposed = true
@@ -191,6 +201,7 @@ function removePhoto(photoId: string) {
 
 async function handleRetry(photo: PhotoDTO) {
   statusAttempts = 0
+  statusTimedOut.value = false
   try {
     const updated = await retryPhoto(photo.id, photo.version)
     if (disposed) return
@@ -312,6 +323,9 @@ defineExpose({
     <div v-if="errorMessage" class="picker-error-msg" role="alert">
       {{ errorMessage }}
     </div>
+    <p v-if="statusTimedOut" class="picker-error-msg" role="status">
+      照片仍在處理。<button type="button" class="btn-link" @click="checkStatusAgain">重新查詢</button>
+    </p>
 
     <!-- Thumbnail Previews of Staged Photos -->
     <div v-if="stagedPhotos.length > 0" class="staged-previews-grid">

@@ -26,7 +26,8 @@ import {
   retryPhoto,
   updatePhoto,
   reorderTripPhotos,
-  getTripCover
+  getTripCover,
+  setTripCover
 } from '@/api/photos'
 import type { PhotoDTO } from '@/types/photo'
 import { ApiError } from '@/api/auth'
@@ -435,6 +436,8 @@ function backToTripList() {
 }
 
 // --- Trip Create / Edit ---
+const coverRetry = ref<{ trip: Trip; photoId: string } | null>(null)
+
 function openCreateTripModal() {
   clearAlert()
   editingTrip.value = null
@@ -451,7 +454,44 @@ function openEditTripModal(trip: Trip) {
   showTripModal.value = true
 }
 
-async function handleTripSubmit(payload: CreateTripPayload | UpdateTripPayload) {
+async function finishCreatedTrip(trip: Trip, coverSkipped = false) {
+  coverRetry.value = null
+  showTripModal.value = false
+  await fetchTrips()
+  await selectTrip(trip.id)
+  if (currentTrip.value?.id === trip.id) {
+    showAlert(coverSkipped ? '手記已建立，封面尚未設定。' : `已建立新旅程手記「${trip.name}」`, coverSkipped ? 'info' : 'success')
+  }
+}
+
+async function applyNewTripCover(trip: Trip, photoId: string) {
+  try {
+    await bindPhoto(photoId, 'trip', trip.id)
+    await setTripCover(trip.id, photoId)
+  } catch {
+    coverRetry.value = { trip, photoId }
+    tripModalError.value = '手記已建立，但封面尚未設定。'
+    return
+  }
+  await finishCreatedTrip(trip)
+}
+
+async function retryNewTripCover() {
+  if (!coverRetry.value || actionInProgress.value) return
+  const { trip, photoId } = coverRetry.value
+  actionInProgress.value = true
+  try { await applyNewTripCover(trip, photoId) }
+  finally { actionInProgress.value = false }
+}
+
+async function closeTripModal() {
+  if (actionInProgress.value) return
+  if (coverRetry.value) await finishCreatedTrip(coverRetry.value.trip, true)
+  else showTripModal.value = false
+}
+
+async function handleTripSubmit(payload: CreateTripPayload | UpdateTripPayload, photoId?: string) {
+  if (actionInProgress.value || coverRetry.value) return
   actionInProgress.value = true
   tripModalError.value = ''
   tripModalConflict.value = false
@@ -467,10 +507,8 @@ async function handleTripSubmit(payload: CreateTripPayload | UpdateTripPayload) 
       await fetchTrips()
     } else {
       const created = await createTrip(payload as CreateTripPayload)
-      showAlert(`已建立新旅程手記「${created.name}」`, 'success')
-      showTripModal.value = false
-      await fetchTrips()
-      await selectTrip(created.id)
+      if (photoId) await applyNewTripCover(created, photoId)
+      else await finishCreatedTrip(created)
     }
   } catch (err: any) {
     if (err instanceof ApiError && err.status === 409) {
@@ -1031,6 +1069,7 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
                   </div>
 
                   <div class="event-header-actions">
+                    <LocationLink :location="evt" mode="saved-map" />
                     <button type="button" class="icon-button event-delete" :disabled="actionInProgress" :aria-label="`刪除足跡：${evt.place_name}`" title="刪除足跡" @click="promptDeleteEvent(evt)"><AppIcon name="trash" /></button>
                     <button type="button" class="icon-button" :disabled="actionInProgress" :aria-label="`編輯足跡：${evt.place_name}`" title="編輯足跡" @click="openEditEventModal(evt)"><AppIcon name="edit" /></button>
                   </div>
@@ -1038,7 +1077,7 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
 
                 <div class="event-place-info">
                   <h4 class="event-place-name">{{ evt.place_name }} <span v-if="evt.city" class="event-city-tag"><AppIcon name="pin" /><span>{{ evt.city }}</span></span></h4>
-                  <LocationLink v-if="evt.address || evt.map_url" class="event-location-text" :location="evt" show-address />
+                  <LocationLink class="event-location-text" :location="evt" mode="address" />
                 </div>
 
                 <p v-if="evt.notes" class="event-notes-content">
@@ -1080,13 +1119,15 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
     :visible="showTripModal"
     :trip="editingTrip"
     :cover-photo-id="editingCoverId"
+    :cover-retry="Boolean(coverRetry)"
     @cover-updated="handleCoverUpdated"
     :loading="actionInProgress"
     :error-message="tripModalError"
     :has-conflict="tripModalConflict"
     @submit="handleTripSubmit"
     @refresh="refreshTripFromModal"
-    @cancel="showTripModal = false"
+    @retry-cover="retryNewTripCover"
+    @cancel="closeTripModal"
   />
 
   <EventDialog

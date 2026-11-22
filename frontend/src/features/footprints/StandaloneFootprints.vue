@@ -292,14 +292,15 @@ function closeAttach(stale: boolean) {
           <div class="daily-entry-heading">
             <div class="daily-identity">
               <button type="button" class="daily-name" @click="emit('view', event)">{{ event.place_name }}</button>
-              <div v-if="event.time || event.city || event.category !== '未分類' || event.address || event.map_url" class="daily-meta">
+              <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
                 <time v-if="event.time" class="daily-time" :datetime="event.time">{{ event.time }}</time>
                 <span v-if="event.city" class="daily-city"><AppIcon name="pin" /><span>{{ event.city }}</span></span>
                 <span v-if="event.category !== '未分類'" class="daily-category">{{ event.category }}</span>
-                <LocationLink :location="event" />
               </div>
+              <LocationLink class="daily-address" :location="event" mode="address" />
             </div>
             <div class="daily-actions">
+              <LocationLink :location="event" mode="saved-map" />
               <button type="button" class="icon-button daily-menu-trigger" title="足跡選項"
                 :aria-label="`足跡選項：${event.place_name}`" :aria-expanded="openMenuId === event.id"
                 :aria-controls="openMenuId === event.id ? `daily-menu-${event.id}` : undefined"

@@ -282,6 +282,25 @@ describe('PhotoPicker', () => {
       vi.useRealTimers()
     }
   })
+  it('can manually resume photo status checks after the automatic polling limit', async () => {
+    vi.useFakeTimers()
+    const pendingPhoto = { ...mockPhotos[0], status: 'processing' } as const
+    const get = vi.spyOn(photosApi, 'getPhoto').mockResolvedValue(pendingPhoto)
+    const wrapper = mount(PhotoPicker, { props: { initialPhotos: [pendingPhoto] } })
+    try {
+      await vi.advanceTimersByTimeAsync(310000)
+      expect(get).toHaveBeenCalledTimes(60)
+      get.mockResolvedValueOnce({ ...pendingPhoto, status: 'ready' })
+      await wrapper.get('p[role="status"] button').trigger('click')
+      await flushPromises()
+      expect(get).toHaveBeenCalledTimes(61)
+      expect(wrapper.emitted('update:photos')?.at(-1)?.[0]).toEqual([{ ...pendingPhoto, status: 'ready' }])
+      expect(wrapper.find('p[role="status"] button').exists()).toBe(false)
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
   beforeEach(() => {
     vi.restoreAllMocks()
   })

@@ -223,16 +223,11 @@ export function getTimezoneOffset(timeZone: string, referenceDate?: string | Dat
   }
 }
 
-/**
- * Returns a list of localized timezone options for datalists and dropdowns.
- *
- * @param referenceDate Optional trip date string (e.g. "2026-06-01") for DST-aware offset.
- * @param locale Optional BCP-47 locale, defaults to 'zh-TW'.
- */
-export function getTimezoneOptions(
-  referenceDate?: string,
-  locale = 'zh-TW'
-): TimezoneOption[] {
+const timezoneNames = new Map<string, TimezoneOption[]>();
+
+function getTimezoneNames(locale: string): TimezoneOption[] {
+  const cached = timezoneNames.get(locale);
+  if (cached) return cached;
   const isZh = locale.toLowerCase().startsWith('zh');
 
   // Intl region display names if available
@@ -248,17 +243,11 @@ export function getTimezoneOptions(
   }
 
   const formatOption = (entry: TimezoneCatalogEntry): TimezoneOption => {
-    const offset = getTimezoneOffset(entry.zone, referenceDate);
-    if (!offset) {
-      // Fallback for unsupported zones in browser
-      return { value: entry.zone, label: entry.zone };
-    }
-
     if (entry.zone === 'UTC') {
       const utcLabel = isZh ? '世界協調時間 (UTC)' : 'Coordinated Universal Time (UTC)';
       return {
         value: 'UTC',
-        label: `${utcLabel} (${offset}) · UTC`,
+        label: utcLabel,
       };
     }
 
@@ -281,8 +270,8 @@ export function getTimezoneOptions(
     }
 
     const label = countryName
-      ? `${countryName} - ${cityName} (${offset}) · ${entry.zone}`
-      : `${cityName} (${offset}) · ${entry.zone}`;
+      ? `${countryName} - ${cityName}`
+      : cityName;
 
     return {
       value: entry.zone,
@@ -315,7 +304,27 @@ export function getTimezoneOptions(
   // Sort remaining by label alphabetically
   remaining.sort((a, b) => a.label.localeCompare(b.label, locale));
 
-  return [...options, ...remaining];
+  const names = [...options, ...remaining];
+  timezoneNames.set(locale, names);
+  return names;
+}
+
+/** Filter the catalog before computing date-dependent offsets. */
+export function getTimezoneOptions(
+  referenceDate?: string,
+  locale = 'zh-TW',
+  query = '',
+  limit = Infinity
+): TimezoneOption[] {
+  const searchable = (value: string) => value.toLocaleLowerCase().replace(/臺/g, '台');
+  const term = searchable(query.trim());
+  return getTimezoneNames(locale)
+    .filter(({ value, label }) => !term || searchable(`${value} ${label}`).includes(term))
+    .slice(0, limit)
+    .map(({ value, label }) => {
+      const offset = getTimezoneOffset(value, referenceDate);
+      return { value, label: offset ? `${label} (${offset}) · ${value}` : value };
+    });
 }
 
 /**

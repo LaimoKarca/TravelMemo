@@ -469,7 +469,7 @@ describe('TripWorkspace and Travel Components', () => {
     expect(wrapper.emitted('refresh')).toBeTruthy()
   })
 
-  it('TripDialog renders searchable timezone input with datalist and preserves existing timezone on edit', async () => {
+  it('TripDialog keeps the current timezone and offers a bounded, keyboard-selectable search', async () => {
     const wrapper = mount(TripDialog, {
       props: { visible: true, trip: mockTrips[0] } // mockTrips[0] has timezone: 'Asia/Tokyo'
     })
@@ -477,11 +477,21 @@ describe('TripWorkspace and Travel Components', () => {
 
     const tzInput = wrapper.find('input#trip-timezone')
     expect(tzInput.exists()).toBe(true)
-    expect(tzInput.attributes('list')).toBe('trip-timezone-list')
+    expect(tzInput.attributes('list')).toBeUndefined()
     expect((tzInput.element as HTMLInputElement).value).toBe('Asia/Tokyo')
 
-    const datalist = wrapper.find('datalist#trip-timezone-list')
-    expect(datalist.exists()).toBe(true)
+    await tzInput.trigger('focus')
+    expect(wrapper.findAll('[role="option"]')).toHaveLength(10)
+    await tzInput.setValue('臺北')
+    expect(wrapper.findAll('[role="option"]').map(option => option.text())).toEqual([expect.stringContaining('Asia/Taipei')])
+    await tzInput.setValue('臺')
+    expect(wrapper.findAll('[role="option"]').length).toBeLessThanOrEqual(10)
+    await tzInput.setValue('臺北')
+    await tzInput.trigger('keydown', { key: 'ArrowDown' })
+    await tzInput.trigger('keydown', { key: 'Enter' })
+    expect((tzInput.element as HTMLInputElement).value).toBe('Asia/Taipei')
+    expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('TripDialog allows typing custom UTC offset and emits normalized value on submit', async () => {
