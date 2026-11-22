@@ -8,8 +8,7 @@ import JournalNote from '@/features/trips/JournalNote.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
 import PhotoPicker from '@/features/media/PhotoPicker.vue'
-import TimezoneInput from '@/components/ui/TimezoneInput.vue'
-import { getTripLocalDate, normalizeTimezoneInput } from '@/utils/timezones'
+import { getTripLocalDate } from '@/utils/timezones'
 import { locationInputError, maxMapUrlLength, validMapUrl } from '@/utils/maps'
 
 const props = withDefaults(
@@ -47,7 +46,7 @@ const locationError = computed(() => locationInputError(location.value))
 const category = ref('景點')
 const eventDate = ref('')
 const eventTime = ref('')
-const timezone = ref('Asia/Taipei')
+const defaultDailyTimezone = 'Asia/Taipei'
 const notes = ref('')
 
 const clientValidationError = ref('')
@@ -182,7 +181,6 @@ function handleCancel() {
 function resetFormFromProps() {
   clientValidationError.value = ''
   addingCategory.value = false
-  timezone.value = props.event?.timezone || props.trip?.timezone || 'Asia/Taipei'
   if (props.event) {
     placeName.value = props.event.place_name
     city.value = props.event.city || ''
@@ -196,7 +194,7 @@ function resetFormFromProps() {
     city.value = ''
     location.value = ''
     category.value = props.trip ? '景點' : '未分類'
-    eventDate.value = props.trip?.start_date || getTripLocalDate(new Date(), timezone.value)
+    eventDate.value = props.trip?.start_date || getTripLocalDate(new Date(), defaultDailyTimezone)
     eventTime.value = ''
     notes.value = ''
   }
@@ -277,11 +275,9 @@ function handleSubmit() {
   const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '')
     && mapUrl === oldMapUrl && address === (oldMapUrl ? '' : (old.address || '').trim())
   const placeIdToSubmit = unchangedPlace ? old.place_id : null
-  const localTimezone = props.trip ? {} : { timezone: normalizeTimezoneInput(timezone.value) || 'Asia/Taipei' }
 
   if (isEdit.value && props.event) {
     const payload: UpdateEventPayload = {
-      ...localTimezone,
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
@@ -296,7 +292,7 @@ function handleSubmit() {
     emit('submit', payload)
   } else {
     const payload: CreateEventPayload = {
-      ...localTimezone,
+      ...(props.trip ? {} : { timezone: defaultDailyTimezone }),
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
@@ -368,7 +364,7 @@ onBeforeUnmount(() => { photoSession.value++ })
           <label for="event-place-name" class="form-label">地點名稱 <span class="required-star">*</span></label>
           <input id="event-place-name" v-model="placeName" class="form-input" placeholder="這一站去了哪裡？" maxlength="200" required :disabled="loading" />
         </div>
-        <div class="essential-row">
+        <div class="essential-row date-time-row">
           <div class="form-group">
             <label for="event-date" class="form-label">日期 <span v-if="trip" class="required-star">*</span></label>
             <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip?.start_date" :max="trip?.end_date" :required="Boolean(trip)" :disabled="loading" />
@@ -402,10 +398,6 @@ onBeforeUnmount(() => { photoSession.value++ })
           <input id="event-address" v-model="location" class="form-input" :maxlength="maxMapUrlLength"
             :disabled="loading" :aria-invalid="Boolean(locationError)" :aria-describedby="locationError ? 'event-location-error' : undefined" />
           <p v-if="locationError" id="event-location-error" class="error-banner" role="alert">{{ locationError }}</p>
-        </div>
-        <div v-if="!trip" class="form-group">
-          <label for="event-timezone" class="form-label">時區</label>
-          <TimezoneInput id="event-timezone" v-model="timezone" :reference-date="eventDate" :disabled="loading" />
         </div>
         <JournalNote id="event-notes" v-model="notes" kind="event" :label="trip ? '旅途隨筆' : '隨筆'" :placeholder="trip ? '留下餐點、沿途風景或旅途感受…' : '此刻想記下什麼？'" :disabled="loading" :maxlength="20000" />
 

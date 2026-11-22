@@ -64,12 +64,25 @@ describe('日常足跡', () => {
 
   it('只填地點即可記錄，保留未知抵達時間', async () => {
     const wrapper = mount(EventDialog, { props: { visible: true } })
+    expect(wrapper.find('#event-timezone').exists()).toBe(false)
     await wrapper.get('#event-place-name').setValue('海邊堤防')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
       place_name: '海邊堤防', category: '未分類', date: expect.stringMatching(/^\d{4}-\d\d-\d\d$/),
       timezone: 'Asia/Taipei', time: null,
     })
+    wrapper.unmount()
+  })
+
+  it('編輯日常足跡時保留已儲存的時區', async () => {
+    vi.spyOn(photos, 'listPhotos').mockResolvedValue({ items: [] })
+    const wrapper = mount(EventDialog, { props: { visible: true, event: { ...footprint, timezone: 'Asia/Tokyo' } } })
+    await wrapper.get('#event-time').setValue('01:20')
+    await wrapper.get('form').trigger('submit')
+    const payload = wrapper.emitted('submit')?.[0]?.[0]
+    expect(payload).toMatchObject({ date: footprint.date, time: '01:20' })
+    expect(payload).not.toHaveProperty('timezone')
+    wrapper.unmount()
   })
 
   it('來源詳情可跳到未歸入手記的足跡', async () => {
