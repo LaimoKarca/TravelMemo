@@ -37,8 +37,12 @@ export interface NextEdge {
   to_id: string
 }
 
+export interface TripListItem extends Trip {
+  cover_photo_id: string | null
+}
+
 export interface TripListResponse {
-  items: Trip[]
+  items: TripListItem[]
 }
 
 export interface TripDetailResponse {

@@ -32,6 +32,7 @@ const emit = defineEmits<{
   (e: 'refresh'): void
   (e: 'cancel'): void
   (e: 'notice', message: string, type: 'success' | 'error'): void
+  (e: 'photo-deleted', photoId: string): void
 }>()
 
 const dialogRef = ref<HTMLElement | null>(null)
@@ -70,63 +71,98 @@ const commonCategories = ['景點', '美食', '住宿', '交通', '購物', '文
 
 const eventPhotos = ref<PhotoDTO[]>([])
 const loadingPhotos = ref(false)
+const photoLoadError = ref(false)
+const photoSession = ref(0)
+let photoLoadGeneration = 0
 const stagedPhotos = ref<PhotoDTO[]>([])
-const eventPhotoPickerRef = ref<any>(null)
+const eventPhotoPickerRef = ref<InstanceType<typeof PhotoPicker> | null>(null)
 
-async function fetchEventPhotos(eventId: string) {
+function isPhotoSessionCurrent(session: number) {
+  return props.visible && session === photoSession.value
+}
+
+async function fetchEventPhotos() {
+  const eventId = props.event?.id
+  if (!props.visible || !eventId) return
+  const session = photoSession.value
+  const generation = ++photoLoadGeneration
+  const isCurrent = () => isPhotoSessionCurrent(session) && generation === photoLoadGeneration
   loadingPhotos.value = true
+  photoLoadError.value = false
   try {
     const res = await listPhotos({ event_id: eventId })
-    eventPhotos.value = res.items || []
+    if (isCurrent()) eventPhotos.value = res.items || []
   } catch {
-    // Non-blocking error for photos
+    if (isCurrent()) photoLoadError.value = true
   } finally {
-    loadingPhotos.value = false
+    if (isCurrent()) loadingPhotos.value = false
   }
+}
+
+function applyPhotoChange(session: number, update: () => void) {
+  if (!isPhotoSessionCurrent(session)) return
+  update()
+  // Reload after the write if an older read is still in flight.
+  if (loadingPhotos.value) void fetchEventPhotos()
 }
 
 async function handleEventPhotoUploaded(photo: PhotoDTO) {
-  if (props.event) {
-    try {
-      const bound = await bindPhoto(photo.id, 'event', props.event.id)
-      eventPhotos.value.push(bound)
+  const eventId = props.event?.id
+  if (!props.visible || !eventId) return
+  const session = photoSession.value
+  try {
+    const bound = await bindPhoto(photo.id, 'event', eventId)
+    applyPhotoChange(session, () => {
+      if (!eventPhotos.value.some(item => item.id === bound.id)) eventPhotos.value.push(bound)
       eventPhotoPickerRef.value?.removePhoto(photo.id)
-      if (eventPhotoPickerRef.value?.stagedPhotos?.length === 0) {
-        eventPhotoPickerRef.value?.clear()
-      }
-    } catch {
-      emit('notice', '無法將照片加入足跡。', 'error')
-    }
+    })
+  } catch {
+    if (isPhotoSessionCurrent(session)) emit('notice', '無法將照片加入足跡。', 'error')
   }
 }
 
+function hasCurrentPhoto(photoId: string) {
+  return props.visible && !loadingPhotos.value && eventPhotos.value.some(photo => photo.id === photoId)
+}
+
 async function handleDeleteEventPhoto(payload: { photoId: string; version: number }) {
+  if (!hasCurrentPhoto(payload.photoId)) return
+  const session = photoSession.value
   try {
     await deletePhoto(payload.photoId, payload.version)
-    eventPhotos.value = eventPhotos.value.filter((p) => p.id !== payload.photoId)
+    emit('photo-deleted', payload.photoId)
+    applyPhotoChange(session, () => {
+      eventPhotos.value = eventPhotos.value.filter(p => p.id !== payload.photoId)
+    })
   } catch {
-    // Non-blocking
+    if (isPhotoSessionCurrent(session)) emit('notice', '無法刪除照片，請稍後重試。', 'error')
   }
 }
 
 async function handleRetryEventPhoto(payload: { photoId: string; version: number }) {
+  if (!hasCurrentPhoto(payload.photoId)) return
+  const session = photoSession.value
   try {
     const updated = await retryPhoto(payload.photoId, payload.version)
-    const idx = eventPhotos.value.findIndex((p) => p.id === payload.photoId)
-    if (idx !== -1) eventPhotos.value[idx] = updated
+    applyPhotoChange(session, () => {
+      eventPhotos.value = eventPhotos.value.map(p => p.id === updated.id ? updated : p)
+    })
   } catch {
-    // Non-blocking
+    if (isPhotoSessionCurrent(session)) emit('notice', '無法重試照片識別。', 'error')
   }
 }
 
 async function handleUpdateEventPhotoCaption(payload: { photoId: string; caption: string; version: number }) {
+  if (!hasCurrentPhoto(payload.photoId)) throw new Error('找不到目前足跡的照片。')
+  const session = photoSession.value
   try {
     const updated = await updatePhoto(payload.photoId, { caption: payload.caption, version: payload.version })
-    const idx = eventPhotos.value.findIndex((p) => p.id === payload.photoId)
-    if (idx !== -1) eventPhotos.value[idx] = updated
-    emit('notice', '已更新照片說明。', 'success')
+    applyPhotoChange(session, () => {
+      eventPhotos.value = eventPhotos.value.map(p => p.id === updated.id ? updated : p)
+      emit('notice', '已更新照片說明。', 'success')
+    })
   } catch (err) {
-    emit('notice', '更新照片說明失敗，請稍後再試。', 'error')
+    if (isPhotoSessionCurrent(session)) emit('notice', '更新照片說明失敗，請稍後再試。', 'error')
     throw err
   }
 }
@@ -209,11 +245,6 @@ watch(
       if (!props.hasConflict) {
         resetFormFromProps()
       }
-      if (props.event) {
-        fetchEventPhotos(props.event.id)
-      } else {
-        eventPhotos.value = []
-      }
       nextTick(() => {
         if (isEdit.value || !props.trip) { dialogRef.value?.focus({ preventScroll: true }); return }
         const firstInput = dialogRef.value?.querySelector<HTMLElement>('#event-place-name')
@@ -229,6 +260,14 @@ watch(
   },
   { immediate: true }
 )
+
+watch([() => props.visible, () => props.event?.id], ([visible, eventId]) => {
+  photoSession.value++
+  loadingPhotos.value = false
+  photoLoadError.value = false
+  eventPhotos.value = []
+  if (visible && eventId) void fetchEventPhotos()
+}, { immediate: true })
 
 watch(
   () => props.event,
@@ -328,6 +367,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  photoSession.value++
   window.removeEventListener('keydown', handleKeyDown)
   if (props.visible) {
     launcherRef.value?.focus()
@@ -431,10 +471,11 @@ onBeforeUnmount(() => {
 
         <section class="event-photo-section" aria-label="足跡相片">
           <div class="event-photo-heading photo-control-heading"><h4>足跡相片</h4>
-            <PhotoPicker v-if="isEdit && event" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
+            <PhotoPicker v-if="isEdit && event" :key="photoSession" ref="eventPhotoPickerRef" :compact="true" :multiple="true" button-text="新增照片" camera-button-text="拍照" @upload-complete="handleEventPhotoUploaded" />
             <PhotoPicker v-else v-model:photos="stagedPhotos" :compact="true" :multiple="true" button-text="選擇照片" camera-button-text="拍照" />
           </div>
-          <PhotoGallery v-if="isEdit && event" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="props.event && fetchEventPhotos(props.event.id)" />
+          <p v-if="photoLoadError" role="alert">無法載入足跡照片。 <button type="button" class="btn-link" @click="fetchEventPhotos">重試</button></p>
+          <PhotoGallery v-else-if="isEdit && event" :key="photoSession" :photos="eventPhotos" :compact-empty="true" :loading="loadingPhotos" :can-set-cover="false" :can-reorder="false" :can-delete="true" :can-edit-caption="true" empty-text="此處足跡尚未附帶照片" @delete="handleDeleteEventPhoto" @retry="handleRetryEventPhoto" :save-caption="handleUpdateEventPhotoCaption" @refresh="fetchEventPhotos" />
         </section>
 
         </div>

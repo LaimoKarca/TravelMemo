@@ -25,7 +25,7 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 
 | 方法與路徑 | 請求與回應 |
 | --- | --- |
-| `GET /trips` | 回傳 `{items:Trip[]}`，依開始日期由新到舊，同分依 ID 排列。 |
+| `GET /trips` | 回傳 `{items:TripListItem[]}`，依開始日期由新到舊，同分依 ID 排列。清單項目包含全部 Trip 欄位與 `cover_photo_id`。 |
 | `POST /trips` | 提供 `name,start_date,end_date,timezone,description`，回傳 201 Trip。 |
 | `GET /trips/{id}` | 回傳 `{trip:Trip,events:Event[],next_edges:[{from_id,to_id}]}`。 |
 | `PUT /trips/{id}` | 提供建立欄位及 `version`，回傳 Trip；不得縮小日期範圍而排除既有足跡。 |
@@ -38,6 +38,8 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 | `POST /events/{id}/attach-trip` | 提供 `{trip_id,version,trip_version,before_event_id?}`，將日常足跡收進手記並回傳原 Event。選填的前置位置須為同日足跡 ID，省略時接在同日末尾。 |
 | `DELETE /events/{id}?version=N` | 回傳 204。 |
 | `PUT /trips/{id}/event-order` | 提供 `{version,event_ids:[...]}`，回傳與旅程詳情相同格式。須將所有事件 ID 各列一次，日期保持非遞減，同日內可調整順序。 |
+
+清單的 `cover_photo_id` 為本人封面的照片 ID。未指定封面、照片已移除或缺少縮圖資料時，欄位為 `null`。原有的封面設定與照片縮圖端點見 [圖片手記](PHOTOS.md)。
 
 新事件接在同日既有紀錄之後。修改日期時移到新日期群組末尾，日期未變時保留順序；精確時間不取代保存的事件順序。
 事件新增、修改、刪除、重排與 NEXT 重建均在單一 Neo4j 交易完成，先鎖定旅程節點，再檢查版本及擁有者。

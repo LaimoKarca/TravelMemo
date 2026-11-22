@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { reactive } from 'vue'
 import ConversationView from '../ConversationView.vue'
 import * as convApi from '../../api/conversation'
-import type { ConversationSummary, Message } from '../../types/conversation'
+import type { ChatWorkspaceState, ConversationSummary, Message } from '../../types/conversation'
 
 const mockConversations: ConversationSummary[] = [
   {
@@ -70,6 +71,26 @@ describe('ConversationView', () => {
       citations: [],
       created_at: '2026-11-20T10:01:00Z'
     })
+  })
+
+  it('lets IME confirm a character and Shift+Enter insert a line before plain Enter sends', async () => {
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+    await wrapper.get('.conversation-item').trigger('click')
+    await flushPromises()
+    const composer = wrapper.get<HTMLTextAreaElement>('#chat-message-input')
+    await composer.setValue('京都')
+    await composer.trigger('compositionstart')
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    composer.element.dispatchEvent(enter)
+    expect(enter.defaultPrevented).toBe(false)
+    await composer.trigger('compositionend')
+    await composer.trigger('keydown', { key: 'Enter', shiftKey: true })
+    expect(convApi.enqueueMessage).not.toHaveBeenCalled()
+    await composer.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(convApi.enqueueMessage).toHaveBeenCalledExactlyOnceWith('c-1', expect.any(String), { content: '京都' })
+    wrapper.unmount()
   })
 
   it('renders conversations list, initial blank chat, and loads conversation on click', async () => {
@@ -580,14 +601,14 @@ describe('ConversationView', () => {
     expect(wrapper.find('button.send-btn').text()).toContain('發送')
   })
 
-  it('first-create race: resetting to New while lazy create is in flight resets sendingMessage and preserves created conversation without deletion', async () => {
+  it('finishes the first send in the original conversation after opening a new draft', async () => {
     let resolveCreate!: (val: ConversationSummary) => void
     const createPromise = new Promise<ConversationSummary>((resolve) => {
       resolveCreate = resolve
     })
     vi.spyOn(convApi, 'createConversation').mockReturnValueOnce(createPromise)
     const deleteSpy = vi.spyOn(convApi, 'deleteConversation')
-    const sendSpy = vi.spyOn(convApi, 'sendMessage')
+    const sendSpy = vi.mocked(convApi.enqueueMessage)
 
     const wrapper = mount(ConversationView)
     await flushPromises()
@@ -617,8 +638,9 @@ describe('ConversationView', () => {
     // sendingMessage must NOT be stuck true
     expect(wrapper.find('button.send-btn').text()).toContain('發送')
 
-    // Late message send should not have been called for aborted context
-    expect(sendSpy).not.toHaveBeenCalled()
+    expect(sendSpy).toHaveBeenCalledExactlyOnceWith('c-late-created', expect.any(String), {
+      content: '發送後立即點擊新對話'
+    })
 
     // Never delete ambiguous potentially persisted data
     expect(deleteSpy).not.toHaveBeenCalled()
@@ -626,7 +648,7 @@ describe('ConversationView', () => {
     // The created conversation is preserved in conversations list
     expect(wrapper.text()).toContain('延遲建立成功的對話')
 
-    // Optimistic message from the aborted send is not left dangling
+    // Optimistic message stays out of the new draft
     expect(wrapper.text()).not.toContain('發送後立即點擊新對話')
   })
 
@@ -637,7 +659,7 @@ describe('ConversationView', () => {
     })
     vi.spyOn(convApi, 'createConversation').mockReturnValueOnce(createPromise)
     const deleteSpy = vi.spyOn(convApi, 'deleteConversation')
-    const sendSpy = vi.spyOn(convApi, 'sendMessage')
+    const sendSpy = vi.mocked(convApi.enqueueMessage)
 
     const wrapper = mount(ConversationView)
     await flushPromises()
@@ -662,14 +684,35 @@ describe('ConversationView', () => {
     // sendingMessage must reset to false
     expect(wrapper.find('button.send-btn').text()).toContain('發送')
 
-    // Does not call send for aborted context
-    expect(sendSpy).not.toHaveBeenCalled()
+    expect(sendSpy).toHaveBeenCalledExactlyOnceWith('c-late-switch', expect.any(String), {
+      content: '發送後切換至舊對話'
+    })
 
     // Never delete persisted row
     expect(deleteSpy).not.toHaveBeenCalled()
 
     // Preserved in list
     expect(wrapper.text()).toContain('切換期間建立的對話')
+  })
+
+  it('keeps the created conversation separate from the blank draft across a page remount', async () => {
+    const workspace = reactive<ChatWorkspaceState>({ drafts: new Map(), conversations: [] })
+    let finish!: (created: ConversationSummary) => void
+    vi.spyOn(convApi, 'createConversation').mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const first = mount(ConversationView, { props: { workspace } })
+    await flushPromises()
+    await first.get('#chat-message-input').setValue('先找出我的回憶')
+    await first.get('form.chat-form').trigger('submit')
+    first.unmount()
+    const reopened = mount(ConversationView, { props: { workspace } })
+    await flushPromises()
+    finish({ id: 'late', title: '回憶', created_at: '' })
+    await flushPromises()
+    expect(workspace.drafts.get(null)).not.toBe(workspace.drafts.get('late'))
+    expect(reopened.get<HTMLTextAreaElement>('#chat-message-input').element.value).toBe('')
+    expect(reopened.findAll('.conversation-item').some(item => item.text() === '回憶')).toBe(true)
+    expect(convApi.enqueueMessage).toHaveBeenCalledExactlyOnceWith('late', expect.any(String), { content: '先找出我的回憶' })
+    reopened.unmount()
   })
 
   it('deleting inactive conversation does not invalidate active conversation loading', async () => {

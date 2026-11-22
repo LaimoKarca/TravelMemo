@@ -57,9 +57,13 @@ class Trip(BaseModel):
     version: int
 
 
+class TripListItem(Trip):
+    cover_photo_id: str | None = None
+
+
 class TripsList(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    items: list[Trip]
+    items: list[TripListItem]
 
 
 class Place(BaseModel):
@@ -202,7 +206,7 @@ def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api
     @router.get("/trips", response_model=TripsList)
     def list_trips(request: Request):
         owner_id = authenticate(request, require_csrf=False)
-        items = repository.get_trips(owner_id)
+        items = repository.get_trips(owner_id, include_cover=True)
         return {"items": items}
 
     @router.post("/trips", response_model=Trip, status_code=201)

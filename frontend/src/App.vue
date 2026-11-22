@@ -156,6 +156,7 @@ async function handleLogout() {
     <!-- Signed-in Workspace: Fills viewport fluidly without card nesting -->
     <template v-if="currentStep === 'welcome' && user">
       <TripWorkspace
+        :key="user.id"
         :user="user"
         :logging-out="loggingOut"
         @logout="handleLogout"

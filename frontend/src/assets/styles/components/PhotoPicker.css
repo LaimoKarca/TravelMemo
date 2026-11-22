@@ -22,6 +22,10 @@
   flex-wrap: wrap;
 }
 
+.picker-buttons-row.search-bar { flex-wrap: nowrap; gap: .15rem; }
+.search-bar .photo-source-menu { flex: 0 0 auto; }
+.search-bar .photo-source-options { top: calc(100% + .4rem); bottom: auto; left: auto; right: 0; }
+
 .picker-btn {
   min-height: 40px;
   padding: 0.35rem 0.75rem;

@@ -16,14 +16,17 @@ const emit = defineEmits<{
   jump: [EventDestination]
   notice: [string, 'success' | 'error']
   unfocus: []
+  'photo-deleted': [string]
 }>()
 const queryInput = ref('')
-const query = ref('')
 const filtersOpen = ref(false)
 const city = ref('')
 const category = ref('')
 const dateFrom = ref('')
 const dateTo = ref('')
+const applied = ref({ q: '', city: '', category: '', date_from: '', date_to: '' })
+const filterError = ref('')
+const failedAppend = ref(false)
 const events = ref<Event[]>([])
 const offset = ref<number | null>(null)
 const focused = ref<Event | null>(null)
@@ -58,8 +61,10 @@ const groups = computed(() => {
   return [...days.entries()]
 })
 const categories = computed(() => [...new Set(events.value.map(event => event.category).filter(Boolean))])
+const appliedFiltersActive = computed(() => Boolean(applied.value.city || applied.value.category || applied.value.date_from || applied.value.date_to))
 const filtersActive = computed(() => Boolean(city.value || category.value || dateFrom.value || dateTo.value))
-const showReset = computed(() => Boolean(queryInput.value || query.value || filtersActive.value))
+const isFiltered = computed(() => appliedFiltersActive.value || Boolean(applied.value.q))
+const showReset = computed(() => Boolean(queryInput.value || filtersActive.value || isFiltered.value))
 const loadingMore = computed(() => loading.value && offset.value !== null)
 
 function closeMenu(restoreFocus = false) {
@@ -92,21 +97,20 @@ async function loadPage(append = false) {
   if (append && (loading.value || offset.value === null)) return
   const generation = ++pageGeneration
   error.value = ''
+  failedAppend.value = false
   if (!append) { closeMenu(); offset.value = null; events.value = [] }
-  if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
-    error.value = '結束日期須等於或晚於開始日期。'
-    loading.value = false
-    return
-  }
   loading.value = true
   try {
-    const page = await listStandaloneEvents({ q: query.value, city: city.value.trim(), category: category.value.trim(), date_from: dateFrom.value, date_to: dateTo.value, limit: 20, offset: append ? offset.value! : 0 })
+    const page = await listStandaloneEvents({ ...applied.value, limit: 20, offset: append ? offset.value! : 0 })
     if (generation !== pageGeneration) return
     const known = new Set(events.value.map(event => event.id))
     events.value = [...events.value, ...page.items.filter(event => !known.has(event.id))]
     offset.value = page.next_offset
   } catch (err) {
-    if (generation === pageGeneration) error.value = message(err, '無法載入日常足跡。')
+    if (generation === pageGeneration) {
+      failedAppend.value = append
+      error.value = message(err, '無法載入日常足跡。')
+    }
   } finally {
     if (generation === pageGeneration) loading.value = false
   }
@@ -114,7 +118,21 @@ async function loadPage(append = false) {
 
 function message(err: unknown, fallback: string) { return err instanceof ApiError ? err.detail : fallback }
 function clearFocus() { focused.value = null; emit('unfocus') }
-function applyFilters() { clearFocus(); query.value = queryInput.value.trim(); void loadPage() }
+function applyFilters() {
+  if (dateFrom.value && dateTo.value && dateFrom.value > dateTo.value) {
+    filtersOpen.value = true
+    filterError.value = '結束日期須等於或晚於開始日期。'
+    return
+  }
+  filterError.value = ''
+  applied.value = {
+    q: queryInput.value.trim(), city: city.value.trim(), category: category.value.trim(),
+    date_from: dateFrom.value, date_to: dateTo.value
+  }
+  clearFocus()
+  void loadPage()
+}
+watch([dateFrom, dateTo], () => { filterError.value = '' })
 function resetFilters() {
   city.value = ''; category.value = ''; dateFrom.value = ''; dateTo.value = ''; queryInput.value = ''
   applyFilters()
@@ -239,30 +257,31 @@ function closeAttach(stale: boolean) {
       <h2 id="daily-title">日常足跡</h2>
       <button type="button" class="btn btn-primary quick-record" aria-label="記錄日常足跡" title="記錄日常足跡" @click="openEditor(null)"><AppIcon name="plus" /></button>
     </header>
-    <form role="search" aria-label="搜尋日常足跡" @submit.prevent="applyFilters">
+    <form role="search" aria-label="搜尋日常足跡" novalidate @submit.prevent="applyFilters">
       <div class="search-bar">
         <button type="submit" class="icon-button search-bar__lead" aria-label="搜尋" title="搜尋"><AppIcon name="search" /></button>
         <input v-model="queryInput" type="search" class="form-input search-bar__input search-bar__input--custom-clear" placeholder="搜尋足跡…" aria-label="搜尋足跡" maxlength="200" />
         <button v-if="showReset" type="button" class="icon-button search-bar__control search-bar__clear"
           title="清除搜尋與篩選" aria-label="清除搜尋與篩選" @click="clearSearchAndFilters"><AppIcon name="close" /></button>
-        <button ref="filterButton" type="button" class="icon-button search-bar__control" :class="{ 'is-active': filtersActive }" aria-label="篩選足跡" aria-controls="daily-filters" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><AppIcon name="filter" /></button>
+        <button ref="filterButton" type="button" class="icon-button search-bar__control" :class="{ 'is-active': appliedFiltersActive || filtersOpen }" aria-label="篩選足跡" aria-controls="daily-filters" :aria-expanded="filtersOpen" @click="filtersOpen = !filtersOpen"><AppIcon name="filter" /></button>
       </div>
       <div v-show="filtersOpen" id="daily-filters" class="daily-filters">
         <label>城市<input v-model="city" class="form-input" maxlength="200" /></label>
         <label>類別<input v-model="category" class="form-input" list="daily-categories" maxlength="200" /><datalist id="daily-categories"><option v-for="value in categories" :key="value" :value="value" /></datalist></label>
         <label>開始日期<input v-model="dateFrom" type="date" class="form-input" :max="dateTo || undefined" /></label>
-        <label>結束日期<input v-model="dateTo" type="date" class="form-input" :min="dateFrom || undefined" /></label>
+        <label>結束日期<input v-model="dateTo" type="date" class="form-input" :min="dateFrom || undefined" :aria-invalid="Boolean(filterError)" :aria-describedby="filterError ? 'daily-date-error' : undefined" /></label>
       </div>
+      <p v-if="filterError" id="daily-date-error" class="daily-error" role="alert">{{ filterError }}</p>
     </form>
-    <p v-if="error" class="daily-error" role="alert">{{ error }} <button type="button" class="btn-link" @click="loadPage()">重試</button></p>
+    <p v-if="error" class="daily-error" role="alert">{{ error }} <button type="button" class="btn-link" @click="loadPage(failedAppend)">重試</button></p>
     <div v-if="(loading && !loadingMore) || loadingFocus" class="daily-loading" role="status">
       <TrailLoader />
       <span class="sr-only">載入足跡中…</span>
     </div>
     <div v-else-if="!loading && !results.length && !error" class="daily-empty">
       <AppIcon name="pin" />
-      <p>{{ query || filtersActive ? '找不到相符的足跡' : '還沒有日常足跡' }}</p>
-      <button v-if="!query && !filtersActive" class="btn-link" type="button" @click="openEditor(null)">記下第一次到訪</button>
+      <p>{{ isFiltered ? '找不到相符的足跡' : '還沒有日常足跡' }}</p>
+      <button v-if="!isFiltered" class="btn-link" type="button" @click="openEditor(null)">記下第一次到訪</button>
     </div>
     <div ref="listRef" :aria-busy="loading || loadingFocus">
       <section v-for="[date, entries] in groups" :key="date" class="daily-group">
@@ -298,7 +317,7 @@ function closeAttach(stale: boolean) {
       <span v-else>載入更多</span>
     </button>
     <span v-if="loadingMore" class="sr-only" role="status">載入更多足跡中…</span>
-    <EventDialog :visible="editorOpen" :event="editing" :categories="categories" :loading="busy" :error-message="editorError" :has-conflict="editorConflict" @submit="save" @refresh="refreshEdit" @cancel="editorOpen = false" @notice="(message, type) => emit('notice', message, type)" />
+    <EventDialog :visible="editorOpen" :event="editing" :categories="categories" :loading="busy" :error-message="editorError" :has-conflict="editorConflict" @submit="save" @refresh="refreshEdit" @cancel="editorOpen = false" @notice="(message, type) => emit('notice', message, type)" @photo-deleted="emit('photo-deleted', $event)" />
     <ConfirmDialog :visible="!!deleting" :target-key="deleting?.id" title="刪除日常足跡" :message="`刪除「${deleting?.place_name || ''}」？`" :loading="busy" confirmation-mode="keyword" confirm-text="刪除足跡" @confirm="remove" @cancel="deleting = null" />
     <AttachFootprintDialog v-if="attaching" :event="attaching" @close="closeAttach" @attached="attached" />
   </section>

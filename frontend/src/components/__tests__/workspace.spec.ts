@@ -9,14 +9,14 @@ import * as convApi from '../../api/conversation'
 import * as searchApi from '../../api/search'
 import * as timezones from '../../utils/timezones'
 import * as photosApi from '../../api/photos'
-import type { Trip, Event, Place } from '../../types/travel'
+import type { TripListItem, Event, Place } from '../../types/travel'
 
 const mockUser = {
   id: 'u-lead-1',
   email: 'traveler@travelmemo.local'
 }
 
-const mockTrips: Trip[] = [
+const mockTrips: TripListItem[] = [
   {
     id: 'trip-1',
     name: '京都秋楓巡禮',
@@ -24,6 +24,7 @@ const mockTrips: Trip[] = [
     end_date: '2026-11-24',
     timezone: 'Asia/Tokyo',
     description: '漫步哲學之道與嵐山竹林',
+    cover_photo_id: null,
     version: 1
   },
   {
@@ -33,6 +34,7 @@ const mockTrips: Trip[] = [
     end_date: '2026-12-12',
     timezone: 'Asia/Taipei',
     description: '鹿野高台與溫泉體驗',
+    cover_photo_id: null,
     version: 1
   }
 ]
@@ -615,6 +617,11 @@ describe('TripWorkspace and Travel Components', () => {
   })
 
   it('jumps from search or conversation to a specific trip and highlights event', async () => {
+    vi.mocked(searchApi.searchRecall).mockResolvedValueOnce({
+      items: [{ event: mockEvents[1], score: 1, reasons: [], relation: null }],
+      clarification: null,
+      vector_status: 'ready'
+    })
     const wrapper = mount(TripWorkspace, {
       props: { user: mockUser }
     })
@@ -628,6 +635,10 @@ describe('TripWorkspace and Travel Components', () => {
     // Trigger jump-trip event from RecallSearch component
     const searchComp = wrapper.findComponent({ name: 'RecallSearch' })
     expect(searchComp.exists()).toBe(true)
+    await searchComp.get('#search-query-input').setValue('金閣寺')
+    await searchComp.get('form').trigger('submit')
+    await flushPromises()
+    await searchComp.get('[aria-controls="footprint-results"]').trigger('click')
     searchComp.vm.$emit('jump-trip', { tripId: 'trip-1', eventId: 'event-2' })
     await flushPromises()
 
@@ -639,6 +650,27 @@ describe('TripWorkspace and Travel Components', () => {
     const eventCard2 = wrapper.find('#event-event-2')
     expect(eventCard2.exists()).toBe(true)
     expect(eventCard2.classes()).toContain('is-highlighted')
+
+    await navTabs[2].trigger('click')
+    const restored = wrapper.getComponent({ name: 'RecallSearch' })
+    expect(restored.get<HTMLInputElement>('#search-query-input').element.value).toBe('金閣寺')
+    expect(restored.get('[aria-controls="footprint-results"]').attributes('aria-expanded')).toBe('false')
+    expect(searchApi.searchRecall).toHaveBeenCalledTimes(1)
+  })
+
+  it('renders a listed cover on first load and falls back on a thumbnail error', async () => {
+    vi.mocked(travelApi.listTrips).mockResolvedValueOnce({
+      items: [{ ...mockTrips[0], cover_photo_id: 'cover' }, mockTrips[1]]
+    })
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    const first = wrapper.get('.trip-card[aria-label$="京都秋楓巡禮"]')
+    const image = first.get('.trip-cover-img')
+    expect(image.attributes('src')).toBe('/api/v1/photos/cover/thumbnail')
+    expect(photosApi.getTripCover).not.toHaveBeenCalled()
+    await image.trigger('error')
+    expect(first.find('.trip-cover-img').exists()).toBe(false)
+    expect(first.find('.trip-cover svg').exists()).toBe(true)
   })
 
   it('supports full keyboard accessibility with role=tab, roving tabindex, and Arrow/Home/End navigation', async () => {

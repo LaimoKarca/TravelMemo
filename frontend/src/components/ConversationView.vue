@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import AppIcon from './AppIcon.vue'
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, toRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type {
+  ChatDraft,
+  ChatWorkspaceState,
   ConversationSummary,
   Message,
   Citation,
@@ -18,13 +20,13 @@ import {
   enqueueMessage, getChatRequest, listChatRequests
 } from '../api/conversation'
 import { listTrips, getTrip } from '../api/travel'
-import { bindPhoto, getPhoto, retryPhoto } from '../api/photos'
-import { ApiError } from '../api/auth'
+import { bindPhoto } from '../api/photos'
+import { ApiError, getCsrfToken } from '../api/auth'
 import ConfirmDialog from './ConfirmDialog.vue'
 import PhotoPicker from './PhotoPicker.vue'
 import PhotoViewer from './PhotoViewer.vue'
 
-const props = withDefaults(defineProps<{ accountId?: string }>(), { accountId: 'current' })
+const props = withDefaults(defineProps<{ accountId?: string; workspace?: ChatWorkspaceState }>(), { accountId: 'current' })
 const storageKey = () => `travelmemo.chat.${props.accountId}`
 function rememberConversation(id: string | null) {
   try { if (id) localStorage.setItem(storageKey(), id); else localStorage.removeItem(storageKey()) } catch { /* Storage can be unavailable in private browsing. */ }
@@ -36,7 +38,8 @@ const emit = defineEmits<{
 }>()
 
 // State
-const conversations = ref<ConversationSummary[]>([])
+const chatWorkspace = props.workspace ?? reactive<ChatWorkspaceState>({ drafts: new Map(), conversations: [] })
+const conversations = toRef(chatWorkspace, 'conversations')
 const activeConversationId = ref<string | null>(null)
 const messages = ref<Message[]>([])
 
@@ -53,16 +56,44 @@ function onHistoryToggle(e: Event) {
   isHistoryOpen.value = (e.target as HTMLDetailsElement).open
 }
 
-const inputContent = ref('')
 const errorMessage = ref('')
 const composerInputRef = ref<HTMLTextAreaElement | null>(null)
-const chatPhotoPickerRef = ref<any>(null)
+const { drafts } = chatWorkspace
+function emptyDraft(): ChatDraft {
+  return { text: '', photos: [], uploading: false, uploadError: '', submitting: false, acceptedRequestId: null }
+}
+function draftFor(id: string | null) {
+  if (!drafts.has(id)) drafts.set(id, emptyDraft())
+  return drafts.get(id)!
+}
+draftFor(null)
+const activeDraft = computed(() => drafts.get(activeConversationId.value) ?? drafts.get(null)!)
+const inputContent = computed({
+  get: () => activeDraft.value.text,
+  set: text => { activeDraft.value.text = text }
+})
+const stagedChatPhotos = computed({
+  get: () => activeDraft.value.photos,
+  set: photos => { activeDraft.value.photos = photos }
+})
 
-// Staged photos for current composer message
-const stagedChatPhotos = ref<PhotoDTO[]>([])
+function beginComposerUpload() {
+  const draft = activeDraft.value
+  draft.uploading = true
+  draft.uploadError = ''
+  return {
+    add: (photo: PhotoDTO) => { draft.photos.push(photo) },
+    finish: (error: string) => { draft.uploading = false; draft.uploadError = error }
+  }
+}
 
-// Drafts cache per conversation to preserve user draft across switches
-const drafts = ref<Record<string, string>>({})
+let composing = false
+watch(activeDraft, () => { composing = false })
+function onComposerKeydown(event: KeyboardEvent) {
+  if (composing || event.isComposing || event.keyCode === 229) return
+  event.preventDefault()
+  void handleSendMessage()
+}
 
 // Save to Journal modal state
 const showSaveModal = ref(false)
@@ -178,141 +209,58 @@ function getAnswerScopeLabel(scope?: string): string {
   return '手記回憶依據'
 }
 
-// Bounded polling for photos with status pending | processing
 let chatPollTimer: ReturnType<typeof setTimeout> | null = null
 let chatPollCount = 0
+let active = true
+const hasPendingChatPhotos = computed(() => messages.value.some(message =>
+  message.photos?.some(photo => photo.status === 'pending' || photo.status === 'processing')
+))
 
-const hasPendingChatPhotos = computed(() => {
-  return messages.value.some((m) =>
-    m.photos?.some((p) => p.status === 'pending' || p.status === 'processing')
-  )
-})
+function stopChatPhotoPoll() {
+  if (chatPollTimer) clearTimeout(chatPollTimer)
+  chatPollTimer = null
+  chatPollCount = 0
+}
 
 function checkAndScheduleChatPoll() {
-  if (chatPollTimer) {
-    clearTimeout(chatPollTimer)
-    chatPollTimer = null
-  }
-  if (!activeConversationId.value || !hasPendingChatPhotos.value || chatPollCount >= 10) {
-    return
-  }
+  const id = activeConversationId.value
+  if (!active || !id || sendingMessage.value || !hasPendingChatPhotos.value || chatPollTimer || chatPollCount >= 10) return
+  const generation = requestGeneration
   const delay = Math.min(2000 + chatPollCount * 1000, 8000)
   chatPollTimer = setTimeout(async () => {
+    chatPollTimer = null
+    const isCurrent = () => active && activeConversationId.value === id && requestGeneration === generation
+    if (!isCurrent() || sendingMessage.value) return
     chatPollCount++
-    if (activeConversationId.value) {
-      try {
-        const res = await listMessages(activeConversationId.value)
-        messages.value = res.items || []
-      } catch {
-        // Non-blocking
-      }
+    try {
+      const res = await listMessages(id)
+      if (isCurrent() && !sendingMessage.value) messages.value = res.items || []
+    } catch {
+      // A transient read failure can be retried while these photos are pending.
     }
+    if (isCurrent()) checkAndScheduleChatPoll()
   }, delay)
 }
 
-watch(hasPendingChatPhotos, (pending) => {
-  if (pending) {
-    checkAndScheduleChatPoll()
-  } else {
-    chatPollCount = 0
-    if (chatPollTimer) {
-      clearTimeout(chatPollTimer)
-      chatPollTimer = null
-    }
-  }
+watch([hasPendingChatPhotos, sendingMessage], ([pending, sending]) => {
+  if (pending && !sending) checkAndScheduleChatPoll()
+  else stopChatPhotoPoll()
 })
 
-// Bounded polling for staged photos in composer until ready
-let stagedPollTimer: ReturnType<typeof setTimeout> | null = null
-let stagedPollCount = 0
-
-const hasPendingStagedPhotos = computed(() => {
-  return stagedChatPhotos.value.some((p) => p.status === 'pending' || p.status === 'processing')
-})
-
-const hasUnreadyStagedPhotos = computed(() => {
-  return stagedChatPhotos.value.some((p) => p.status !== 'ready')
-})
-
-const hasFailedOrBlockedStagedPhotos = computed(() => {
-  return stagedChatPhotos.value.some((p) => p.status === 'failed' || p.status === 'blocked')
-})
-
-function checkAndScheduleStagedPoll() {
-  if (stagedPollTimer) {
-    clearTimeout(stagedPollTimer)
-    stagedPollTimer = null
-  }
-
-  if (!hasPendingStagedPhotos.value || stagedPollCount >= 20) {
-    return
-  }
-
-  const delay = Math.min(1500 + stagedPollCount * 500, 5000)
-  stagedPollTimer = setTimeout(async () => {
-    stagedPollCount++
-    const pendingList = stagedChatPhotos.value.filter((p) => p.status === 'pending' || p.status === 'processing')
-    for (const p of pendingList) {
-      try {
-        const latest = await getPhoto(p.id)
-        const idx = stagedChatPhotos.value.findIndex((item) => item.id === p.id)
-        if (idx !== -1) {
-          stagedChatPhotos.value[idx] = latest
-        }
-      } catch {
-        // Non-blocking poll
-      }
-    }
-    if (hasPendingStagedPhotos.value) {
-      checkAndScheduleStagedPoll()
-    }
-  }, delay)
-}
-
-watch(
-  hasPendingStagedPhotos,
-  (hasPending) => {
-    if (hasPending) {
-      checkAndScheduleStagedPoll()
-    } else {
-      stagedPollCount = 0
-      if (stagedPollTimer) {
-        clearTimeout(stagedPollTimer)
-        stagedPollTimer = null
-      }
-    }
-  },
-  { immediate: true }
+const hasPendingStagedPhotos = computed(() =>
+  stagedChatPhotos.value.some(p => p.status === 'pending' || p.status === 'processing')
+)
+const hasUnreadyStagedPhotos = computed(() => stagedChatPhotos.value.some(p => p.status !== 'ready'))
+const hasFailedOrBlockedStagedPhotos = computed(() =>
+  stagedChatPhotos.value.some(p => p.status === 'failed' || p.status === 'blocked')
 )
 
-async function handleRetryStagedPhoto(photoId: string) {
-  const photo = stagedChatPhotos.value.find((p) => p.id === photoId)
-  if (!photo) return
-  try {
-    const updated = await retryPhoto(photo.id, photo.version)
-    const idx = stagedChatPhotos.value.findIndex((p) => p.id === photo.id)
-    if (idx !== -1) {
-      stagedChatPhotos.value[idx] = updated
-    }
-    stagedPollCount = 0
-    checkAndScheduleStagedPoll()
-  } catch {
-    // Non-blocking
-  }
-}
-
 onBeforeUnmount(() => {
+  active = false
+  messageLoadGen++
   stopRequestPolling()
+  stopChatPhotoPoll()
   window.removeEventListener('online', reconnectRequest)
-
-  if (chatPollTimer) {
-    clearTimeout(chatPollTimer)
-    chatPollTimer = null
-  }
-  if (stagedPollTimer) {
-    clearTimeout(stagedPollTimer)
-    stagedPollTimer = null
-  }
 })
 
 // Generation counter to invalidate stale loads when switching or on create/delete
@@ -327,19 +275,19 @@ const messagesContainerRef = ref<HTMLElement | null>(null)
 
 onMounted(async () => {
   await fetchConversations()
+  if (!active) return
   let saved: string | null = null
   try { saved = localStorage.getItem(storageKey()) } catch { /* Storage is optional. */ }
   if (saved && conversations.value.some(c => c.id === saved)) await selectConversation(saved)
   else rememberConversation(null)
-  window.addEventListener('online', reconnectRequest)
+  if (active) window.addEventListener('online', reconnectRequest)
 })
 
 async function fetchConversations() {
   loadingConversations.value = true
   errorMessage.value = ''
   try {
-    const res = await listConversations()
-    conversations.value = res.items || []
+    await reloadConversationsPreservingSelection(false)
     loadingConversations.value = false
     // Initial AI view remains a new blank chat rather than auto-selecting history
   } catch (err: any) {
@@ -348,31 +296,28 @@ async function fetchConversations() {
   }
 }
 
-async function reloadConversationsPreservingSelection() {
+async function reloadConversationsPreservingSelection(ignoreFailure = true) {
+  const knownIds = new Set(conversations.value.map(conversation => conversation.id))
   try {
     const res = await listConversations()
-    conversations.value = res.items || []
-  } catch {
-    // Non-blocking reload
+    if (!active) return
+    const items = res.items || []
+    const loadedIds = new Set(items.map(conversation => conversation.id))
+    const createdWhileLoading = conversations.value.filter(conversation => !knownIds.has(conversation.id) && !loadedIds.has(conversation.id))
+    conversations.value = [...createdWhileLoading, ...items]
+  } catch (err) {
+    if (!ignoreFailure) throw err
   }
 }
 
 async function selectConversation(id: string) {
   if (activeConversationId.value === id && messages.value.length > 0) return
-
-  // Preserve draft of current active conversation or blank chat before switching
-  if (activeConversationId.value) {
-    drafts.value[activeConversationId.value] = inputContent.value
-  } else {
-    drafts.value['new'] = inputContent.value
-  }
-
   stopRequestPolling()
+  stopChatPhotoPoll()
   sendingMessage.value = false
+  draftFor(id)
   activeConversationId.value = id
   rememberConversation(id)
-  // Restore draft for this conversation
-  inputContent.value = drafts.value[id] || ''
   messages.value = []
 
   const currentGen = ++messageLoadGen
@@ -387,7 +332,7 @@ async function selectConversation(id: string) {
     }
     messages.value = res.items || []
     await recoverRequests(id)
-    await scrollToBottom()
+    if (currentGen === messageLoadGen) await scrollToBottom()
   } catch (err: any) {
     if (currentGen !== messageLoadGen || activeConversationId.value !== id) {
       return
@@ -402,19 +347,14 @@ async function selectConversation(id: string) {
 
 function handleStartNewConversation() {
   stopRequestPolling()
+  stopChatPhotoPoll()
   sendingMessage.value = false
   rememberConversation(null)
-  // Preserve draft of current conversation before resetting to blank
-  if (activeConversationId.value) {
-    drafts.value[activeConversationId.value] = inputContent.value
-  }
+  if (!activeConversationId.value && activeDraft.value.submitting) drafts.set(null, emptyDraft())
   messageLoadGen++
   activeConversationId.value = null
   messages.value = []
   loadingMessages.value = false
-  inputContent.value = drafts.value['new'] || ''
-  stagedChatPhotos.value = []
-  chatPhotoPickerRef.value?.clear()
   errorMessage.value = ''
   nextTick(() => {
     composerInputRef.value?.focus()
@@ -435,17 +375,17 @@ async function handleConfirmDelete() {
   try {
     await deleteConversation(targetId)
     conversations.value = conversations.value.filter((c) => c.id !== targetId)
-    delete drafts.value[targetId]
+    drafts.delete(targetId)
 
     // If deleting the active conversation, reset to blank chat
     if (activeConversationId.value === targetId) {
       stopRequestPolling()
+      stopChatPhotoPoll()
       rememberConversation(null)
       sendingMessage.value = false
       messageLoadGen++
       activeConversationId.value = null
       messages.value = []
-      inputContent.value = drafts.value['new'] || ''
       loadingMessages.value = false
     }
     showDeleteConfirm.value = false
@@ -459,7 +399,9 @@ async function handleConfirmDelete() {
 
 let requestTimer: ReturnType<typeof setTimeout> | null = null
 let requestGeneration = 0
-let pendingRequest: { conversationId: string; requestId: string } | null = null
+type PendingRequest = { conversationId: string; requestId: string }
+let pendingRequest: PendingRequest | null = null
+let pollingRequest: PendingRequest | null = null
 function stopRequestPolling() {
   requestGeneration++
   if (requestTimer) clearTimeout(requestTimer)
@@ -471,20 +413,36 @@ function reconnectRequest() {
   else if (activeConversationId.value) void recoverRequests(activeConversationId.value)
 }
 async function recoverRequests(id: string) {
+  const generation = requestGeneration
   try {
     const jobs = await listChatRequests(id)
-    if (activeConversationId.value !== id) return
+    if (generation !== requestGeneration || activeConversationId.value !== id || pendingRequest) return
     const pending = jobs.items.find(j => j.status === 'queued' || j.status === 'running')
-    if (pending) { sendingMessage.value = true; pendingRequest = { conversationId: id, requestId: pending.id }; void pollRequest(id, pending.id, requestGeneration) }
+    if (pending) trackRequest(id, pending.id)
   } catch { /* History is still available; reconnect will retry request discovery. */ }
 }
+function trackRequest(id: string, rid: string) {
+  if (pendingRequest) return
+  sendingMessage.value = true
+  pendingRequest = { conversationId: id, requestId: rid }
+  void pollRequest(id, rid, requestGeneration)
+}
+
+watch([activeConversationId, () => activeDraft.value.acceptedRequestId, loadingMessages], ([id, rid, loading]) => {
+  if (id && rid && !loading) trackRequest(id, rid)
+})
+
 async function pollRequest(id: string, rid: string, generation: number) {
-  if (generation !== requestGeneration || activeConversationId.value !== id) return
+  const request = pendingRequest
+  const isCurrent = () => request === pendingRequest && generation === requestGeneration && activeConversationId.value === id
+  if (!request || request.requestId !== rid || pollingRequest === request || !isCurrent()) return
   if (requestTimer) clearTimeout(requestTimer)
+  pollingRequest = request
   try {
     const job = await getChatRequest(id, rid)
+    if (!isCurrent()) return
     const history = await listMessages(id)
-    if (generation !== requestGeneration || activeConversationId.value !== id) return
+    if (!isCurrent()) return
     const optimistic = messages.value.find(m => m.id === 'pending-' + rid)
     messages.value = history.items || []
     if (optimistic && !messages.value.some(m => m.role === 'user' && m.content === optimistic.content && m.created_at >= optimistic.created_at) && (job.status === 'queued' || job.status === 'running')) messages.value.push(optimistic)
@@ -492,61 +450,82 @@ async function pollRequest(id: string, rid: string, generation: number) {
     if (job.status === 'completed' || job.status === 'failed') {
       sendingMessage.value = false
       pendingRequest = null
+      if (activeDraft.value.acceptedRequestId === rid) activeDraft.value.acceptedRequestId = null
       if (job.status === 'failed') errorMessage.value = job.error || '這次回覆未完成，請重新發問。'
       await reloadConversationsPreservingSelection()
-      await scrollToBottom()
+      if (generation === requestGeneration) await scrollToBottom()
       return
     }
   } catch (err) {
     if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
-      if (generation === requestGeneration) { stopRequestPolling(); sendingMessage.value = false; errorMessage.value = err.detail }
+      if (isCurrent()) {
+        if (activeDraft.value.acceptedRequestId === rid) activeDraft.value.acceptedRequestId = null
+        stopRequestPolling()
+        sendingMessage.value = false
+        errorMessage.value = err.detail
+      }
       return
     }
     // An interrupted connection does not cancel work or create another request.
+  } finally {
+    if (pollingRequest === request) pollingRequest = null
   }
-  if (generation === requestGeneration && activeConversationId.value === id) requestTimer = setTimeout(() => void pollRequest(id, rid, generation), navigator.onLine ? 1500 : 5000)
+  if (isCurrent()) requestTimer = setTimeout(() => void pollRequest(id, rid, generation), navigator.onLine ? 1500 : 5000)
 }
 async function handleSendMessage() {
-  const content = inputContent.value.trim()
-  if ((!content && !stagedChatPhotos.value.length) || sendingMessage.value || hasUnreadyStagedPhotos.value) return
-  const photos = [...stagedChatPhotos.value]
+  const draft = activeDraft.value
+  const text = draft.text
+  const content = text.trim()
+  const photos = [...draft.photos]
+  if ((!content && !photos.length) || loadingMessages.value || sendingMessage.value || draft.submitting || draft.uploading || hasUnreadyStagedPhotos.value) return
+  stopRequestPolling()
   const generation = requestGeneration
-  const loadGeneration = messageLoadGen
+  const session = getCsrfToken()
+  const isCurrentSession = () => session === getCsrfToken()
+  const isCurrentView = () => generation === requestGeneration && draft === activeDraft.value
   let targetId = activeConversationId.value
+  draft.submitting = true
   sendingMessage.value = true
   errorMessage.value = ''
   try {
     if (!targetId) {
       const created = await createConversation({})
+      if (!isCurrentSession()) return
       conversations.value.unshift(created)
       targetId = created.id
-      if (loadGeneration === messageLoadGen) { activeConversationId.value = targetId; rememberConversation(targetId) }
-      else { drafts.value[targetId] = content; return }
+      drafts.set(targetId, draft)
+      if (isCurrentView()) {
+        activeConversationId.value = targetId
+        rememberConversation(targetId)
+      }
+      if (drafts.get(null) === draft) drafts.set(null, emptyDraft())
     }
     const rid = crypto.randomUUID()
     const payload = { content, ...(photos.length ? { photo_ids: photos.map(p => p.id) } : {}) }
     // Repeat only this exact idempotent request if its acknowledgement is lost.
     let accepted = false
     for (let attempt = 0; attempt < 2 && !accepted; attempt++) {
+      if (!isCurrentSession()) return
       try { await enqueueMessage(targetId, rid, payload); accepted = true }
       catch (err) { if (err instanceof ApiError || attempt === 1) throw err }
     }
-    if (generation !== requestGeneration || activeConversationId.value !== targetId) return
-    inputContent.value = ''
-    stagedChatPhotos.value = []
-    chatPhotoPickerRef.value?.clear()
-    delete drafts.value[targetId]
-    delete drafts.value['new']
-    pendingRequest = { conversationId: targetId, requestId: rid }
-    messages.value.push({ id: 'pending-' + rid, role: 'user', content, status: 'answered', citations: [], photos, created_at: new Date().toISOString() })
-    await scrollToBottom()
-    void pollRequest(targetId, rid, generation)
+    if (!isCurrentSession()) return
+    if (draft.text === text) draft.text = ''
+    const sentPhotoIds = new Set(photos.map(photo => photo.id))
+    draft.photos = draft.photos.filter(photo => !sentPhotoIds.has(photo.id))
+    draft.acceptedRequestId = rid
+    if (isCurrentView()) {
+      messages.value.push({ id: 'pending-' + rid, role: 'user', content, status: 'answered', citations: [], photos, created_at: new Date().toISOString() })
+      void scrollToBottom()
+    }
   } catch (err) {
-    if (generation === requestGeneration) {
+    if (isCurrentSession() && isCurrentView()) {
       sendingMessage.value = false
       errorMessage.value = err instanceof ApiError ? err.detail : '連線中斷；已送出的問題會繼續處理，重新連線後可接回回覆。'
       if (targetId) await recoverRequests(targetId)
     }
+  } finally {
+    draft.submitting = false
   }
 }
 
@@ -865,18 +844,20 @@ function handleCitationClick(citation: Citation) {
           <form class="chat-form" @submit.prevent="handleSendMessage">
             <div class="composer-picker-row">
               <PhotoPicker
-                ref="chatPhotoPickerRef"
+                :key="activeConversationId ?? 'new'"
                 v-model:photos="stagedChatPhotos"
+                :begin-upload="beginComposerUpload"
+                :disabled="activeDraft.uploading || activeDraft.submitting"
                 :icon-only="true"
                 :compact="true"
                 :multiple="true"
                 :max-photos="4"
                 button-text="選取照片"
                 camera-button-text="拍照"
-                @retry="handleRetryStagedPhoto"
               />
 
-              <div v-if="hasPendingStagedPhotos" class="reading-indicator" role="status" aria-live="polite">
+              <div v-if="activeDraft.uploadError" class="staged-alert-hint" role="alert">{{ activeDraft.uploadError }}</div>
+              <div v-else-if="hasPendingStagedPhotos" class="reading-indicator" role="status" aria-live="polite">
                 <div class="page-spinner-sm ui-spinner" aria-hidden="true"></div>
                 <span class="reading-text">正在識別照片內容...</span>
               </div>
@@ -895,14 +876,16 @@ function handleCitationClick(citation: Citation) {
               class="form-input chat-textarea"
               placeholder="問問你的旅行回憶…"
               rows="2"
-              :disabled="sendingMessage || loadingMessages"
-              @keydown.enter.exact.prevent="handleSendMessage"
+              :disabled="sendingMessage || loadingMessages || activeDraft.submitting"
+              @compositionstart="composing = true"
+              @compositionend="composing = false"
+              @keydown.enter.exact="onComposerKeydown"
             ></textarea>
 
             <button
               type="submit"
               class="btn btn-primary send-btn"
-              :disabled="sendingMessage || loadingMessages || hasUnreadyStagedPhotos || (!inputContent.trim() && stagedChatPhotos.length === 0)"
+              :disabled="sendingMessage || loadingMessages || activeDraft.submitting || activeDraft.uploading || hasUnreadyStagedPhotos || (!inputContent.trim() && stagedChatPhotos.length === 0)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <line x1="22" y1="2" x2="11" y2="13" />

@@ -45,3 +45,22 @@ export interface SearchResponse {
   clarification: string | null
   vector_status: string
 }
+
+export function createRecallState() {
+  return {
+    query: '',
+    selectedTripId: '',
+    selectedCity: '',
+    selectedCategory: '',
+    dateFrom: '',
+    dateTo: '',
+    searchLimit: 10,
+    showFilters: false,
+    searchResult: null as SearchResponse | null,
+    photoResultsOpen: false,
+    footprintResultsOpen: true,
+    searchPhotos: [] as PhotoDTO[]
+  }
+}
+
+export type RecallState = ReturnType<typeof createRecallState>

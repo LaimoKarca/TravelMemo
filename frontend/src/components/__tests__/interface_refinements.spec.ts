@@ -6,7 +6,7 @@ import ConfirmDialog from '../ConfirmDialog.vue'
 import * as travel from '../../api/travel'
 import * as photos from '../../api/photos'
 
-const trip = { id: 't1', name: '京都慢旅', start_date: '2026-11-01', end_date: '2026-11-03', timezone: 'Asia/Tokyo', description: '河邊散步', version: 1 }
+const trip = { id: 't1', name: '京都慢旅', start_date: '2026-11-01', end_date: '2026-11-03', timezone: 'Asia/Tokyo', description: '河邊散步', version: 1, cover_photo_id: null }
 const detail = { trip, events: [], next_edges: [] }
 const user = { id: 'u1', email: 'tester@example.com' }
 enableAutoUnmount(afterEach)

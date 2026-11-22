@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from backend.auth import AuthService
 from backend.config import Settings
+from backend.photo_store import MemoryPhotoStore
 from backend.store import MemoryStore
 from backend.travel import create_travel_router
 from backend.travel_store import MemoryTravelRepository
@@ -49,6 +50,36 @@ def sign_in(auth, email="alice@example.com", user_id="user-alice"):
         },
     )
     return token, csrf, user_id
+
+
+def test_trip_list_includes_only_owned_cover_thumbnails(travel_app):
+    client, auth, repo, _, _ = travel_app
+    token, csrf, owner = sign_in(auth)
+    client.cookies.set("travelmemo_session", token)
+    photo_store = MemoryPhotoStore()
+    repo.photo_store = photo_store
+    photo_store.create(owner, {"id": "my-cover", "thumbnail_path": "my-thumb.webp"})
+    photo_store.create("user-bob", {"id": "other-cover", "thumbnail_path": "other-thumb.webp"})
+    photo_store.create(owner, {"id": "no-thumbnail"})
+    trip = client.post(
+        "/api/v1/trips",
+        json={"name": "Trip", "start_date": "2026-06-01", "end_date": "2026-06-05"},
+        headers={"X-CSRF-Token": csrf},
+    ).json()
+
+    for cover_id, expected in (
+        (None, None),
+        ("my-cover", "my-cover"),
+        ("other-cover", None),
+        ("no-thumbnail", None),
+        ("missing-photo", None),
+    ):
+        photo_store.set_cover(owner, trip["id"], cover_id)
+        response = client.get("/api/v1/trips")
+        assert response.status_code == 200
+        assert response.json()["items"] == [{**trip, "cover_photo_id": expected}]
+
+    assert repo.get_trips(owner) == [trip]
 
 
 def test_auth_and_csrf_enforcement(travel_app):

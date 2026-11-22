@@ -133,11 +133,17 @@ class MemoryTravelRepository:
     def close(self):
         pass
 
-    def get_trips(self, owner_id: str) -> list[dict]:
+    def get_trips(self, owner_id: str, *, include_cover: bool = False) -> list[dict]:
         with self.lock:
             user_trips = [
                 format_trip(t) for t in self.trips.values() if t.get("owner_id") == owner_id
             ]
+            if include_cover:
+                photo_store = self.photo_store
+                for trip in user_trips:
+                    cover_id = photo_store.get_cover(owner_id, trip["id"]) if photo_store else None
+                    photo = photo_store.get(owner_id, cover_id) if cover_id else None
+                    trip["cover_photo_id"] = cover_id if photo and photo.get("thumbnail_path") else None
             # sort start_date descending, id ascending
             user_trips.sort(key=lambda t: (-int(t["start_date"].replace("-", "")), t["id"]))
             return user_trips
@@ -585,18 +591,27 @@ class Neo4jTravelRepository:
     def close(self):
         pass
 
-    def get_trips(self, owner_id: str) -> list[dict]:
+    def get_trips(self, owner_id: str, *, include_cover: bool = False) -> list[dict]:
         with self.driver.session(database=self.database) as session:
             res = session.run(
                 """
                 MATCH (u:User {id: $owner_id})-[:OWNS]->(t:Trip)
                 RETURN t.id AS id, t.name AS name, t.start_date AS start_date, t.end_date AS end_date,
-                       t.timezone AS timezone, t.description AS description, t.version AS version
+                       t.timezone AS timezone, t.description AS description, t.version AS version,
+                       CASE WHEN $include_cover AND EXISTS {
+                           MATCH (u)-[:OWNS]->(cover:Photo {id: t.cover_photo_id, owner_id: $owner_id})
+                           WHERE cover.thumbnail_path <> ''
+                       } THEN t.cover_photo_id END AS cover_photo_id
                 ORDER BY t.start_date DESC, t.id ASC
                 """,
                 owner_id=owner_id,
+                include_cover=include_cover,
             )
-            return [dict(record) for record in res]
+            trips = [dict(record) for record in res]
+            if not include_cover:
+                for trip in trips:
+                    trip.pop("cover_photo_id")
+            return trips
 
     def get_trip(self, owner_id: str, trip_id: str) -> dict | None:
         with self.driver.session(database=self.database) as session:

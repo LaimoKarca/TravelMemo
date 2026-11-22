@@ -3,13 +3,14 @@ import { mount, flushPromises } from '@vue/test-utils'
 import ConversationView from '../ConversationView.vue'
 import RecallSearch from '../RecallSearch.vue'
 import EventDialog from '../EventDialog.vue'
+import PhotoGallery from '../PhotoGallery.vue'
 import * as convApi from '../../api/conversation'
 import * as searchApi from '../../api/search'
 import * as photosApi from '../../api/photos'
 import * as travelApi from '../../api/travel'
 import type { Message } from '../../types/conversation'
 import type { PhotoDTO } from '../../types/photo'
-import type { Trip, Event } from '../../types/travel'
+import type { TripListItem, Event } from '../../types/travel'
 
 const mockPhoto: PhotoDTO = {
   id: 'photo-chat-1',
@@ -57,7 +58,7 @@ const mockMessageWithPhotos: Message = {
   created_at: '2026-11-20T10:02:00Z'
 }
 
-const mockTrips: Trip[] = [
+const mockTrips: TripListItem[] = [
   {
     id: 'trip-1',
     name: '京都秋楓紀行',
@@ -65,6 +66,7 @@ const mockTrips: Trip[] = [
     end_date: '2026-11-25',
     timezone: 'Asia/Tokyo',
     description: '',
+    cover_photo_id: null,
     version: 1
   }
 ]
@@ -262,6 +264,56 @@ describe('Media Frontend Integration', () => {
     expect(submitCall[1]).toEqual(['photo-chat-1'])
   })
 
+  it('ignores a previous footprint photo load and prevents deleting its photo', async () => {
+    const [event] = (await travelApi.getTrip('trip-1')).events
+    let finish!: (value: { items: PhotoDTO[] }) => void
+    const otherPhoto = { ...mockPhoto, id: 'current-photo' }
+    vi.mocked(photosApi.listPhotos)
+      .mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+      .mockResolvedValueOnce({ items: [otherPhoto] })
+    const remove = vi.spyOn(photosApi, 'deletePhoto')
+    const wrapper = mount(EventDialog, { props: { visible: true, trip: mockTrips[0], event } })
+    await wrapper.setProps({ visible: false })
+    await wrapper.setProps({ visible: true, event: { ...event, id: 'other-event' } })
+    await flushPromises()
+    finish({ items: [mockPhoto] })
+    await flushPromises()
+    const album = wrapper.getComponent(PhotoGallery)
+    expect(album.props('photos')).toEqual([otherPhoto])
+    album.vm.$emit('delete', { photoId: mockPhoto.id, version: mockPhoto.version })
+    expect(remove).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('returns a delayed upload to its original conversation only', async () => {
+    vi.mocked(convApi.listConversations).mockResolvedValueOnce({ items: [
+      { id: 'a', title: '甲對話', created_at: '2026-11-20T10:00:00Z' },
+      { id: 'b', title: '乙對話', created_at: '2026-11-20T09:00:00Z' }
+    ] })
+    let finish!: (photo: PhotoDTO) => void
+    vi.spyOn(photosApi, 'uploadPhoto').mockReturnValueOnce(new Promise(resolve => { finish = resolve }))
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+    const [a, b] = wrapper.findAll('.conversation-item')
+    await a.trigger('click')
+    await flushPromises()
+    await wrapper.get('#chat-message-input').setValue('甲草稿')
+    const picker = wrapper.findAll('input[type="file"]')[1]
+    Object.defineProperty(picker.element, 'files', { value: [new File(['image'], 'a.jpg', { type: 'image/jpeg' })] })
+    await picker.trigger('change')
+    await b.trigger('click')
+    await flushPromises()
+    await wrapper.get('#chat-message-input').setValue('乙草稿')
+    finish(mockPhoto)
+    await flushPromises()
+    expect(wrapper.find('.staged-preview-item').exists()).toBe(false)
+    await a.trigger('click')
+    await flushPromises()
+    expect(wrapper.get<HTMLTextAreaElement>('#chat-message-input').element.value).toBe('甲草稿')
+    expect(wrapper.findAll('.staged-preview-item')).toHaveLength(1)
+    wrapper.unmount()
+  })
+
   it('disables sending when staged photo is pending, displays reading indicator, and polls until ready', async () => {
     vi.useFakeTimers()
     const pendingPhoto: PhotoDTO = { ...mockPhoto, id: 'photo-pending-1', status: 'pending' }
@@ -306,6 +358,7 @@ describe('Media Frontend Integration', () => {
     await flushPromises()
 
     expect(getPhotoSpy).toHaveBeenCalledWith('photo-pending-1')
+    expect(getPhotoSpy).toHaveBeenCalledTimes(1)
 
     // Now photo status is ready: reading indicator disappears, send button enabled
     expect(wrapper.find('.reading-indicator').exists()).toBe(false)
@@ -338,6 +391,12 @@ describe('Media Frontend Integration', () => {
     // Alert hint is shown
     expect(wrapper.find('.staged-alert-hint').exists()).toBe(true)
     expect(wrapper.text()).toContain('照片未就緒，請重試或移除無法識別的照片')
+    const retry = vi.spyOn(photosApi, 'retryPhoto').mockResolvedValue({ ...failedPhoto, status: 'ready' })
+    await wrapper.get('.btn-staged-retry').trigger('click')
+    await flushPromises()
+    expect(retry).toHaveBeenCalledExactlyOnceWith(failedPhoto.id, failedPhoto.version)
+    picker.vm.$emit('update:photos', [failedPhoto])
+    await flushPromises()
 
     // Send button disabled
     const sendBtn = wrapper.find('.send-btn')

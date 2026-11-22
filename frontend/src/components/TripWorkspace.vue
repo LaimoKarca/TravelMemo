@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import type { User } from '../types/auth'
 import type {
   Trip,
+  TripListItem,
   Event,
   CreateTripPayload,
   UpdateTripPayload,
   CreateEventPayload,
   UpdateEventPayload
 } from '../types/travel'
-import type { SearchItem, SearchEvent } from '../types/search'
-import type { Citation } from '../types/conversation'
+import { createRecallState, type SearchItem, type SearchEvent } from '../types/search'
+import type { ChatWorkspaceState, Citation } from '../types/conversation'
 import {
   listTrips,
   createTrip,
@@ -61,6 +62,8 @@ const emit = defineEmits<{
 }>()
 
 const { isTabWashing, triggerTabWash, handleActionClick } = useTravelMotion()
+const recallState = reactive(createRecallState())
+const chatWorkspace = reactive<ChatWorkspaceState>({ drafts: new Map(), conversations: [] })
 
 // Workspace active tab navigation
 type WorkspaceTab = 'trips' | 'footprints' | 'search' | 'chat'
@@ -185,7 +188,7 @@ function clearAlert() {
 }
 
 // Data state
-const trips = ref<Trip[]>([])
+const trips = ref<TripListItem[]>([])
 const clockNow = ref(new Date())
 let clockTimer: ReturnType<typeof setInterval> | undefined
 function refreshClock() { clockNow.value = new Date() }
@@ -225,7 +228,13 @@ const currentTripPhotos = ref<PhotoDTO[]>([])
 const currentTripCoverId = ref<string | null>(null)
 const albumOpen = ref(false)
 const loadingTripPhotos = ref(false)
-const tripCovers = ref<Record<string, string | null>>({})
+const brokenCoverIds = reactive(new Map<string, string>())
+const editingCoverId = computed(() => {
+  if (!editingTrip.value) return null
+  const id = editingTrip.value.id
+  const item = trips.value.find(trip => trip.id === id)
+  return item ? item.cover_photo_id : currentTrip.value?.id === id ? currentTripCoverId.value : null
+})
 const tripPhotoPickerRef = ref<any>(null)
 
 // Lightbox for timeline event photos
@@ -381,6 +390,7 @@ async function fetchTrips() {
   try {
     const res = await listTrips()
     if (generation !== tripsGeneration) return
+    brokenCoverIds.clear()
     trips.value = res.items || []
   } catch (err: any) {
     if (generation === tripsGeneration) showAlert(err instanceof ApiError ? err.detail : '載入旅程清單失敗，請稍後再試。', 'error')
@@ -436,7 +446,6 @@ async function fetchTripPhotos(tripId: string) {
     if (generation !== photosGeneration || activeTripId.value !== tripId) return
     currentTripPhotos.value = photosRes.items || []
     currentTripCoverId.value = coverRes.photo_id
-    tripCovers.value[tripId] = coverRes.photo_id
   } catch {
     // Non-blocking
   } finally {
@@ -463,8 +472,24 @@ async function handleTripPhotoUploaded(photo: PhotoDTO) {
 }
 
 async function handleCoverUpdated(payload: { tripId: string; photoId: string | null }) {
-  tripCovers.value[payload.tripId] = payload.photoId
-  if (currentTrip.value?.id === payload.tripId) await fetchTripPhotos(payload.tripId)
+  const trip = trips.value.find(item => item.id === payload.tripId)
+  if (trip) trip.cover_photo_id = payload.photoId
+  brokenCoverIds.delete(payload.tripId)
+  if (loadingTrips.value) void fetchTrips()
+  if (activeTripId.value === payload.tripId) {
+    currentTripCoverId.value = payload.photoId
+    await fetchTripPhotos(payload.tripId)
+  }
+}
+
+function handlePhotoDeleted(photoId: string) {
+  currentTripPhotos.value = currentTripPhotos.value.filter(p => p.id !== photoId)
+  for (const trip of trips.value) {
+    if (trip.cover_photo_id === photoId) trip.cover_photo_id = null
+  }
+  if (currentTripCoverId.value === photoId) currentTripCoverId.value = null
+  if (loadingTrips.value) void fetchTrips()
+  if (loadingTripPhotos.value && activeTripId.value) void fetchTripPhotos(activeTripId.value)
 }
 
 async function handleReorderPhotos(photoIds: string[]) {
@@ -482,11 +507,7 @@ async function handleDeletePhoto(payload: { photoId: string; version: number }) 
   actionInProgress.value = true
   try {
     await deletePhoto(payload.photoId, payload.version)
-    currentTripPhotos.value = currentTripPhotos.value.filter((p) => p.id !== payload.photoId)
-    if (currentTripCoverId.value === payload.photoId) {
-      currentTripCoverId.value = null
-      if (currentTrip.value) tripCovers.value[currentTrip.value.id] = null
-    }
+    handlePhotoDeleted(payload.photoId)
     showAlert('已刪除照片。', 'info')
   } catch (err: any) {
     showAlert(err instanceof ApiError ? err.detail : '刪除照片失敗。', 'error')
@@ -548,18 +569,12 @@ function openCreateTripModal() {
   showTripModal.value = true
 }
 
-async function openEditTripModal(trip: Trip) {
+function openEditTripModal(trip: Trip) {
   clearAlert()
   editingTrip.value = trip
   tripModalError.value = ''
   tripModalConflict.value = false
   showTripModal.value = true
-  try {
-    const cover = await getTripCover(trip.id)
-    tripCovers.value[trip.id] = cover.photo_id
-  } catch {
-    showAlert('暫時無法讀取手記封面，請稍後重新開啟編輯。', 'error')
-  }
 }
 
 async function handleTripSubmit(payload: CreateTripPayload | UpdateTripPayload) {
@@ -916,10 +931,12 @@ function resetFilters() {
               >
                 <div class="trip-cover" aria-hidden="true">
                   <img
-                    v-if="tripCovers[trip.id]"
-                    :src="'/api/v1/photos/' + tripCovers[trip.id] + '/thumbnail'"
+                    v-if="trip.cover_photo_id && brokenCoverIds.get(trip.id) !== trip.cover_photo_id"
+                    :key="trip.cover_photo_id"
+                    :src="'/api/v1/photos/' + trip.cover_photo_id + '/thumbnail'"
                     alt=""
                     class="trip-cover-img"
+                    @error="brokenCoverIds.set(trip.id, trip.cover_photo_id)"
                   />
                   <svg v-else viewBox="0 0 360 88" fill="none" preserveAspectRatio="xMidYMid slice">
                     <path d="M0 22H360M0 66H360M45 0V88M135 0V88M225 0V88M315 0V88" stroke="currentColor" stroke-opacity=".07" />
@@ -1275,7 +1292,7 @@ function resetFilters() {
         </div>
 
         <div v-else-if="activeTab === 'footprints'" id="workspace-panel-footprints" role="tabpanel" aria-labelledby="workspace-tab-footprints" class="tabpanel-container" tabindex="0">
-          <StandaloneFootprints :focus-id="focusedStandaloneId" @view="handleViewEvent" @jump="handleJumpToTrip" @notice="showAlert" @unfocus="focusedStandaloneId = null" />
+          <StandaloneFootprints :focus-id="focusedStandaloneId" @view="handleViewEvent" @jump="handleJumpToTrip" @notice="showAlert" @unfocus="focusedStandaloneId = null" @photo-deleted="handlePhotoDeleted" />
         </div>
 
         <!-- Recall Search View -->
@@ -1289,6 +1306,7 @@ function resetFilters() {
         >
           <RecallSearch
             :trips="trips"
+            :state="recallState"
             @view-source="handleViewSearchSource"
             @jump-trip="handleJumpToTrip"
           />
@@ -1305,6 +1323,7 @@ function resetFilters() {
         >
           <ConversationView
             :account-id="String(user.id)"
+            :workspace="chatWorkspace"
             @open-trip="async (id) => { activeTab = 'trips'; await selectTrip(id) }"
             @view-citation="handleViewCitation"
             @jump-trip="handleJumpToTrip"
@@ -1348,7 +1367,7 @@ function resetFilters() {
     <TripDialog
       :visible="showTripModal"
       :trip="editingTrip"
-      :cover-photo-id="editingTrip ? tripCovers[editingTrip.id] : null"
+      :cover-photo-id="editingCoverId"
       @cover-updated="handleCoverUpdated"
       :loading="actionInProgress"
       :error-message="tripModalError"
@@ -1371,6 +1390,7 @@ function resetFilters() {
       @refresh="refreshEventFromModal"
       @cancel="showEventModal = false"
       @notice="(message, type) => showAlert(message, type)"
+      @photo-deleted="handlePhotoDeleted"
     />
 
     <ConfirmDialog

@@ -1,5 +1,19 @@
 import type { PhotoDTO } from './photo'
 
+export interface ChatDraft {
+  text: string
+  photos: PhotoDTO[]
+  uploading: boolean
+  uploadError: string
+  submitting: boolean
+  acceptedRequestId: string | null
+}
+
+export interface ChatWorkspaceState {
+  drafts: Map<string | null, ChatDraft>
+  conversations: ConversationSummary[]
+}
+
 export type MessageRole = 'user' | 'assistant'
 
 export type MessageStatus =

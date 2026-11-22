@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onBeforeUnmount, reactive, ref, toRefs } from 'vue'
 import type { EventDestination, Trip } from '../types/travel'
-import type { SearchItem, SearchPayload, SearchResponse, SearchPhotoItem } from '../types/search'
+import { createRecallState, type RecallState, type SearchItem, type SearchPayload, type SearchPhotoItem } from '../types/search'
 import type { PhotoDTO } from '../types/photo'
 import { searchRecall } from '../api/search'
 import { ApiError } from '../api/auth'
@@ -11,6 +11,7 @@ import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   trips: Trip[]
+  state?: RecallState
 }>()
 
 const emit = defineEmits<{
@@ -18,27 +19,14 @@ const emit = defineEmits<{
   (e: 'jump-trip', payload: EventDestination): void
 }>()
 
-const query = ref('')
-const selectedTripId = ref('')
-const selectedCity = ref('')
-const selectedCategory = ref('')
-const dateFrom = ref('')
-const dateTo = ref('')
-const searchLimit = ref<number>(10)
-
-// Extra filters collapsed initially per brief
-const showFilters = ref(false)
-
+const state = props.state ?? reactive(createRecallState())
+const {
+  query, selectedTripId, selectedCity, selectedCategory, dateFrom, dateTo, searchLimit,
+  showFilters, searchResult, photoResultsOpen, footprintResultsOpen, searchPhotos
+} = toRefs(state)
 const loading = ref(false)
 const errorMessage = ref('')
-const hasSearched = ref(false)
-const searchResult = ref<SearchResponse | null>(null)
-const photoResultsOpen = ref(false)
-const footprintResultsOpen = ref(true)
-
-// Image search state
-const searchPhotos = ref<PhotoDTO[]>([])
-const searchPhotoPickerRef = ref<any>(null)
+const searchPhotoPickerRef = ref<InstanceType<typeof PhotoPicker> | null>(null)
 
 // Lightbox for photo search results
 const viewerVisible = ref(false)
@@ -66,6 +54,7 @@ function jumpToPhotoTrip(item: SearchPhotoItem) {
 
 // Generation counter to guard against stale search results or races with reset
 let searchGeneration = 0
+onBeforeUnmount(() => { searchGeneration++ })
 
 async function handleSearch() {
   const trimmed = query.value.trim()
@@ -77,7 +66,6 @@ async function handleSearch() {
   const currentGen = ++searchGeneration
   errorMessage.value = ''
   loading.value = true
-  hasSearched.value = true
 
   const payload: SearchPayload = {
     query: trimmed,
@@ -108,7 +96,6 @@ async function handleSearch() {
     if (currentGen !== searchGeneration) {
       return
     }
-    searchResult.value = null
     errorMessage.value = err instanceof ApiError ? err.detail : '檢索旅行回憶時發生錯誤，請稍後再試。'
   } finally {
     if (currentGen === searchGeneration) {
@@ -129,15 +116,10 @@ function handleResetFilters() {
   dateTo.value = ''
   searchLimit.value = 10
   errorMessage.value = ''
-  hasSearched.value = false
   photoResultsOpen.value = false
   footprintResultsOpen.value = true
   searchResult.value = null
   loading.value = false
-}
-
-function toggleFilters() {
-  showFilters.value = !showFilters.value
 }
 
 
@@ -145,66 +127,52 @@ function toggleFilters() {
 
 <template>
   <section class="recall-search-section" aria-label="回憶搜尋">
-    <!-- Confident short page heading per brief, no decorative filler subtitle -->
-    <div class="search-header">
-      <h2 class="search-title">回憶搜尋</h2>
-
-
-    </div>
-
-    <!-- Search Bar & Controls -->
-    <form class="search-form-card" @submit.prevent="handleSearch">
-      <!-- Main Search Input and Readily Available Trip Selector per brief -->
-      <div class="main-query-row">
-        <div class="query-input-wrap">
+    <h2 class="search-title">回憶搜尋</h2>
+    <form class="search-form-card" role="search" aria-label="搜尋旅行回憶" @submit.prevent="handleSearch">
+      <PhotoPicker
+        ref="searchPhotoPickerRef"
+        v-model:photos="searchPhotos"
+        search-bar
+        icon-only
+        compact
+        :max-photos="4"
+      >
+        <template #before-controls>
           <label for="search-query-input" class="sr-only">搜尋關鍵字</label>
-          <div class="input-with-icon">
-            <svg class="search-lens-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              id="search-query-input"
-              v-model="query"
-              type="text"
-              class="form-input query-input"
-              placeholder="搜尋地點或行程紀錄..."
-              :disabled="loading"
-              :required="searchPhotos.length === 0"
-            />
-          </div>
-        </div>
-
-        <PhotoPicker ref="searchPhotoPickerRef" v-model:photos="searchPhotos" :icon-only="true" :compact="true" :multiple="true" :max-photos="4" />
-
-        <!-- Clear filter toggle button -->
-        <button
-          type="button"
-          class="btn btn-secondary filter-toggle-btn"
-          :aria-expanded="showFilters"
-          @click="toggleFilters"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-          </svg>
-          <span class="sr-only">{{ showFilters ? '收起篩選' : '進階篩選' }}</span>
-        </button>
-
-        <button
-          type="submit"
-          class="btn btn-primary search-submit-btn"
-          :disabled="loading || searchPhotos.some(p => p.status !== 'ready') || (!query.trim() && searchPhotos.length === 0)"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <span class="sr-only">{{ loading ? '搜尋中...' : '搜尋' }}</span>
-        </button>
-      </div>
-
+          <input
+            id="search-query-input"
+            v-model="query"
+            type="text"
+            class="form-input search-bar__input recall-query-input"
+            placeholder="搜尋地點或行程紀錄..."
+            :disabled="loading"
+            :required="searchPhotos.length === 0"
+          />
+        </template>
+        <template #after-controls>
+          <button
+            type="button"
+            class="icon-button search-bar__control"
+            :class="{ 'is-active': showFilters }"
+            :aria-expanded="showFilters"
+            aria-controls="recall-filters"
+            @click="showFilters = !showFilters"
+          >
+            <AppIcon name="filter" />
+            <span class="sr-only">{{ showFilters ? '收起篩選' : '進階篩選' }}</span>
+          </button>
+          <button
+            type="submit"
+            class="btn btn-primary search-submit-btn"
+            :disabled="loading || searchPhotos.some(p => p.status !== 'ready') || (!query.trim() && searchPhotos.length === 0)"
+          >
+            <AppIcon name="search" />
+            <span class="sr-only">{{ loading ? '搜尋中...' : '搜尋' }}</span>
+          </button>
+        </template>
+      </PhotoPicker>
       <!-- Collapsible Additional Filters Grid (v-show preserves DOM access for tests/a11y) -->
-      <div v-show="showFilters" class="filters-grid">
+      <div v-show="showFilters" id="recall-filters" class="filters-grid">
         <!-- Trip scope stays with the other collapsible filters. -->
         <div class="trip-selector-wrap">
           <label for="filter-trip" class="filter-label">回憶來源</label>

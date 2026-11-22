@@ -2,7 +2,7 @@
 import { ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import type { PhotoDTO } from '../types/photo'
 import { uploadPhoto, retryPhoto, getPhoto } from '../api/photos'
-import { ApiError } from '../api/auth'
+import { ApiError, getCsrfToken } from '../api/auth'
 import AppIcon from './AppIcon.vue'
 
 const props = withDefaults(
@@ -19,6 +19,8 @@ const props = withDefaults(
     iconOnly?: boolean
     directIcons?: boolean
     nativePicker?: boolean
+    searchBar?: boolean
+    beginUpload?: () => { add: (photo: PhotoDTO) => void; finish: (error: string) => void }
   }>(),
   {
     multiple: true,
@@ -36,7 +38,6 @@ const emit = defineEmits<{
   (e: 'update:photos', photos: PhotoDTO[]): void
   (e: 'upload-complete', photo: PhotoDTO): void
   (e: 'remove', photoId: string): void
-  (e: 'retry', photoId: string): void
   (e: 'error', message: string): void
 }>()
 
@@ -89,6 +90,7 @@ let statusTimer: ReturnType<typeof setTimeout> | null = null
 let statusAttempts = 0
 let disposed = false
 let polling = false
+let uploadGeneration = 0
 const pending = () => stagedPhotos.value.some(p => p.status === 'pending' || p.status === 'processing')
 
 function scheduleStatus() {
@@ -148,6 +150,7 @@ function triggerGallery() {
 
 async function handleFileChange(event: Event) {
   closeMenu()
+  if (props.disabled || isUploading.value) return
   const target = event.target as HTMLInputElement
   const files = target.files
   if (!files || files.length === 0) return
@@ -165,20 +168,36 @@ async function handleFileChange(event: Event) {
   }
 
   if (props.autoUpload) {
+    const receiver = props.beginUpload?.()
+    const session = getCsrfToken()
+    const generation = ++uploadGeneration
+    const isCurrent = () => !disposed && generation === uploadGeneration
+    let uploadError = ''
     isUploading.value = true
     try {
       for (let i = 0; i < selectedFiles.length; i++) {
+        if (session !== getCsrfToken()) break
+        if (!receiver && !isCurrent()) break
         const file = selectedFiles[i]
         uploadProgressText.value = `上傳中 (${i + 1}/${selectedFiles.length})...`
         const photoDto = await uploadPhoto(file, file.type)
-        stagedPhotos.value.push(photoDto)
-        emit('upload-complete', photoDto)
-        emit('update:photos', [...stagedPhotos.value])
+        if (session !== getCsrfToken()) break
+        if (receiver) {
+          receiver.add(photoDto)
+        } else if (isCurrent()) {
+          stagedPhotos.value.push(photoDto)
+          emit('upload-complete', photoDto)
+          emit('update:photos', [...stagedPhotos.value])
+        }
       }
     } catch (err: any) {
-      errorMessage.value = err instanceof ApiError ? err.detail : '上傳照片失敗，請檢查格式或網路連線。'
-      emit('error', errorMessage.value)
+      uploadError = err instanceof ApiError ? err.detail : '上傳照片失敗，請檢查格式或網路連線。'
+      if (isCurrent() && !receiver) {
+        errorMessage.value = uploadError
+        emit('error', uploadError)
+      }
     } finally {
+      receiver?.finish(uploadError)
       isUploading.value = false
       uploadProgressText.value = ''
       if (target) target.value = ''
@@ -196,12 +215,12 @@ async function handleRetry(photo: PhotoDTO) {
   statusAttempts = 0
   try {
     const updated = await retryPhoto(photo.id, photo.version)
+    if (disposed) return
     const idx = stagedPhotos.value.findIndex((p) => p.id === photo.id)
     if (idx !== -1) {
       stagedPhotos.value[idx] = updated
     }
     emit('update:photos', [...stagedPhotos.value])
-    emit('retry', photo.id)
     scheduleStatus()
   } catch (err: any) {
     errorMessage.value = err instanceof ApiError ? err.detail : '重試照片識別失敗，請稍後再試。'
@@ -209,6 +228,7 @@ async function handleRetry(photo: PhotoDTO) {
 }
 
 function clear() {
+  uploadGeneration++
   stagedPhotos.value = []
   errorMessage.value = ''
   if (cameraInputRef.value) cameraInputRef.value.value = ''
@@ -252,7 +272,8 @@ defineExpose({
     />
 
     <!-- Action Buttons -->
-    <div class="picker-buttons-row">
+    <div class="picker-buttons-row" :class="{ 'search-bar': searchBar }">
+      <slot name="before-controls" />
       <button v-if="nativePicker" type="button" class="icon-button native-picker-btn" :aria-label="buttonText" :title="buttonText" :disabled="disabled || isUploading || stagedPhotos.length >= maxPhotos" @click="triggerGallery"><AppIcon name="camera" /></button>
       <details v-else-if="iconOnly" ref="menuRef" class="photo-source-menu" @keydown.esc.prevent="menuRef && (menuRef.open = false)">
         <summary class="icon-button" aria-label="加入圖片" title="加入圖片" :aria-disabled="disabled || isUploading" @click="(disabled || isUploading) && $event.preventDefault()"><AppIcon name="image" /></summary>
@@ -292,7 +313,7 @@ defineExpose({
         <span :class="{ 'sr-only': directIcons }">{{ buttonText }}</span>
       </button>
 
-      <span v-if="isUploading" class="upload-status-text">
+      <span v-if="isUploading && !searchBar" class="upload-status-text">
         <span class="spinner-small ui-spinner ui-spinner--current" aria-hidden="true"></span>
         <span>{{ uploadProgressText }}</span>
       </span>
@@ -300,7 +321,13 @@ defineExpose({
       <span v-else-if="!iconOnly && maxPhotos <= 100" class="picker-count-hint">
         ({{ stagedPhotos.length }}/{{ maxPhotos }})
       </span>
+      <slot name="after-controls" />
     </div>
+
+    <span v-if="isUploading && searchBar" class="upload-status-text" role="status">
+      <span class="spinner-small ui-spinner ui-spinner--current" aria-hidden="true"></span>
+      {{ uploadProgressText }}
+    </span>
 
     <!-- Error notice -->
     <div v-if="errorMessage" class="picker-error-msg" role="alert">
