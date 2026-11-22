@@ -77,6 +77,14 @@ describe('日常足跡', () => {
   it('編輯日常足跡時保留已儲存的時區', async () => {
     vi.spyOn(photos, 'listPhotos').mockResolvedValue({ items: [] })
     const wrapper = mount(EventDialog, { props: { visible: true, event: { ...footprint, timezone: 'Asia/Tokyo' } } })
+    const save = wrapper.get('button[type="submit"]')
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await wrapper.get('#event-time').setValue('01:20')
+    expect(save.attributes('disabled')).toBeUndefined()
+    await wrapper.get('#event-time').setValue('')
+    expect(save.attributes('disabled')).toBeDefined()
     await wrapper.get('#event-time').setValue('01:20')
     await wrapper.get('form').trigger('submit')
     const payload = wrapper.emitted('submit')?.[0]?.[0]

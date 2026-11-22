@@ -55,6 +55,35 @@ const clientValidationError = ref('')
 
 const isEdit = computed(() => !!props.event)
 const dialogTitle = computed(() => `${isEdit.value ? '編輯' : '記錄'}${props.trip ? '旅行' : '日常'}足跡`)
+const defaultCategory = computed(() => props.trip ? '景點' : '未分類')
+const eventFields = computed(() => {
+  const mapUrl = validMapUrl(location.value)
+  return {
+    place_name: placeName.value.trim(),
+    city: city.value.trim(),
+    address: mapUrl ? '' : location.value.trim(),
+    map_url: mapUrl,
+    category: category.value.trim(),
+    date: eventDate.value,
+    time: eventTime.value || null,
+    notes: notes.value,
+  }
+})
+const unchangedPlace = computed(() => {
+  const event = props.event
+  if (!event) return false
+  const { place_name, city, address, map_url } = eventFields.value
+  const originalMap = validMapUrl(event.map_url) || validMapUrl(event.address)
+  return place_name === event.place_name.trim() && city === (event.city || '').trim()
+    && map_url === originalMap && address === (originalMap ? '' : (event.address || '').trim())
+})
+const hasChanges = computed(() => {
+  const event = props.event
+  if (!event) return true
+  const { category, date, time, notes } = eventFields.value
+  return !unchangedPlace.value || category !== (event.category || defaultCategory.value).trim()
+    || date !== event.date || time !== (event.time || null) || notes !== (event.notes || '')
+})
 
 const addedCategories = ref<string[]>([])
 const addingCategory = ref(false)
@@ -186,8 +215,8 @@ function resetFormFromProps() {
   if (props.event) {
     placeName.value = props.event.place_name
     city.value = props.event.city || ''
-    location.value = props.event.map_url || props.event.address || ''
-    category.value = props.event.category || (props.trip ? '景點' : '未分類')
+    location.value = validMapUrl(props.event.map_url) || props.event.address || ''
+    category.value = props.event.category || defaultCategory.value
     eventDate.value = props.event.date
     eventTime.value = props.event.time || ''
     notes.value = props.event.notes || ''
@@ -195,7 +224,7 @@ function resetFormFromProps() {
     placeName.value = ''
     city.value = ''
     location.value = ''
-    category.value = props.trip ? '景點' : '未分類'
+    category.value = defaultCategory.value
     eventDate.value = props.trip?.start_date || getTripLocalDate(new Date(), defaultDailyTimezone)
     eventTime.value = ''
     notes.value = ''
@@ -223,10 +252,11 @@ watch(
 )
 
 function handleSubmit() {
-  if (savingEvent.value) return
+  if (savingEvent.value || !hasChanges.value) return
   clientValidationError.value = ''
 
-  const trimmedPlaceName = placeName.value.trim()
+  const fields = eventFields.value
+  const trimmedPlaceName = fields.place_name
   if (!trimmedPlaceName) {
     clientValidationError.value = '請填寫地點名稱（1 至 200 字元）。'
     return
@@ -236,17 +266,14 @@ function handleSubmit() {
     return
   }
 
-  const trimmedCity = city.value.trim()
+  const trimmedCity = fields.city
   if (trimmedCity.length > 200) {
     clientValidationError.value = '城市名稱不可超過 200 字元。'
     return
   }
 
   if (locationError.value) return
-  const mapUrl = validMapUrl(location.value)
-  const address = mapUrl ? '' : location.value.trim()
-
-  const trimmedCategory = category.value.trim()
+  const trimmedCategory = fields.category
   if (!trimmedCategory) {
     clientValidationError.value = '請填寫或選擇回憶分類（1 至 200 字元）。'
     return
@@ -271,39 +298,18 @@ function handleSubmit() {
     return
   }
 
-  const normalizedTime = eventTime.value ? eventTime.value : null
-  const old = props.event
-  const oldMapUrl = validMapUrl(old?.map_url) || validMapUrl(old?.address)
-  const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '')
-    && mapUrl === oldMapUrl && address === (oldMapUrl ? '' : (old.address || '').trim())
-  const placeIdToSubmit = unchangedPlace ? old.place_id : null
-
-  if (isEdit.value && props.event) {
+  if (props.event) {
     const payload: UpdateEventPayload = {
-      place_id: placeIdToSubmit,
-      place_name: trimmedPlaceName,
-      city: trimmedCity,
-      address,
-      map_url: mapUrl,
-      category: trimmedCategory,
-      date: eventDate.value,
-      time: normalizedTime,
-      notes: notes.value,
+      ...fields,
+      place_id: unchangedPlace.value ? props.event.place_id : null,
       version: props.event.version
     }
     emit('submit', payload)
   } else {
     const payload: CreateEventPayload = {
       ...(props.trip ? {} : { timezone: defaultDailyTimezone }),
-      place_id: placeIdToSubmit,
-      place_name: trimmedPlaceName,
-      city: trimmedCity,
-      address,
-      map_url: mapUrl,
-      category: trimmedCategory,
-      date: eventDate.value,
-      time: normalizedTime,
-      notes: notes.value
+      ...fields,
+      place_id: null,
     }
     emit('submit', payload, stagedPhotos.value.map((p) => p.id))
   }
@@ -433,7 +439,7 @@ onBeforeUnmount(() => { photoSession.value++ })
             type="submit"
             class="btn btn-primary editor-save event-save"
             :class="{ 'is-photo-pending': photosPending }"
-            :disabled="savingEvent || requiredFieldsMissing"
+            :disabled="savingEvent || requiredFieldsMissing || !hasChanges"
             :aria-label="photosPending ? '等待照片處理' : loading ? '儲存中' : isEdit ? '儲存修改' : '記錄足跡'"
             :title="isEdit ? '儲存修改' : '記錄足跡'"
             :aria-busy="savingEvent"

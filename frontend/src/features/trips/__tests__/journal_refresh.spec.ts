@@ -82,7 +82,7 @@ describe('Journal editing and resumable chat', () => {
     wrapper.unmount()
   })
   it('edits location independently and preserves place identity for note-only changes', async () => {
-    const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: '', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
+    const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: 'https://maps.app.goo.gl/ExampleMap123', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
     const wrapper = mount(EventDialog, { props: { visible: true, trip: { id: 'trip', name: '旅程', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }, event } })
     expect(wrapper.find('.more-details').exists()).toBe(false)
     const dateRow = wrapper.get('.date-time-row')
@@ -90,9 +90,14 @@ describe('Journal editing and resumable chat', () => {
     expect(dateRow.get('#event-time').attributes('type')).toBe('time')
     expect(dateRow.text()).toContain('2026/01/01')
     expect(wrapper.find('#existing-place-select').exists()).toBe(false)
+    const save = wrapper.get('button[type="submit"]')
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('#event-address').setValue(` ${event.address} `)
+    expect(save.attributes('disabled')).toBeDefined()
     await wrapper.get('#event-notes').setValue('舒服')
+    expect(save.attributes('disabled')).toBeUndefined()
     await wrapper.get('form').trigger('submit')
-    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ place_id: 'original', notes: '舒服' })
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({ place_id: 'original', map_url: event.address, notes: '舒服' })
     await wrapper.get('#event-place-name').setValue('山邊')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.emitted('submit')?.[1]?.[0]).toMatchObject({ place_id: null, place_name: '山邊', version: 1 })
