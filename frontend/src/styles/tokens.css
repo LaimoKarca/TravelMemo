@@ -1,0 +1,81 @@
+:root {
+  /* Autumn Cream & Maple Design Tokens per autumn-refresh-brief */
+  --color-canvas: #F6F1E7;
+  --color-paper: #FBF8F1;
+  --color-ink: #453A32;
+  --color-ink-secondary: #5C4F44;
+  --color-subtle: #766859;
+  --color-subtle-light: #9B8C7C;
+  --color-border: #DCD1BF;
+  --color-border-light: #E9E0D2;
+  --color-divider: #E9E0D2;
+
+  /* Autumn Accents */
+  --color-maple: #A95535;
+  --color-maple-hover: #894028;
+  --color-maple-subtle: #F1DFD2;
+  --color-maple-border: rgba(169, 85, 53, 0.25);
+
+  --color-olive: #6A7051;
+  --color-olive-pale: #E5E6D7;
+  --color-olive-text: #464B34;
+
+  --color-amber: #E0B65B;
+  --color-amber-subtle: #FAF2DF;
+  --color-amber-text: #634B16;
+
+  /* Semantic UI Tokens */
+  --color-primary: var(--color-maple);
+  --color-primary-hover: var(--color-maple-hover);
+  --color-primary-subtle: var(--color-maple-subtle);
+  --color-primary-border: var(--color-maple-border);
+
+  /* Contrast / Base */
+  --color-white: #FFFFFF;
+
+  /* Feedback States */
+  --color-error-text: #A62F19;
+  --color-error-bg: #FBECE8;
+  --color-error-border: #F3C4B8;
+  --color-success-text: #464B34;
+  --color-success-bg: #E5E6D7;
+  --color-success-border: #C8CCB4;
+  --color-info-text: #453A32;
+  --color-info-bg: #F1DFD2;
+  --color-info-border: #E0C7B5;
+  --color-warning-text: #634B16;
+  --color-warning-bg: #FAF2DF;
+  --color-warning-border: #E9D5A5;
+
+  /* Backward Compatibility Aliases for legacy cobalt/navy/teal/mint/yellow */
+  --color-navy: var(--color-ink);
+  --color-cobalt: var(--color-maple);
+  --color-cobalt-hover: var(--color-maple-hover);
+  --color-cobalt-subtle: var(--color-maple-subtle);
+  --color-cobalt-border: var(--color-maple-border);
+  --color-teal: var(--color-maple);
+  --color-teal-hover: var(--color-maple-hover);
+  --color-pale-blue: var(--color-canvas);
+  --color-mango: var(--color-amber);
+  --color-mango-subtle: var(--color-amber-subtle);
+  --color-mint: var(--color-olive-pale);
+  --color-mint-text: var(--color-olive-text);
+  --color-yellow: var(--color-amber);
+
+  /* Typography: Readable native sans for Chinese and Latin */
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Elevation & Borders */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --size-control: 44px;
+  --size-dialog-action: 48px;
+  --color-dialog-overlay: rgb(69 58 50 / .45);
+
+  --shadow-sm: 0 1px 3px rgba(69, 58, 50, 0.08);
+  --shadow-md: 0 4px 12px rgba(69, 58, 50, 0.1);
+  --shadow-notebook: var(--shadow-md);
+}

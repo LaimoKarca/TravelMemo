@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import BrandHeader from './components/BrandHeader.vue'
-import RouteMotif from './components/RouteMotif.vue'
-import LoginForm from './components/LoginForm.vue'
-import OtpForm from './components/OtpForm.vue'
-import TripWorkspace from './components/TripWorkspace.vue'
-import StatusAlert from './components/StatusAlert.vue'
+import BrandHeader from '@/features/auth/BrandHeader.vue'
+import RouteMotif from '@/features/auth/RouteMotif.vue'
+import LoginForm from '@/features/auth/LoginForm.vue'
+import OtpForm from '@/features/auth/OtpForm.vue'
+import TripWorkspace from '@/app/workspace/TripWorkspace.vue'
+import StatusAlert from '@/components/ui/StatusAlert.vue'
 import {
   requestCode,
   verifyCode,
@@ -13,8 +13,8 @@ import {
   logout as apiLogout,
   setUnauthorizedHandler,
   ApiError
-} from './api/auth'
-import type { User } from './types/auth'
+} from '@/api/auth'
+import type { User } from '@/types/auth'
 
 type AuthStep = 'loading_session' | 'email' | 'otp' | 'welcome'
 
@@ -204,4 +204,4 @@ async function handleLogout() {
   </main>
 </template>
 
-<style scoped src="./assets/styles/components/App.css"></style>
+<style scoped src="./App.css"></style>

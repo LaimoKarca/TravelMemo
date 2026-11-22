@@ -1,0 +1,213 @@
+* { scrollbar-color: #c7ab92 #f6f1e7; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: var(--color-canvas); }
+::-webkit-scrollbar-thumb { background: #c7ab92; border: 2px solid var(--color-canvas); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-maple); }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: var(--size-control); height: var(--size-control); border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-maple); cursor: pointer; padding: .6rem; }
+.icon-button:hover { background: var(--color-maple-subtle); }
+.icon-button:disabled { opacity: .45; cursor: default; }
+.icon-button:focus-visible { outline: 2px solid var(--color-maple); outline-offset: 2px; }
+:root {
+  scrollbar-color: #c7ab92 #f6f1e7;
+  scrollbar-width: thin;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 1024px) {
+  html { font-size: 17.6px; }
+  body { font-size: 16.5px !important; }
+}
+html,
+body {
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessible focus styling */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--color-maple);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Global Button Styles with 44px min touch target */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 1.125rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--color-maple);
+  color: #FFFFFF;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-maple-hover);
+}
+
+.btn-secondary {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  border-color: var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--color-canvas);
+  border-color: #C7BBA8;
+  color: var(--color-ink);
+}
+
+.btn-link {
+  background: transparent;
+  border: none;
+  color: var(--color-maple);
+  min-height: 44px;
+  padding: 0.5rem 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-link:hover:not(:disabled) {
+  color: var(--color-maple-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Form Controls with 44px min touch target */
+.form-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.875rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--color-ink);
+  background-color: var(--color-paper);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+/* Keep native Safari date/time controls within the surrounding field. */
+input.form-input[type="date"], input.form-input[type="time"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+}
+input.form-input[type="date"]::-webkit-date-and-time-value,
+input.form-input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-align: left; }
+
+.dialog-icon-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 0;
+  flex: 0 0 auto;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-paper);
+}
+.dialog-icon-actions > .btn { width: 100%; min-width: 0; min-height: var(--size-dialog-action); justify-content: center; padding: .7rem; border: 0; border-radius: 0; }
+.dialog-icon-actions > .btn + .btn { border-left: 1px solid var(--color-border); }
+.dialog-icon-actions > .btn-secondary { background: transparent; }
+.editor-dialog.dialog-card, .editor-dialog.save-modal-card { display: flex; flex-direction: column; padding: 0; gap: 0; min-height: 0; overflow: hidden; }
+.editor-dialog > .dialog-header { padding: 1rem 1.5rem; flex: 0 0 auto; }
+.editor-dialog > .dialog-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 0; overflow: hidden; }
+.editor-dialog .dialog-form-body { display: flex; flex-direction: column; gap: 1.25rem; flex: 1 1 auto; min-height: 0; padding: 0 1.5rem 1.25rem; overflow-y: auto; overscroll-behavior: contain; }
+.editor-dialog.save-modal-card > .dialog-form-body { padding-top: 1.25rem; }
+.editor-dialog > .conflict-banner, .editor-dialog > .error-banner { margin: 0 1.5rem .75rem; flex: 0 0 auto; }
+
+.form-input:focus {
+  border-color: var(--color-maple);
+  box-shadow: 0 0 0 3px rgba(169, 85, 53, 0.18);
+  outline: none;
+}
+
+.form-input:disabled {
+  background-color: var(--color-canvas);
+  color: var(--color-subtle-light);
+  cursor: not-allowed;
+}
+
+/* Wordmark style: confident sans-serif */
+.travelmemo-wordmark {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* Screen reader utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Keep editable controls readable without triggering iOS focus zoom.
+   This baseline intentionally wins over compact component typography. */
+@media (max-width: 1023px), (pointer: coarse) {
+  input:not(.otp-input):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]),
+  select, textarea { font-size: max(16px, 1rem) !important; }
+}
