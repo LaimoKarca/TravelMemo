@@ -15,6 +15,23 @@ import type { PhotoDTO } from '@/types/photo'
 describe('Journal editing and resumable chat', () => {
   beforeEach(() => { vi.restoreAllMocks(); localStorage.clear() })
   afterEach(() => { vi.useRealTimers() })
+  it('disables journal save until a required field is present and a real edit exists', async () => {
+    const trip = { id: 'edited-trip', name: '日記', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'UTC+08:00', description: '', version: 1 }
+    const wrapper = mount(TripDialog, { props: { visible: true, trip } })
+    const save = wrapper.get('button[type="submit"]')
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('#trip-timezone').setValue('UTC+8')
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('#trip-name-input').setValue('  ')
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('#trip-name-input').setValue('新的名稱')
+    expect(save.attributes('disabled')).toBeUndefined()
+    await wrapper.get('#trip-name-input').setValue(trip.name)
+    expect(save.attributes('disabled')).toBeDefined()
+    await wrapper.get('form').trigger('submit')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    wrapper.unmount()
+  })
   it('updates the cover for the trip being edited', async () => {
     const trip = { id: 'edited-trip', name: 'Trip', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }
     const photo = { id: 'uploaded-cover' } as PhotoDTO
@@ -68,7 +85,10 @@ describe('Journal editing and resumable chat', () => {
     const event = { id: 'event', trip_id: 'trip', place_id: 'original', place_name: '河邊', city: '', address: '', category: '景點', date: '2026-01-01', time: null, notes: '', position: 0, version: 1 }
     const wrapper = mount(EventDialog, { props: { visible: true, trip: { id: 'trip', name: '旅程', start_date: '2026-01-01', end_date: '2026-01-02', timezone: 'Asia/Taipei', description: '', version: 1 }, event } })
     expect(wrapper.find('.more-details').exists()).toBe(false)
-    expect(wrapper.get('#event-time').element.parentElement?.parentElement).toBe(wrapper.get('#event-date').element.parentElement?.parentElement)
+    const dateRow = wrapper.get('.date-time-row')
+    expect(dateRow.get('#event-date').attributes('type')).toBe('date')
+    expect(dateRow.get('#event-time').attributes('type')).toBe('time')
+    expect(dateRow.text()).toContain('2026/01/01')
     expect(wrapper.find('#existing-place-select').exists()).toBe(false)
     await wrapper.get('#event-notes').setValue('舒服')
     await wrapper.get('form').trigger('submit')
@@ -84,7 +104,11 @@ describe('Journal editing and resumable chat', () => {
     const wrapper = mount(EventDialog, { props: { visible: true } })
     const picker = wrapper.getComponent(PhotoPicker)
     const photo = { id: 'pending', status: 'processing' } as PhotoDTO
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('#event-place-name').setValue('  ')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeDefined()
     await wrapper.get('#event-place-name').setValue('海邊')
+    expect(wrapper.get('button[type="submit"]').attributes('disabled')).toBeUndefined()
     picker.vm.$emit('update:photos', [photo])
     await flushPromises()
     expect(wrapper.get('button[type="submit"]').attributes('aria-busy')).toBe('true')

@@ -46,6 +46,8 @@ const locationError = computed(() => locationInputError(location.value))
 const category = ref('景點')
 const eventDate = ref('')
 const eventTime = ref('')
+const dateLabel = computed(() => eventDate.value ? eventDate.value.replaceAll('-', '/') : '選擇日期')
+const requiredFieldsMissing = computed(() => !placeName.value.trim() || !eventDate.value || !category.value.trim())
 const defaultDailyTimezone = 'Asia/Taipei'
 const notes = ref('')
 
@@ -367,11 +369,17 @@ onBeforeUnmount(() => { photoSession.value++ })
         <div class="essential-row date-time-row">
           <div class="form-group">
             <label for="event-date" class="form-label">日期 <span v-if="trip" class="required-star">*</span></label>
-            <input id="event-date" v-model="eventDate" type="date" class="form-input" :min="trip?.start_date" :max="trip?.end_date" :required="Boolean(trip)" :disabled="loading" />
+            <div class="form-input date-time-control">
+              <span aria-hidden="true" :class="{ 'date-time-placeholder': !eventDate }">{{ dateLabel }}</span>
+              <input id="event-date" v-model="eventDate" type="date" :min="trip?.start_date" :max="trip?.end_date" required :disabled="loading" />
+            </div>
           </div>
           <div class="form-group">
             <label for="event-time" class="form-label">抵達時間</label>
-            <input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" />
+            <div class="form-input date-time-control">
+              <span aria-hidden="true" :class="{ 'date-time-placeholder': !eventTime }">{{ eventTime || '—' }}</span>
+              <input id="event-time" v-model="eventTime" type="time" :disabled="loading" />
+            </div>
           </div>
         </div>
         <div class="essential-row">
@@ -423,9 +431,9 @@ onBeforeUnmount(() => { photoSession.value++ })
           </button>
           <button
             type="submit"
-            class="btn btn-primary event-save"
+            class="btn btn-primary editor-save event-save"
             :class="{ 'is-photo-pending': photosPending }"
-            :disabled="savingEvent"
+            :disabled="savingEvent || requiredFieldsMissing"
             :aria-label="photosPending ? '等待照片處理' : loading ? '儲存中' : isEdit ? '儲存修改' : '記錄足跡'"
             :title="isEdit ? '儲存修改' : '記錄足跡'"
             :aria-busy="savingEvent"

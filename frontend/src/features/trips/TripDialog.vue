@@ -90,7 +90,23 @@ async function uploadCover(photo: PhotoDTO) {
 
 const isEdit = computed(() => !!props.trip)
 const dialogTitle = computed(() => (isEdit.value ? '編輯旅行手記' : '建立旅行手記'))
-
+const tripFields = computed(() => ({
+  name: name.value.trim(),
+  start_date: startDate.value,
+  end_date: endDate.value,
+  timezone: normalizeTimezoneInput(timezone.value) || 'Asia/Taipei',
+  description: description.value,
+}))
+const hasChanges = computed(() => {
+  const trip = props.trip
+  if (!trip) return true
+  const fields = tripFields.value
+  return fields.name !== trip.name.trim() || fields.start_date !== trip.start_date || fields.end_date !== trip.end_date
+    || fields.timezone !== (normalizeTimezoneInput(trip.timezone) || 'Asia/Taipei')
+    || fields.description !== (trip.description || '')
+})
+const savingTrip = computed(() => props.loading || coverUploading.value || coverBusy.value)
+const saveDisabled = computed(() => savingTrip.value || !hasChanges.value || !tripFields.value.name || !startDate.value || !endDate.value)
 
 
 function resetFormFromProps() {
@@ -127,10 +143,10 @@ watch(startDate, (start) => {
 })
 
 function handleSubmit() {
-  if (props.loading || props.coverRetry || coverUploading.value || coverBusy.value) return
+  if (savingTrip.value || props.coverRetry || !hasChanges.value) return
   clientValidationError.value = ''
 
-  const trimmedName = name.value.trim()
+  const trimmedName = tripFields.value.name
   if (!trimmedName) {
     clientValidationError.value = '請填寫旅程名稱（1 至 200 字元）。'
     return
@@ -156,29 +172,10 @@ function handleSubmit() {
     return
   }
 
-  const rawTimezone = timezone.value.trim()
-  const normalized = normalizeTimezoneInput(rawTimezone)
-  const finalTimezone = (normalized && normalized.trim()) || rawTimezone || 'Asia/Taipei'
-
-  if (isEdit.value && props.trip) {
-    const payload: UpdateTripPayload = {
-      name: trimmedName,
-      start_date: startDate.value,
-      end_date: endDate.value,
-      timezone: finalTimezone,
-      description: description.value,
-      version: props.trip.version
-    }
-    emit('submit', payload)
+  if (props.trip) {
+    emit('submit', { ...tripFields.value, version: props.trip.version })
   } else {
-    const payload: CreateTripPayload = {
-      name: trimmedName,
-      start_date: startDate.value,
-      end_date: endDate.value,
-      timezone: finalTimezone,
-      description: description.value
-    }
-    emit('submit', payload, newCover.value[0]?.id)
+    emit('submit', tripFields.value, newCover.value[0]?.id)
   }
 }
 
@@ -317,13 +314,13 @@ function handleSubmit() {
           </button>
           <button
             type="submit"
-            class="btn btn-primary"
-            :disabled="loading || coverUploading || coverBusy"
+            class="btn btn-primary editor-save"
+            :disabled="saveDisabled"
             :aria-label="coverUploading ? '上傳封面中' : loading ? '儲存中' : isEdit ? '儲存修改' : '建立旅程'"
             :title="isEdit ? '儲存修改' : '建立旅程'"
-            :aria-busy="loading || coverUploading || coverBusy"
+            :aria-busy="savingTrip"
           >
-            <span v-if="loading || coverUploading || coverBusy" class="spinner-small ui-spinner ui-spinner--on-primary" aria-hidden="true"></span>
+            <span v-if="savingTrip" class="spinner-small ui-spinner ui-spinner--on-primary" aria-hidden="true"></span>
             <AppIcon v-else name="save" />
           </button>
         </footer>

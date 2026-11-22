@@ -166,6 +166,11 @@ input.form-input[type="time"]::-webkit-date-and-time-value { min-width: 0; text-
 .dialog-icon-actions > .btn { width: 100%; min-width: 0; min-height: var(--size-dialog-action); justify-content: center; padding: .7rem; border: 0; border-radius: 0; }
 .dialog-icon-actions > .btn + .btn { border-left: 1px solid var(--color-border); }
 .dialog-icon-actions > .btn-secondary { background: transparent; }
+.dialog-icon-actions > .editor-save:disabled:not([aria-busy="true"]) {
+  background: var(--color-border-light);
+  color: var(--color-subtle);
+  opacity: 1;
+}
 .editor-dialog.dialog-card, .editor-dialog.save-modal-card { display: flex; flex-direction: column; padding: 0; gap: 0; min-height: 0; overflow: hidden; }
 .editor-dialog > .dialog-header { padding: 1rem 1.5rem; flex: 0 0 auto; }
 .editor-dialog > .dialog-form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; gap: 0; overflow: hidden; }
