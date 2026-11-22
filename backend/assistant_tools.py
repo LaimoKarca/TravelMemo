@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.locations import location_reference
+
 
 def is_greeting(text):
     return bool(re.fullmatch(r"\s*(?:你好|您好|哈囉|嗨|嗨嗨|早安|午安|晚安|hello|hi|hey)[~～!！。.\s]*", text, re.IGNORECASE))
@@ -112,7 +114,8 @@ class AssistantTools:
             result = get_recent(owner, limit=args.limit) if get_recent else {"items": []}
             fields = ("id", "trip_id", "date", "time", "place_name", "version", "record_scope")
             return {
-                "events": [{field: event.get(field) for field in fields} for event in result["items"][:args.limit]],
+                "events": [{field: event.get(field) for field in fields} | location_reference(event)
+                           for event in result["items"][:args.limit]],
                 "has_more": result.get("next_offset") is not None,
             }
         args = SearchArgs.model_validate(call.arguments)
@@ -125,8 +128,9 @@ class AssistantTools:
             return {"trips": [self.trip_data(t) for t in trips[:args.limit]], "total": len(trips)}
         if call.name == "search_events":
             result = self.search.search(owner_id=owner, query=args.query, limit=min(args.limit, 8))
-            return {"events": [{k: (item.get("event") or {}).get(k) for k in ("id", "trip_id", "date", "place_name", "version")}
-                               for item in result.get("items", [])[:8]]}
+            fields = ("id", "trip_id", "date", "place_name", "version")
+            return {"events": [{field: event.get(field) for field in fields} | location_reference(event)
+                               for item in result.get("items", [])[:8] if (event := item.get("event"))]}
         photos = getattr(self.search, "photo_search", None)
         results = photos.search(owner, query=args.query, limit=min(args.limit, 8)) if photos else []
         return {"photos": [{"id": r["photo"]["id"], "caption": r["photo"].get("caption", "")[:200]} for r in results[:8]]}

@@ -6,7 +6,15 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from neo4j import Driver
 from neo4j.exceptions import TransientError
 
+from backend.locations import stored_location
 from backend.timezones import normalize_timezone
+
+
+def preserve_omitted_map_link(data: dict, current: dict) -> dict:
+    # Older clients can edit a link-only event without sending the new field.
+    if "map_url" not in data and not data.get("address") and not data.get("place_id"):
+        return data | {"map_url": stored_location(current)["map_url"]}
+    return data
 
 
 def deterministic_category_id(owner_id: str, normalized_name: str) -> str:
@@ -95,7 +103,7 @@ def format_event(e: dict) -> dict:
         "place_id": e["place_id"],
         "place_name": e["place_name"],
         "city": e.get("city", ""),
-        "address": e.get("address", ""),
+        **stored_location(e),
         "category": e["category"],
         "date": e["date"],
         "time": e.get("time"),
@@ -112,7 +120,7 @@ def format_place(p: dict) -> dict:
         "id": p["id"],
         "name": p["name"],
         "city": p.get("city", ""),
-        "address": p.get("address", ""),
+        **stored_location(p),
     }
 
 
@@ -279,7 +287,7 @@ class MemoryTravelRepository:
             "owner_id": owner_id,
             "name": data["place_name"],
             "city": data.get("city", ""),
-            "address": data.get("address", ""),
+            **stored_location(data),
         }
         self.places[new_place_id] = new_place
         return new_place
@@ -329,7 +337,7 @@ class MemoryTravelRepository:
                 "place_id": place["id"],
                 "place_name": place["name"],
                 "city": place["city"],
-                "address": place["address"],
+                **stored_location(place),
                 "category": cat_name,
                 "date": data["date"],
                 "time": data.get("time"),
@@ -374,7 +382,7 @@ class MemoryTravelRepository:
                      "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="microseconds"),
                      "record_scope": "standalone", "timezone": normalize_timezone(data.get("timezone", "Asia/Taipei")),
                      "place_id": place["id"], "place_name": place["name"],
-                     "city": place.get("city", ""), "address": place.get("address", ""),
+                     "city": place.get("city", ""), **stored_location(place),
                      "category": self._resolve_category(owner_id, data.get("category", "未分類")),
                      "date": data["date"], "time": data.get("time"), "notes": data.get("notes", ""),
                      "position": None, "version": 1, "embedding_status": "pending", "embedded_version": 0}
@@ -412,10 +420,11 @@ class MemoryTravelRepository:
             if event["version"] != data["version"]:
                 raise TravelConflictError("事件已被修改，請重新整理後再試。")
 
+            data = preserve_omitted_map_link(data, event)
             if not event.get("trip_id"):
                 place = self._resolve_place_on_create(owner_id, data)
-                event.update(place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
-                             address=place.get("address", ""), category=self._resolve_category(owner_id, data["category"]),
+                event.update(stored_location(place), place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
+                             category=self._resolve_category(owner_id, data["category"]),
                              date=data["date"], time=data.get("time"), notes=data.get("notes", ""),
                              timezone=normalize_timezone(data.get("timezone") or event.get("timezone", "Asia/Taipei")),
                              version=event["version"] + 1, embedding_status="pending")
@@ -444,7 +453,7 @@ class MemoryTravelRepository:
                     "owner_id": owner_id,
                     "name": data["place_name"],
                     "city": data.get("city", ""),
-                    "address": data.get("address", ""),
+                    **stored_location(data),
                 }
                 self.places[new_place_id] = place
 
@@ -456,7 +465,7 @@ class MemoryTravelRepository:
             event["place_id"] = place["id"]
             event["place_name"] = place["name"]
             event["city"] = place["city"]
-            event["address"] = place["address"]
+            event.update(stored_location(place))
             event["category"] = cat_name
             event["date"] = new_date
             event["time"] = data.get("time")
@@ -649,7 +658,7 @@ class Neo4jTravelRepository:
                     MATCH (t:Trip {id: $trip_id, owner_id: $owner_id})-[:HAS_EVENT]->(e:Event {owner_id: $owner_id, trip_id: $trip_id})
                     MATCH (:User {id:$owner_id})-[:OWNS_EVENT]->(e)
                     RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
-                           e.city AS city, e.address AS address, e.category AS category, e.date AS date,
+                           e.city AS city, e.address AS address, e.map_url AS map_url, e.category AS category, e.date AS date,
                            e.time AS time, e.notes AS notes, e.position AS position, e.version AS version,
                            coalesce(t.timezone, 'Asia/Taipei') AS timezone, 'trip' AS record_scope
                     ORDER BY e.position ASC, e.id ASC
@@ -657,7 +666,7 @@ class Neo4jTravelRepository:
                 owner_id=owner_id,
                 trip_id=trip_id,
             )
-            events = [dict(r) for r in events_res]
+            events = [format_event(dict(r)) for r in events_res]
 
             next_res = tx.run(
                 """
@@ -805,24 +814,24 @@ class Neo4jTravelRepository:
             res = session.run(
                 """
                 MATCH (p:Place {owner_id: $owner_id})
-                RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
+                RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address, p.map_url AS map_url
                 ORDER BY p.name ASC, p.id ASC
                 """,
                 owner_id=owner_id,
             )
-            return [dict(r) for r in res]
+            return [format_place(dict(r)) for r in res]
 
     def get_place(self, owner_id: str, place_id: str) -> dict | None:
         with self.driver.session(database=self.database) as session:
             res = session.run(
                 """
                 MATCH (p:Place {id: $place_id, owner_id: $owner_id})
-                RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address
+                RETURN p.id AS id, p.name AS name, p.city AS city, p.address AS address, p.map_url AS map_url
                 """,
                 owner_id=owner_id,
                 place_id=place_id,
             ).single()
-            return dict(res) if res else None
+            return format_place(dict(res)) if res else None
 
     def get_event(self, owner_id: str, event_id: str) -> dict | None:
         with self.driver.session(database=self.database) as session:
@@ -832,7 +841,7 @@ class Neo4jTravelRepository:
                 OPTIONAL MATCH (:User {id: $owner_id})-[:OWNS]->(t:Trip {owner_id: $owner_id})-[:HAS_EVENT]->(e)
                 WITH e, t WHERE (e.trip_id IS NULL AND NOT EXISTS { MATCH (:Trip)-[:HAS_EVENT]->(e) }) OR e.trip_id = t.id
                 RETURN e.id AS id, e.trip_id AS trip_id, e.place_id AS place_id, e.place_name AS place_name,
-                       e.city AS city, e.address AS address, e.category AS category, e.date AS date,
+                       e.city AS city, e.address AS address, e.map_url AS map_url, e.category AS category, e.date AS date,
                        e.time AS time, e.notes AS notes, e.position AS position, e.version AS version,
                        t.name AS trip_name, coalesce(t.timezone, e.timezone, 'Asia/Taipei') AS timezone,
                        CASE WHEN e.trip_id IS NULL THEN 'standalone' ELSE 'trip' END AS record_scope
@@ -840,7 +849,10 @@ class Neo4jTravelRepository:
                 owner_id=owner_id,
                 event_id=event_id,
             ).single()
-            return dict(res) if res else None
+            if not res:
+                return None
+            record = dict(res)
+            return record | stored_location(record)
 
     @staticmethod
     def _locked_trip(tx, owner_id: str, trip_id: str) -> dict:
@@ -879,7 +891,7 @@ class Neo4jTravelRepository:
             place = dict(row["place"])
         else:
             place = {"id": str(uuid4()), "owner_id": owner_id, "name": data["place_name"],
-                     "city": data.get("city", ""), "address": data.get("address", "")}
+                     "city": data.get("city", ""), **stored_location(data)}
             tx.run("""MERGE (u:User {id:$owner}) CREATE (p:Place) SET p=$place
                       CREATE (u)-[:OWNS_PLACE]->(p)""", owner=owner_id, place=place).consume()
         category = data.get("category", "未分類")
@@ -951,7 +963,7 @@ class Neo4jTravelRepository:
                      "record_scope": "trip" if trip else "standalone",
                      "timezone": normalize_timezone(trip.get("timezone", "Asia/Taipei") if trip else data.get("timezone", "Asia/Taipei")),
                      "place_id": place["id"], "place_name": place["name"], "city": place.get("city", ""),
-                     "address": place.get("address", ""), "category": data.get("category", "未分類"),
+                     **stored_location(place), "category": data.get("category", "未分類"),
                      "date": data["date"], "time": data.get("time"), "notes": data.get("notes", ""),
                      "position": None, "version": 1, "embedding_status": "pending", "embedded_version": 0}
             rows = self._trip_event_rows(tx, owner_id, trip_id) if trip else []
@@ -986,13 +998,14 @@ class Neo4jTravelRepository:
             zone = normalize_timezone((trip or {}).get("timezone") or data.get("timezone") or event.get("timezone", "Asia/Taipei"))
             if trip and data.get("timezone") and normalize_timezone(data["timezone"]) != zone:
                 raise TravelValidationError("手記足跡使用手記的時區，請於編輯手記調整。")
+            data = preserve_omitted_map_link(data, event)
             place, cat_id = self._event_links(tx, owner_id, data)
             rows = self._trip_event_rows(tx, owner_id, trip_id) if trip else []
             if trip and data["date"] != event["date"]:
                 rows = [row for row in rows if row["id"] != event_id]
                 rows.insert(find_event_insert_index(rows, data["date"]), {"id":event_id,"date":data["date"]})
-            event.update(place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
-                         address=place.get("address", ""), category=data["category"], date=data["date"],
+            event.update(stored_location(place), place_id=place["id"], place_name=place["name"], city=place.get("city", ""),
+                         category=data["category"], date=data["date"],
                          time=data.get("time"), notes=data.get("notes", ""), timezone=zone,
                          version=event["version"]+1, embedding_status="pending",
                          position=next((pos for pos,row in enumerate(rows) if row["id"]==event_id), None))

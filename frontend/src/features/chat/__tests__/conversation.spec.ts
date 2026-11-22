@@ -155,6 +155,29 @@ describe('ConversationView', () => {
     expect(wrapper.emitted('view-citation')![0][0]).toEqual(mockMessages[1].citations[0])
   })
 
+  it('renders each current citation with its verified map link', async () => {
+    const first = 'https://maps.app.goo.gl/ExampleMap123'
+    const second = 'https://www.google.com/maps/search/?api=1&query=Kyoto'
+    const [current, deleted] = mockMessages[1].citations
+    vi.mocked(convApi.listMessages).mockResolvedValue({ items: [{
+      ...mockMessages[1],
+      citations: [
+        { ...current, map_url: first },
+        { ...current, event_id: 'e-second', place_name: '第二站', map_url: second },
+        { ...current, event_id: 'e-changed', state: 'changed', map_url: first },
+        { ...deleted, map_url: first },
+      ],
+    }] })
+    const wrapper = mount(ConversationView)
+    await flushPromises()
+    await wrapper.find('.conversation-item').trigger('click')
+    await flushPromises()
+
+    const links = wrapper.findAll('a.location-link__action')
+    expect(links.map(link => link.attributes('href'))).toEqual([first, second])
+    expect(links[1].attributes('aria-label')).toContain('第二站')
+  })
+
   it('new conversation button resets to blank chat without DB call and focuses composer', async () => {
     const createSpy = vi.spyOn(convApi, 'createConversation')
 

@@ -201,6 +201,10 @@ flowchart TD
 一次最多選擇三次工具呼叫，每次結果數及合計送入模型的資料大小也有上限，不讓工具循環無限擴張上下文。
 工具回傳的描述、圖說與搜尋結果仍是不可信資料，沒有指令權限；沒有新增、修改或刪除工具。
 
+`search_events` 與 `list_standalone_events` 回傳 `address` 與 `map_url`。Place 和 Event 分開儲存文字地址與 HTTPS Google Maps 分享連結，網址僅接受指定主機與對應路徑。後端不會展開短網址或查詢 Google Maps，文字地址依 Maps URLs 格式產生搜尋連結，並以城市輔助定位。網址本身不送入足跡 embedding。[Google Maps URLs](https://developers.google.com/maps/documentation/urls/get-started)
+
+文字與圖片對話都由伺服器在核對本人事件、版本和相鄰證據後提供引用地圖連結。模型回覆文字以純文字呈現。歷史訊息重新讀取時也會核對來源，已變更或刪除的引用不提供連結。
+
 旅程名稱、日期與描述使用獨立的 `trip_citations` 引用，回答前重新核對本人資料及版本。
 查到一本空手記不表示曾造訪其中任何地點，旅程標頭不能替代 Event 或 NEXT 的證據。
 一般招呼使用 `general` 範圍回覆，不顯示缺乏手記證據的提示，也不需要捏造來源。

@@ -66,6 +66,8 @@ def test_attach_keeps_id_validates_versions_timezone_and_same_day_position():
     trip = repo.create_trip("a", trip_data())
     existing = repo.create_event("a", trip["id"], event_data())
     single = repo.create_standalone_event("a", event_data())
+    legacy_map_url = "https://maps.app.goo.gl/ExampleMap123"
+    repo.events[single["id"]]["address"] = legacy_map_url
     data = {"trip_id": trip["id"], "version": 1, "trip_version": 1, "before_event_id": existing["id"]}
     with pytest.raises(TravelConflictError):
         repo.attach_event_to_trip("a", single["id"], data)
@@ -73,6 +75,7 @@ def test_attach_keeps_id_validates_versions_timezone_and_same_day_position():
     result = repo.attach_event_to_trip("a", single["id"], data)
     assert result["id"] == single["id"] and result["version"] == 2
     assert result["trip_id"] == trip["id"] and result["record_scope"] == "trip"
+    assert result["map_url"] == legacy_map_url and result["address"] == ""
     detail = repo.get_trip_detail("a", trip["id"])
     assert [e["id"] for e in detail["events"]] == [single["id"], existing["id"]]
     assert detail["next_edges"] == [{"from_id": single["id"], "to_id": existing["id"]}]
@@ -109,3 +112,15 @@ def test_standalone_api_defaults_validation_and_owner_is_server_derived():
         assert client.get("/api/v1/events?date_from=2026-11-22&date_to=2026-11-20").status_code == 422
         assert client.post("/api/v1/events", json={"place_name": "公園", "date": "bad"}, headers=headers).status_code == 422
         assert client.post("/api/v1/events", json={"place_name": "公園", "owner_id": "other"}, headers=headers).status_code == 422
+        share_url = "https://maps.app.goo.gl/ExampleMap123"
+        linked = client.post("/api/v1/events", json=event_data(address=share_url), headers=headers)
+        assert linked.status_code == 201
+        assert linked.json()["map_url"] == share_url
+        assert linked.json()["address"] == ""
+        rejected = client.post("/api/v1/events", json=event_data(address="https://example.com/maps"), headers=headers)
+        assert rejected.status_code == 422
+        changed = client.put(f"/api/v1/events/{linked.json()['id']}", json=event_data(
+            address="安平路一號", map_url=None, version=1
+        ), headers=headers)
+        assert changed.status_code == 200
+        assert changed.json()["address"] == "安平路一號" and changed.json()["map_url"] is None

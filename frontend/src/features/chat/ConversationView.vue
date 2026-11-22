@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppDialogFrame from '@/components/ui/AppDialogFrame.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
+import LocationLink from '@/features/footprints/LocationLink.vue'
 import { ref, reactive, toRef, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import type {
   ChatDraft,
@@ -761,6 +762,7 @@ function handleCitationClick(citation: Citation) {
                   <button v-if="cite.state !== 'deleted'" type="button" class="source-link" @click="handleCitationClick(cite)">{{ cite.place_name }} <span class="cite-date">{{ cite.date }}</span></button>
                   <span v-else class="deleted-source">{{ cite.place_name }} <span class="cite-date">{{ cite.date }}</span></span>
                   <small v-if="cite.state !== 'current'" class="source-note">{{ cite.state === 'changed' ? '已更新' : '已刪除' }}</small>
+                  <LocationLink v-if="cite.state === 'current' && cite.map_url" :location="cite" show-label />
                 </div>
               </div>
             </div>

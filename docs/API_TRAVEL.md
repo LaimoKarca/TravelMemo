@@ -10,8 +10,8 @@
 | 資源 | 欄位與規則 |
 | --- | --- |
 | Trip | `{id,name,start_date,end_date,timezone,description,version}`；日期使用 `YYYY-MM-DD`，時區為 IANA 或固定 UTC 偏移，預設 `Asia/Taipei`。名稱 1–200 字，描述最多 10,000 字，開始日期不得晚於結束日期。 |
-| Event | `{id,trip_id,place_id,place_name,city,address,category,date,time,notes,position,version,timezone,record_scope}`。日常足跡的 `trip_id` 與 `position` 為 `null`、`record_scope` 為 `standalone`。手記內的足跡採手記時區、日期須在旅程範圍內、`record_scope` 為 `trip`。時間為 `HH:mm` 或 `null`，心得最多 20,000 字。地點名稱 1–200 字，城市與類別最多 200 字，地址最多 1,000 字。 |
-| Place | `{id,name,city,address}`；地點屬於單一使用者，只在明確提供 `place_id` 時重用，不依同名自動合併。 |
+| Event | `{id,trip_id,place_id,place_name,city,address,map_url,category,date,time,notes,position,version,timezone,record_scope}`。日常足跡的 `trip_id` 與 `position` 為 `null`、`record_scope` 為 `standalone`。手記內的足跡採手記時區、日期須在旅程範圍內、`record_scope` 為 `trip`。時間為 `HH:mm` 或 `null`，心得最多 20,000 字。地點名稱 1–200 字，城市與類別最多 200 字，文字地址最多 1,000 字。 |
+| Place | `{id,name,city,address,map_url}`；地點屬於單一使用者，只在明確提供 `place_id` 時重用，不依同名自動合併。 |
 
 Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時，Trip 版本會增加；Event 編輯時增加自己的版本。
 每次到訪都有獨立 Event ID，未知時間保持 `null`，不補造時間。
@@ -20,6 +20,8 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 
 提供 `place_id` 時，以本人既有 Place 欄位為準；未提供時建立新 Place。
 編輯時未提供 `place_id` 也會建立新地點，不連動改寫其他事件共用的地點。Category 依擁有者及正規化名稱管理。
+
+地點可留空，或提供文字 `address`、Google Maps `map_url` 兩者之一。網址接受 HTTPS 分享短連結及受支援的 Google Maps 長連結，最多 2,048 字元。無效網址回傳 422。舊客戶端放在 `address` 的有效分享連結會轉為 `map_url`。舊紀錄在讀取時也提供相同格式。更新到訪時可用 `address: ""` 與 `map_url: null` 清除兩者。
 
 ## 旅程與足跡端點
 
@@ -31,7 +33,7 @@ Trip 與 Event 的 `version` 從 1 開始。旅程本身或所含足跡變更時
 | `PUT /trips/{id}` | 提供建立欄位及 `version`，回傳 Trip；不得縮小日期範圍而排除既有足跡。 |
 | `DELETE /trips/{id}?version=N` | 回傳 204，刪除本人的旅程、事件及 NEXT，保留可重用的 Place。 |
 | `GET /places` | 回傳 `{items:Place[]}`。 |
-| `POST /trips/{id}/events` | 提供 `place_id?:str\|null,place_name,city,address,category,date,time,notes`，回傳 201 Event。 |
+| `POST /trips/{id}/events` | 提供 `place_id?:str\|null,place_name,city,address,map_url?,category,date,time,notes`，回傳 201 Event。 |
 | `GET /events` | 只列出本人的日常足跡。可傳入 `q,city,category,date_from,date_to,limit,offset`，回傳 `{items:Event[],next_offset:int\|null}`，預設每頁二十筆。 |
 | `POST /events` | 建立日常足跡，回傳 201 Event。地點名稱必填，日期預設為所用時區的當日，時區預設 `Asia/Taipei`，分類預設「未分類」。其他事件欄位選填。 |
 | `PUT /events/{id}` | 提供事件欄位及 `version`，回傳 Event。可為日常足跡指定 `timezone`。 |
@@ -78,6 +80,7 @@ NEXT 只連接同一使用者、同一旅程內相鄰的紀錄，保留方向、
 狀態為 `editing`、`queued`、`running`、`ready`、`failed` 或 `committed`。`issues` 對應項目 ID 的缺漏或無效欄位訊息，不能取代確認時的伺服器驗證。
 
 每個項目包含 `id,selected,place_name,date,time,city,address,category,notes`，陣列順序即預覽順序。
+草稿的 `address` 欄可貼 Google Maps 分享連結，送出前驗證格式，寫入時由後端轉成 `map_url`。
 草稿中的地點、日期與時間可暫為 `null`；勾選項目在確認前須符合一般 Event 建立規則。未勾選的不完整項目不阻擋有效項目加入。
 
 記錄日期須在旅程範圍內，描述最多 10,000 字，生成最多 20 個項目。

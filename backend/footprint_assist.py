@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from backend.auth import AuthError
 from backend.dependencies import authenticate
+from backend.locations import MAX_MAP_URL_LENGTH, parse_location
 from backend.safety import evaluate_deterministic_regex, normalize_safety_text
 from backend.travel import EventCreate
 from backend.travel_store import TravelConflictError, TravelNotFoundError, TravelValidationError
@@ -56,7 +57,7 @@ class DraftItem(BaseModel):
     date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     city: str = Field(default="", max_length=200)
-    address: str = Field(default="", max_length=1000)
+    address: str = Field(default="", max_length=MAX_MAP_URL_LENGTH)
     category: str = Field(default="其他", max_length=200)
     notes: str = Field(default="", max_length=20000)
 
@@ -220,6 +221,10 @@ class FootprintAssistant:
             issues.append("日期不在手記範圍內。")
         if not (item.get("category") or "").strip():
             issues.append("請選擇分類。")
+        try:
+            parse_location(item.get("address") or "")
+        except ValueError as exc:
+            issues.append(str(exc))
         return issues
 
     def _dto(self, record, trip):

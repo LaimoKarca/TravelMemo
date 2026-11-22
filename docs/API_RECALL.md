@@ -77,9 +77,11 @@ completed 不代表回答一定有足夠證據，仍須檢查 message.status。
 `answer_scope` 是 image、memory、mixed 或 general；圖片描述可引用照片，個別到訪經歷仍須事件引用。
 general 用於一般招呼等沒有旅程事實的回答，不顯示旅程證據標籤。
 role 是 user 或 assistant；status 是 answered、insufficient_evidence、needs_clarification 或 unavailable。
-citations 每筆為 `{event_id,trip_id,date,place_name,version,state}`，
+citations 每筆為 `{event_id,trip_id,date,place_name,version,state,address,map_url}`，
 state 是 current、changed 或 deleted。關係引用可額外保存 relation 證據；
 讀歷史會重新核對事件版本及原本的相鄰關係，行程重排也可標示已變更。
+
+`current` 引用從已驗證的足跡帶回 `address` 與 `map_url`。連結可取自儲存的分享網址，或以文字地址產生 Google Maps 搜尋網址。無可用連結時 `map_url` 為 `null`，來源變更或刪除後也不提供連結。前端可在每筆引用旁顯示地圖入口。
 
 trip_citations 每筆為 `{trip_id,name,start_date,end_date,version,state}`；
 用於手記名稱、日期與描述等旅程層級事實，不證明個別到訪或先後順序。

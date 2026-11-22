@@ -9,6 +9,7 @@ import AppSearchBar from '@/components/ui/AppSearchBar.vue'
 import AttachFootprintDialog from '@/features/footprints/AttachFootprintDialog.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import EventDialog from '@/features/footprints/EventDialog.vue'
+import LocationLink from './LocationLink.vue'
 import TrailLoader from '@/components/ui/TrailLoader.vue'
 
 const props = defineProps<{ focusId?: string | null }>()
@@ -291,10 +292,11 @@ function closeAttach(stale: boolean) {
           <div class="daily-entry-heading">
             <div class="daily-identity">
               <button type="button" class="daily-name" @click="emit('view', event)">{{ event.place_name }}</button>
-              <div v-if="event.time || event.city || event.category !== '未分類'" class="daily-meta">
+              <div v-if="event.time || event.city || event.category !== '未分類' || event.address || event.map_url" class="daily-meta">
                 <time v-if="event.time" class="daily-time" :datetime="event.time">{{ event.time }}</time>
                 <span v-if="event.city" class="daily-city"><AppIcon name="pin" /><span>{{ event.city }}</span></span>
                 <span v-if="event.category !== '未分類'" class="daily-category">{{ event.category }}</span>
+                <LocationLink :location="event" />
               </div>
             </div>
             <div class="daily-actions">

@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from backend.assistant_tools import standalone_question
 from backend.llm import BaseLLM, LLMResult
+from backend.locations import location_reference
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ CRITICAL SECURITY AND FACTUAL RULES:
    - "memory": Answers based strictly on travel event evidence without photo evidence. cited_event_ids must contain the event ID(s), and cited_photo_ids must be empty.
    - "mixed": Answers combining visual details from photos and confirmed personal travel event facts. Must cite both cited_photo_ids and cited_event_ids.
 5. If evidence is insufficient to answer the question, set status="insufficient_evidence", explain what is missing in content, and leave citations empty.
+6. Use the recorded travel event address when asked. Cite the event when a Google Maps destination is available. The app shows the link, so never write or guess URLs in the answer.
 6. If the question is ambiguous (e.g. refers to an unclear photo or multiple possible places), set status="needs_clarification", ask the user to clarify, and leave citations empty.
 7. Only cite photo IDs and event IDs that actually exist in the provided EVIDENCE section.
 8. Independent visits have no journal. Do not infer a trip or an itinerary sequence from unrelated visits or their dates.
@@ -373,11 +375,14 @@ def build_photo_prompt_envelope(
                     "date": item.get("date", ""),
                     "time": item.get("time", ""),
                     "city": item.get("city", ""),
+                    "address": location["address"],
+                    "has_map_link": bool(location["map_url"]),
                     "category": item.get("category", ""),
                     "record_scope": "trip" if item.get("trip_id") else "standalone",
                     "notes": str(item.get("notes", ""))[:1500],
                 }
                 for item in ev
+                for location in (location_reference(item),)
             ],
             "untrusted_user_query": content,
             "untrusted_context_summary": s,
@@ -842,6 +847,7 @@ def handle_photo_conversation(
                 "place_name": snapshot_ev.get("place_name", ""),
                 "version": snapshot_ev.get("version", 1),
                 "state": "current",
+                **location_reference(cur_event if isinstance(cur_event, dict) else snapshot_ev),
             }
         )
 

@@ -42,6 +42,8 @@ export interface Citation {
   trip_id: string | null
   date: string
   place_name: string
+  address?: string
+  map_url?: string | null
   version: number
   state: CitationState
   relation?: {

@@ -62,6 +62,7 @@ def test_recent_standalone_footprints_are_cited_and_follow_the_live_trip_assignm
         "id": "sunset", "trip_id": None, "date": "2026-01-01", "time": None,
         "place_name": "海邊堤防", "version": 1, "record_scope": "standalone",
     }
+    event["map_url"] = "https://maps.app.goo.gl/ExampleMap123"
     repo.list_standalone_events = MagicMock(return_value={"items": [dict(event)], "next_offset": None})
     service.search_service.get_event = MagicMock(side_effect=lambda owner, _id: event if owner == "owner" else None)
     answer = service.post_message("owner", cid, "最近記了哪些日常足跡？")
@@ -69,10 +70,13 @@ def test_recent_standalone_footprints_are_cited_and_follow_the_live_trip_assignm
     assert answer["status"] == "answered"
     assert "海邊堤防" in answer["content"]
     assert Citation.model_validate(answer["citations"][0]).trip_id is None
+    assert answer["citations"][0]["map_url"] == event["map_url"]
+    assert service.get_messages("owner", cid)[-1]["citations"][0]["map_url"] == event["map_url"]
     event.update(trip_id=trip["id"], version=2, record_scope="trip")
     citation = service.get_messages("owner", cid)[-1]["citations"][0]
     assert citation["state"] == "changed"
     assert citation["trip_id"] == trip["id"]
+    assert not citation.get("map_url")
 
 
 @pytest.mark.parametrize('question', [

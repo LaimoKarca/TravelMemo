@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.auth import AuthError, AuthService
+from backend.locations import MAX_MAP_URL_LENGTH, parse_location
 from backend.timezones import normalize_timezone, resolve_timezone
 from backend.travel_store import (
     TravelConflictError,
@@ -72,6 +73,7 @@ class Place(BaseModel):
     name: str
     city: str
     address: str
+    map_url: str | None = None
 
 
 class PlacesList(BaseModel):
@@ -84,11 +86,20 @@ class EventCreate(BaseModel):
     place_id: str | None = None
     place_name: str = Field(min_length=1, max_length=200)
     city: str = Field(default="", max_length=200)
-    address: str = Field(default="", max_length=1000)
+    address: str = Field(default="", max_length=MAX_MAP_URL_LENGTH)
+    map_url: str | None = Field(default=None, max_length=MAX_MAP_URL_LENGTH)
     category: str = Field(min_length=1, max_length=200)
     date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
     time: str | None = Field(default=None, pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     notes: str = Field(default="", max_length=20000)
+
+    @model_validator(mode="after")
+    def validate_location(self):
+        location = parse_location(self.address, self.map_url)
+        self.address = location["address"]
+        if location["map_url"] is not None or "map_url" in self.model_fields_set:
+            self.map_url = location["map_url"]
+        return self
 
     @field_validator("date")
     @classmethod
@@ -140,6 +151,7 @@ class Event(BaseModel):
     place_name: str
     city: str
     address: str
+    map_url: str | None = None
     category: str
     date: str
     time: str | None
@@ -318,7 +330,10 @@ def create_travel_router(auth: AuthService, repository: Any, prefix: str = "/api
     def update_event(id: str, body: EventUpdate, request: Request):
         owner_id = authenticate(request, require_csrf=True)
         try:
-            event = repository.update_event(owner_id, id, body.model_dump())
+            data = body.model_dump()
+            if "map_url" not in body.model_fields_set:
+                del data["map_url"]
+            event = repository.update_event(owner_id, id, data)
             return event
         except TravelNotFoundError as exc:
             raise HTTPException(status_code=404, detail=exc.message)

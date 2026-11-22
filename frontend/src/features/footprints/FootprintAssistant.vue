@@ -234,7 +234,8 @@ onBeforeUnmount(() => { alive = false; generation++; stopPoll(); if (debounce) c
                   <label>地點<input v-model="item.place_name" class="form-input" maxlength="200" :disabled="busy || committing" /></label>
                   <div class="draft-pair"><label>日期<input v-model="item.date" type="date" class="form-input" :min="tripInfo.start_date" :max="tripInfo.end_date" :disabled="busy || committing" /></label><label>時間<input v-model="item.time" type="time" class="form-input" :disabled="busy || committing" /></label></div>
                   <div class="draft-pair"><label>城市<input v-model="item.city" class="form-input" maxlength="200" :disabled="busy || committing" /></label><label>分類<input v-model="item.category" class="form-input" list="assist-categories" maxlength="200" :disabled="busy || committing" /></label></div>
-                  <label>地址<input v-model="item.address" class="form-input" maxlength="1000" :disabled="busy || committing" /></label><label>心得<textarea v-model="item.notes" class="form-input" rows="3" maxlength="20000" :disabled="busy || committing" /></label>
+                  <label>地址或 Google Maps 連結<input v-model="item.address" class="form-input" maxlength="2048" :disabled="busy || committing" /></label>
+                  <label>心得<textarea v-model="item.notes" class="form-input" rows="3" maxlength="20000" :disabled="busy || committing" /></label>
                   <button type="button" class="remove-draft" :disabled="busy || committing" @click="items.splice(index, 1); change()">移除這筆草稿</button>
                 </div>
               </article>

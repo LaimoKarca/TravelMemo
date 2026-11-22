@@ -36,6 +36,7 @@ import { getTripStatus } from '@/utils/timezones'
 import FootprintAssistant from '@/features/footprints/FootprintAssistant.vue'
 import TripDialog from './TripDialog.vue'
 import EventDialog from '@/features/footprints/EventDialog.vue'
+import LocationLink from '@/features/footprints/LocationLink.vue'
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
 import PhotoPicker from '@/features/media/PhotoPicker.vue'
@@ -1037,13 +1038,7 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
 
                 <div class="event-place-info">
                   <h4 class="event-place-name">{{ evt.place_name }} <span v-if="evt.city" class="event-city-tag"><AppIcon name="pin" /><span>{{ evt.city }}</span></span></h4>
-                  <div v-if="evt.address" class="event-location-text">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                      <circle cx="12" cy="10" r="3" />
-                    </svg>
-                    <span>{{ evt.address }}</span>
-                  </div>
+                  <LocationLink v-if="evt.address || evt.map_url" class="event-location-text" :location="evt" show-address />
                 </div>
 
                 <p v-if="evt.notes" class="event-notes-content">

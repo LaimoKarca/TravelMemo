@@ -9,6 +9,7 @@ import type { PhotoDTO } from '@/types/photo'
 import { ApiError } from '@/api/auth'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
+import LocationLink from '@/features/footprints/LocationLink.vue'
 
 const props = defineProps<{
   visible: boolean
@@ -177,9 +178,8 @@ function handleJump() {
             <span class="meta-label">所屬城市：</span>
             <span class="meta-value">{{ currentEvent.city }}</span>
           </div>
-          <div v-if="currentEvent.address" class="meta-item full-width">
-            <span class="meta-label">詳細地址：</span>
-            <span class="meta-value">{{ currentEvent.address }}</span>
+          <div v-if="currentEvent.address || currentEvent.map_url" class="meta-item full-width">
+            <LocationLink class="meta-value" :location="currentEvent" show-address show-label />
           </div>
         </div>
 

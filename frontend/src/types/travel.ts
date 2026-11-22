@@ -15,6 +15,7 @@ export interface Event {
   place_name: string
   city: string
   address: string
+  map_url?: string | null
   category: string
   date: string
   time: string | null
@@ -30,6 +31,7 @@ export interface Place {
   name: string
   city: string
   address: string
+  map_url?: string | null
 }
 
 export interface NextEdge {
@@ -78,6 +80,7 @@ export interface CreateEventPayload {
   place_name: string
   city: string
   address: string
+  map_url?: string | null
   category: string
   date: string
   time?: string | null
@@ -90,6 +93,7 @@ export interface UpdateEventPayload {
   place_name: string
   city: string
   address: string
+  map_url?: string | null
   category: string
   date: string
   time?: string | null

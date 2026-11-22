@@ -5,6 +5,7 @@ import datetime
 import json
 from uuid import uuid4
 
+from backend.locations import stored_location
 from backend.travel_store import (
     TravelConflictError,
     TravelNotFoundError,
@@ -322,13 +323,13 @@ class FootprintStore:
                 existing.insert(position, {"id": event_id, "date": item["date"]})
                 event = {"id": event_id, "owner_id": owner, "trip_id": trip_id, "place_id": place_id,
                              "timezone": trip.get("timezone", "Asia/Taipei"), "record_scope": "trip",
-                             "place_name": item["place_name"], "city": item.get("city", ""), "address": item.get("address", ""),
+                             "place_name": item["place_name"], "city": item.get("city", ""), **stored_location(item),
                              "category": category, "date": item["date"], "time": item.get("time"), "notes": item.get("notes", ""),
                              "version": 1, "position": position, "embedding_status": "pending", "embedded_version": 0}
                 tx.run("""
                     MATCH (t:Trip {id:$trip,owner_id:$owner})
                     MERGE (u:User {id:$owner})
-                    CREATE (p:Place {id:$place,owner_id:$owner,name:$name,city:$city,address:$address})
+                    CREATE (p:Place {id:$place,owner_id:$owner,name:$name,city:$city,address:$address,map_url:$map_url})
                     CREATE (u)-[:OWNS_PLACE]->(p)
                     MERGE (c:Category {id:$category_id})
                     ON CREATE SET c.owner_id=$owner,c.name=$category,c.normalized_name=$norm
@@ -339,7 +340,7 @@ class FootprintStore:
                     CREATE (e)-[:AT]->(p)
                     CREATE (e)-[:HAS_CATEGORY]->(c)
                     """, trip=trip_id, owner=owner, place=place_id, name=event["place_name"], city=event["city"],
-                    address=event["address"], category_id=cat_id, category=category, norm=norm, event=event).consume()
+                    address=event["address"], map_url=event["map_url"], category_id=cat_id, category=category, norm=norm, event=event).consume()
                 created.append(event)
             positions = {event["id"]: i for i, event in enumerate(existing)}
             tx.run("""

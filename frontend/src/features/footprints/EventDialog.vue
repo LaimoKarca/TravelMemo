@@ -9,6 +9,7 @@ import AppIcon from '@/components/ui/AppIcon.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
 import PhotoPicker from '@/features/media/PhotoPicker.vue'
 import { getTimezoneOptions, getTripLocalDate, normalizeTimezoneInput } from '@/utils/timezones'
+import { locationInputError, maxMapUrlLength, validMapUrl } from '@/utils/maps'
 
 const props = withDefaults(
   defineProps<{
@@ -41,7 +42,8 @@ const moreDetails = ref(false)
 
 const placeName = ref('')
 const city = ref('')
-const address = ref('')
+const location = ref('')
+const locationError = computed(() => locationInputError(location.value))
 const category = ref('景點')
 const eventDate = ref('')
 const eventTime = ref('')
@@ -176,12 +178,12 @@ function handleCancel() {
 function resetFormFromProps() {
   clientValidationError.value = ''
   addingCategory.value = false
-  moreDetails.value = !!(props.trip && props.event && (props.event.city || props.event.address || props.event.time))
+  moreDetails.value = !!(props.trip && props.event && (props.event.city || props.event.address || props.event.map_url || props.event.time))
   timezone.value = props.event?.timezone || props.trip?.timezone || 'Asia/Taipei'
   if (props.event) {
     placeName.value = props.event.place_name
     city.value = props.event.city || ''
-    address.value = props.event.address || ''
+    location.value = props.event.map_url || props.event.address || ''
     category.value = props.event.category || (props.trip ? '景點' : '未分類')
     eventDate.value = props.event.date
     eventTime.value = props.event.time || ''
@@ -189,7 +191,7 @@ function resetFormFromProps() {
   } else {
     placeName.value = ''
     city.value = ''
-    address.value = ''
+    location.value = ''
     category.value = props.trip ? '景點' : '未分類'
     eventDate.value = props.trip?.start_date || getTripLocalDate(new Date(), timezone.value)
     eventTime.value = ''
@@ -236,11 +238,12 @@ function handleSubmit() {
     return
   }
 
-  const trimmedAddress = address.value.trim()
-  if (trimmedAddress.length > 1000) {
-    clientValidationError.value = '地址不可超過 1,000 字元。'
+  if (locationError.value) {
+    moreDetails.value = true
     return
   }
+  const mapUrl = validMapUrl(location.value)
+  const address = mapUrl ? '' : location.value.trim()
 
   const trimmedCategory = category.value.trim()
   if (!trimmedCategory) {
@@ -269,7 +272,9 @@ function handleSubmit() {
 
   const normalizedTime = eventTime.value ? eventTime.value : null
   const old = props.event
-  const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '') && trimmedAddress === (old.address || '')
+  const oldMapUrl = validMapUrl(old?.map_url) || validMapUrl(old?.address)
+  const unchangedPlace = old && trimmedPlaceName === old.place_name && trimmedCity === (old.city || '')
+    && mapUrl === oldMapUrl && address === (oldMapUrl ? '' : (old.address || '').trim())
   const placeIdToSubmit = unchangedPlace ? old.place_id : null
   const localTimezone = props.trip ? {} : { timezone: normalizeTimezoneInput(timezone.value) || 'Asia/Taipei' }
 
@@ -279,7 +284,8 @@ function handleSubmit() {
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
-      address: trimmedAddress,
+      address,
+      map_url: mapUrl,
       category: trimmedCategory,
       date: eventDate.value,
       time: normalizedTime,
@@ -293,7 +299,8 @@ function handleSubmit() {
       place_id: placeIdToSubmit,
       place_name: trimmedPlaceName,
       city: trimmedCity,
-      address: trimmedAddress,
+      address,
+      map_url: mapUrl,
       category: trimmedCategory,
       date: eventDate.value,
       time: normalizedTime,
@@ -390,7 +397,12 @@ onBeforeUnmount(() => { photoSession.value++ })
               <div class="form-group flex-1"><label for="event-city" class="form-label">城市／地區</label><input id="event-city" v-model="city" class="form-input" maxlength="200" :disabled="loading" /></div>
               <div class="form-group flex-1"><label for="event-time" class="form-label">抵達時間</label><input id="event-time" v-model="eventTime" type="time" class="form-input" :disabled="loading" /></div>
             </div>
-            <div class="form-group"><label for="event-address" class="form-label">地址</label><input id="event-address" v-model="address" class="form-input" maxlength="1000" :disabled="loading" /></div>
+            <div class="form-group">
+              <label for="event-address" class="form-label">地址或 Google Maps 連結</label>
+              <input id="event-address" v-model="location" class="form-input" :maxlength="maxMapUrlLength"
+                :disabled="loading" :aria-invalid="Boolean(locationError)" :aria-describedby="locationError ? 'event-location-error' : undefined" />
+              <p v-if="locationError" id="event-location-error" class="error-banner" role="alert">{{ locationError }}</p>
+            </div>
           </div>
         </details>
         <JournalNote id="event-notes" v-model="notes" kind="event" :label="trip ? '旅途隨筆' : '隨筆'" :placeholder="trip ? '留下餐點、沿途風景或旅途感受…' : '此刻想記下什麼？'" :disabled="loading" :maxlength="20000" />

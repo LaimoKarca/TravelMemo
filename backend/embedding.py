@@ -8,6 +8,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from backend.locations import looks_like_url
+
 logger = logging.getLogger(__name__)
 
 E5_MODEL_NAME = "intfloat/multilingual-e5-small"
@@ -46,7 +48,7 @@ def event_to_passage_text(event: dict[str, Any]) -> str:
     if city:
         parts.append(f"城市: {city}")
     address = event.get("address")
-    if address:
+    if address and not looks_like_url(address):
         parts.append(f"地址: {address}")
     notes = event.get("notes")
     if notes:
