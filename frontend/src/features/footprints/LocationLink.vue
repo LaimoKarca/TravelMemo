@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
-import { mapsDestination, validMapUrl } from '@/utils/maps'
+import { mapsDestination, textAddress, validMapUrl } from '@/utils/maps'
 
 const props = defineProps<{
   location: { map_url?: string | null; address?: string; city?: string; place_name?: string }
@@ -11,10 +11,7 @@ const props = defineProps<{
 }>()
 const savedMap = computed(() => validMapUrl(props.location.map_url) || validMapUrl(props.location.address))
 const link = computed(() => props.mode === 'saved-map' ? savedMap.value : mapsDestination(props.location))
-const address = computed(() => {
-  const value = props.location.address?.trim()
-  return (props.showAddress || props.mode === 'address') && value && !validMapUrl(value) ? value : ''
-})
+const address = computed(() => props.showAddress || props.mode === 'address' ? textAddress(props.location.address) : '')
 const label = computed(() => props.location.place_name
   ? `在 Google Maps 開啟${props.location.place_name}`
   : '在 Google Maps 開啟')

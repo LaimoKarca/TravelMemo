@@ -395,7 +395,18 @@
   gap: 0.4rem;
 }
 
+.source-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+
 .source-place-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 1.0625rem;
   font-weight: 700;
   color: var(--color-ink);
@@ -405,11 +416,17 @@
 .source-location-row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: .25rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 48%;
+  gap: .1rem;
   font-size: 0.75rem;
   color: var(--color-subtle);
 }
+
+.source-location-row .loc-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-location-row > .location-link { flex: none; }
+.source-location-pin { flex: none; width: .9rem; height: .9rem; }
 
 .source-notes-excerpt {
   flex: 1;

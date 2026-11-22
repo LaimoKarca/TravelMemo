@@ -96,6 +96,11 @@
   font-weight: 600;
 }
 
+.meta-location-row { display: flex; align-items: center; gap: .65rem; min-width: 0; }
+.meta-location-row .meta-value { min-width: 0; overflow-wrap: anywhere; }
+.meta-location-row .location-link { flex: none; font-size: .8125rem; }
+.meta-address { font-size: .8125rem; color: var(--color-subtle); overflow-wrap: anywhere; }
+
 .notes-section {
   display: flex;
   flex-direction: column;

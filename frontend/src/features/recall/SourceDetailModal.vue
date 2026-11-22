@@ -10,6 +10,7 @@ import { ApiError } from '@/api/auth'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import PhotoGallery from '@/features/media/PhotoGallery.vue'
 import LocationLink from '@/features/footprints/LocationLink.vue'
+import { mapsDestination, textAddress } from '@/utils/maps'
 
 const props = defineProps<{
   visible: boolean
@@ -174,12 +175,13 @@ function handleJump() {
             <span class="meta-label">造訪時間：</span>
             <span class="meta-value">{{ currentEvent.time }}</span>
           </div>
-          <div v-if="currentEvent.city" class="meta-item">
-            <span class="meta-label">所屬城市：</span>
-            <span class="meta-value">{{ currentEvent.city }}</span>
-          </div>
-          <div v-if="currentEvent.address || currentEvent.map_url" class="meta-item full-width">
-            <LocationLink class="meta-value" :location="currentEvent" show-address show-label />
+          <div v-if="currentEvent.city || currentEvent.address || currentEvent.map_url" class="meta-item" :class="{ 'full-width': mapsDestination(currentEvent) || textAddress(currentEvent.address) }">
+            <span v-if="currentEvent.city" class="meta-label">所屬城市：</span>
+            <div v-if="currentEvent.city || mapsDestination(currentEvent)" class="meta-location-row">
+              <span v-if="currentEvent.city" class="meta-value">{{ currentEvent.city }}</span>
+              <LocationLink :location="currentEvent" show-label />
+            </div>
+            <span v-if="textAddress(currentEvent.address)" class="meta-address">{{ textAddress(currentEvent.address) }}</span>
           </div>
         </div>
 

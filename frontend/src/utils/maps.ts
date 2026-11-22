@@ -35,6 +35,11 @@ export function locationInputError(value: string): string {
   return input.length > 1000 ? '地址不可超過 1,000 字元。' : ''
 }
 
+export function textAddress(value: string | null | undefined): string {
+  const address = value?.trim() || ''
+  return validMapUrl(address) ? '' : address
+}
+
 export function mapsDestination(location: { map_url?: string | null; address?: string; city?: string }): string | null {
   const address = location.address?.trim() || ''
   const saved = validMapUrl(location.map_url) || validMapUrl(address)

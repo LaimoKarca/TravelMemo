@@ -79,6 +79,13 @@ describe('SourceDetailModal', () => {
 
     expect(getEventSpy).toHaveBeenCalledWith('evt-101')
     expect(wrapper.text()).toContain('嵐山竹林小徑')
+    const locationRow = wrapper.get('.meta-location-row')
+    expect(locationRow.get('.meta-value').text()).toBe(mockEvent.city)
+    const map = locationRow.get('a')
+    expect(map.text()).toBe('Google Maps')
+    expect(new URL(map.attributes('href') || '').searchParams.get('query')).toContain(mockEvent.address)
+    expect(wrapper.get('.meta-address').text()).toBe(mockEvent.address)
+    wrapper.unmount()
   })
 
   it('handles deleted 404 event clearly and hides jump button', async () => {

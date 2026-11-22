@@ -11,6 +11,7 @@ import AppSearchBar from '@/components/ui/AppSearchBar.vue'
 import PhotoViewer from '@/features/media/PhotoViewer.vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import LocationLink from '@/features/footprints/LocationLink.vue'
+import { mapsDestination, textAddress } from '@/utils/maps'
 
 const props = defineProps<{
   trips: Trip[]
@@ -368,11 +369,13 @@ function handleResetFilters() {
             </div>
 
             <div class="source-card-body">
-              <h3 class="source-place-name">{{ item.event.place_name }}</h3>
-
-              <div v-if="item.event.city || item.event.address || item.event.map_url" class="source-location-row">
-                <span v-if="item.event.city" class="loc-text">{{ item.event.city }}</span>
-                <LocationLink :location="item.event" show-address />
+              <div class="source-title-row">
+                <h3 class="source-place-name">{{ item.event.place_name }}</h3>
+                <div v-if="item.event.city || textAddress(item.event.address) || mapsDestination(item.event)" class="source-location-row">
+                  <LocationLink v-if="mapsDestination(item.event)" :location="item.event" />
+                  <AppIcon v-else name="pin" class="source-location-pin" />
+                  <span class="loc-text">{{ item.event.city || textAddress(item.event.address) }}</span>
+                </div>
               </div>
 
               <!-- Reasons list: Quiet collapsed metadata -->

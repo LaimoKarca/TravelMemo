@@ -103,6 +103,11 @@ describe('RecallSearch', () => {
     expect(wrapper.text()).toContain('您可能也在尋找音羽瀑布的泉水體驗？')
 
     // Source card content
+    const headingRow = wrapper.get('.source-title-row')
+    expect(headingRow.get('h3').text()).toBe(mockSearchResult.items[0].event.place_name)
+    expect(headingRow.get('.source-location-row .loc-text').text()).toBe(mockSearchResult.items[0].event.city)
+    const map = headingRow.get('.source-location-row a')
+    expect(new URL(map.attributes('href') || '').searchParams.get('query')).toBe('京都市 東山區清水1丁目294')
     expect(wrapper.text()).toContain('清水寺本堂')
     expect(wrapper.text()).toContain('京都秋楓紀行')
     expect(wrapper.text()).toContain('登舞台遠眺京都市區景色。')
