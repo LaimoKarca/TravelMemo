@@ -70,6 +70,35 @@ def test_process_valid_png_and_webp():
     assert Image.open(io.BytesIO(res_webp.main_bytes)).format == "WEBP"
 
 
+def test_process_mpo_uses_primary_photo_and_strips_metadata():
+    primary = Image.new("RGB", (120, 80), "red")
+    secondary = Image.new("RGB", (60, 40), "blue")
+    exif = primary.getexif()
+    exif[274] = 6  # Rotate the stored image 90 degrees clockwise.
+    exif[36867] = "2024:10:25 15:45:00"
+    exif[34853] = {1: "N", 2: (25.0, 0.0, 0.0)}  # GPS latitude.
+    buf = io.BytesIO()
+    primary.save(buf, format="MPO", append_images=[secondary], exif=exif)
+    raw = buf.getvalue()
+    with Image.open(io.BytesIO(raw)) as uploaded:
+        assert uploaded.format == "MPO"
+        assert uploaded.n_frames == 2
+
+    result = process_image(raw)
+
+    assert (result.width, result.height) == (80, 120)
+    assert result.date_candidate == "2024-10-25T15:45:00"
+    for output in (result.main_bytes, result.thumbnail_bytes):
+        with Image.open(io.BytesIO(output)) as saved:
+            assert saved.format == "WEBP"
+            assert not saved.getexif()
+            red, _, blue = saved.getpixel((0, 0))
+            assert red > blue
+
+    with pytest.raises(ImageSizeError, match="像素.*超過限制"):
+        process_image(raw, max_megapixels=120 * 80 - 1)
+
+
 def test_downscale_large_image():
     # Image larger than 2048px on longest side
     raw = create_test_image("JPEG", size=(3000, 1500))

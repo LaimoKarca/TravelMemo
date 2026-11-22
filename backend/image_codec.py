@@ -25,7 +25,7 @@ MAX_DIMENSION: int = 2048  # 2048px
 MAX_MAIN_SIZE_BYTES: int = 512 * 1024  # 512 KiB
 THUMB_MAX_DIMENSION: int = 384  # 384px
 THUMB_MAX_SIZE_BYTES: int = 64 * 1024  # 64 KiB
-SUPPORTED_FORMATS: set[str] = {"JPEG", "JPG", "PNG", "WEBP", "HEIF", "HEIC"}
+SUPPORTED_FORMATS: set[str] = {"JPEG", "JPG", "PNG", "WEBP", "HEIF", "HEIC", "MPO"}
 
 
 class ImageCodecError(Exception):
@@ -184,6 +184,12 @@ def process_image(
         raise ImageSizeError(
             f"圖片像素 ({pixels} pixels) 超過限制 ({max_megapixels} pixels)。"
         )
+
+    # Pillow opens MPO at its primary JPEG frame. Decode only that frame.
+    try:
+        img.load()
+    except (OSError, ValueError, SyntaxError) as exc:
+        raise ImageCorruptError() from exc
 
     # Extract date candidate from EXIF before stripping
     date_candidate = extract_date_candidate(img)
