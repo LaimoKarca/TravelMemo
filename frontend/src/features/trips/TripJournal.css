@@ -1,27 +1,18 @@
-.trip-library-tools { display: flex; flex-direction: column; gap: .6rem; margin: .85rem 0 1.25rem; }
+.trip-library-tools { display: flex; flex-direction: column; gap: var(--space-control); margin: 0 0 var(--space-section); }
 .library-filters { display: flex; align-items: end; gap: .6rem; }
 .library-filters label { display: flex; flex-direction: column; gap: .25rem; flex: 1; min-width: 0; color: var(--color-subtle); font-size: .75rem; }
 .library-filters select { width: 100%; min-width: 0; }
 .library-reset { padding: .35rem; min-height: 36px; }
-.create-trip-btn { min-height: 32px; padding: .3rem .65rem; font-size: .8rem; line-height: 1.2; }
-.detail-refresh { min-width: 30px; height: 34px; padding: .3rem; border: 0; background: transparent; }
+.create-trip-btn { min-height: var(--size-control); padding: 4px var(--space-group); font-size: .8rem; line-height: 1.2; }
+.detail-refresh { min-width: var(--size-control); height: var(--size-control); padding: var(--space-control); border: 0; background: transparent; }
 .album-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .4rem 0; color: var(--color-ink-secondary); list-style: none; }
 .album-toggle::-webkit-details-marker { display: none; }
 .album-toggle small { color: var(--color-subtle); margin-left: .4rem; }
 .album-toggle svg.is-open { transform: rotate(180deg); }
-.album-header .album-toggle { border: 0; background: none; gap: .5rem; margin-right: auto; font: inherit; white-space: nowrap; }
+.album-header .album-toggle { min-height: var(--size-control); border: 0; background: none; gap: .5rem; margin-right: auto; font: inherit; white-space: nowrap; }
 @media(max-width: 480px) { .album-header { gap: .35rem; } .album-header :deep(.picker-buttons-row) { gap: .3rem; } .album-toggle { font-size: .85rem !important; } }
 .custom-cover-action { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--color-subtle); }
 .empty-filtered-trips { padding: 2rem 0; color: var(--color-subtle); }
-.create-trip-btn > *:not(.travel-cream-ripple-host) {
-  position: relative;
-  z-index: 1;
-}
-
-.create-trip-btn {
-  position: relative;
-}
-
 .trips-tab-container {
   width: 100%;
   min-width: 0;
@@ -34,21 +25,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: .9rem;
+  margin-bottom: var(--space-group);
   flex-wrap: nowrap;
   gap: .6rem;
 }
 
-.section-title {
-  font-size: 1.375rem;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.01em;
-}
 .trip-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.25rem;
+  gap: var(--space-section);
 }
 
 .trip-card {
@@ -61,15 +46,13 @@
   display: flex;
   flex-direction: column;
   container: trip-card / inline-size;
-  gap: 1rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color var(--motion-control) var(--motion-ease);
   position: relative;
   text-align: left;
 }
 
 .trip-card:hover {
   border-color: var(--color-maple);
-  box-shadow: var(--shadow-sm);
 }
 
 .trip-card:focus-visible {
@@ -81,33 +64,32 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 0.5rem;
-  padding: 0 1.25rem 1rem;
+  gap: var(--space-control);
+  padding: var(--space-group) var(--space-card) var(--space-control);
 }
 
 .trip-cover {
-  height: 96px;
+  aspect-ratio: 10 / 3;
   flex-shrink: 0;
-  background: var(--color-maple-subtle);
-  color: var(--color-maple);
+  background: var(--color-canvas);
+  color: var(--color-subtle);
+  border-bottom: 1px solid var(--color-divider);
   position: relative;
   overflow: hidden;
 }
-.trip-cover svg { width: 100%; height: 100%; }
+.trip-cover svg { display: block; width: 100%; height: 100%; opacity: .5; }
 .trip-cover-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-.trip-card:nth-child(3n + 2) .trip-cover { background: var(--color-olive-pale); color: var(--color-olive); }
-.trip-card:nth-child(3n) .trip-cover { background: var(--color-amber-subtle); color: var(--color-amber-text); }
 .trip-gallery-block {
   background-color: transparent;
   border: none;
   border-radius: 0;
-  padding: 0.25rem 0 .6rem;
-  margin-bottom: .3125rem;
+  padding: 0;
+  margin-bottom: 0;
   border-bottom: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -157,11 +139,10 @@
   border: 1px solid var(--color-border);
   cursor: pointer;
   background-color: var(--color-canvas);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  transition: border-color var(--motion-control) var(--motion-ease);
 }
 
 .event-photo-item:hover {
-  transform: scale(1.05);
   border-color: var(--color-maple);
 }
 
@@ -177,34 +158,17 @@
   display: block;
 }
 
-.trip-badge-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-
-.trip-date-pill {
-  font-size: 0.75rem;
-  font-weight: 600;
+.trip-date {
+  color: var(--color-subtle);
+  font-size: var(--font-meta);
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  color: var(--color-mint-text);
-  background-color: var(--color-mint);
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-xs);
-}
-
-.trip-route-art {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  opacity: 0.85;
+  line-height: 1.25;
 }
 
 .trip-name {
-  font-size: 1.125rem;
-  font-weight: 700;
+  font-size: var(--font-card-title);
+  font-weight: 650;
+  overflow-wrap: anywhere;
   color: var(--color-ink);
   line-height: 1.3;
 }
@@ -220,8 +184,7 @@
 }
 
 .trip-desc.is-empty {
-  font-style: italic;
-  opacity: 0.6;
+  color: var(--color-subtle);
 }
 
 .trip-meta-row {
@@ -246,17 +209,17 @@
 }
 
 .btn-icon {
-  width: 30px;
-  height: 30px;
+  width: var(--size-control);
+  height: var(--size-control);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--color-border);
+  border: 1px solid transparent;
   background-color: transparent;
   border-radius: var(--radius-xs);
   color: var(--color-subtle);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color var(--motion-control) var(--motion-ease), background-color var(--motion-control) var(--motion-ease);
 }
 
 .btn-icon:hover {
@@ -273,8 +236,8 @@
   display: flex;
   flex-direction: column;
   gap: .5rem;
-  margin-bottom: .625rem;
-  padding-bottom: .625rem;
+  margin-bottom: 4px;
+  padding-bottom: var(--space-control);
   border-bottom: 1px solid var(--color-border);
 }
 
@@ -355,7 +318,7 @@
   gap: 1rem;
   padding: .1875rem 0;
   border-bottom: 1px solid var(--color-border);
-  margin-bottom: .75rem;
+  margin-bottom: var(--space-control);
 }
 
 .filter-controls {
@@ -391,13 +354,13 @@
 .timeline-container {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: var(--space-section);
 }
 
 .timeline-day-group {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-group);
 }
 
 .day-header {
@@ -405,22 +368,20 @@
   align-items: center;
   gap: 0.75rem;
   padding-bottom: 0.5rem;
-  border-bottom: 2px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .day-marker {
-  background-color: var(--color-amber);
-  color: var(--color-ink);
-  font-weight: 700;
-  font-size: 0.75rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: var(--radius-xs);
-  letter-spacing: 0.05em;
+  color: var(--color-maple-hover);
+  font-size: var(--font-meta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .day-date-heading {
-  font-size: 1.0625rem;
-  font-weight: 700;
+  font-size: var(--font-card-title);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   color: var(--color-ink);
 }
 
@@ -476,12 +437,12 @@
   background-color: var(--color-paper);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 1rem 1.25rem;
+  min-width: 0;
+  padding: var(--space-card);
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
+  gap: var(--space-control);
+  transition: border-color var(--motion-control) var(--motion-ease);
 }
 
 .event-card.is-highlighted .event-card-body {
@@ -506,13 +467,9 @@
 }
 
 .event-time-badge {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-maple);
-  background-color: var(--color-maple-subtle);
-  padding: 0.15rem 0.45rem;
-  border-radius: var(--radius-xs);
-  font-family: var(--font-mono);
+  color: var(--color-subtle);
+  font-size: var(--font-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 .event-category-pill {
@@ -526,8 +483,9 @@
 }
 
 .event-place-name {
-  font-size: 1.0625rem;
-  font-weight: 700;
+  font-size: var(--font-card-title);
+  font-weight: 650;
+  overflow-wrap: anywhere;
   color: var(--color-ink);
   line-height: 1.3;
 }
@@ -546,10 +504,8 @@
   color: var(--color-subtle);
   line-height: 1.5;
   white-space: pre-line;
-  background-color: var(--color-canvas);
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-xs);
-  border-left: 3px solid var(--color-maple);
+  padding-inline-start: var(--space-group);
+  border-inline-start: 1px solid var(--color-border);
 }
 
 .btn-sm {
@@ -650,13 +606,12 @@
 .trip-album-photos :deep(.empty-hint) { font-size: .8rem; text-wrap: pretty; }
 .trip-album-photos :deep(.empty-text) { font-weight: 600; color: var(--color-ink); }
 @media(max-width: 768px) {
-  .section-header { gap: .5rem; margin-bottom: .7rem; }
-  .section-title { font-size: 1.25rem; }
+  .section-header { gap: var(--space-control); }
   .detail-actions { gap: .25rem; min-width: 0; }
-  .detail-actions .btn { padding: .3rem .4rem; font-size: .75rem; min-height: 34px; }
+  .detail-actions .btn { padding: 4px var(--space-control); font-size: .75rem; min-height: var(--size-control); }
   .detail-actions .ai-record-btn { border-color: transparent; background: var(--color-maple-subtle); color: var(--color-maple); }
   .detail-nav { gap: .2rem; }
-  .detail-nav .back-button { min-width: 26px; padding: .25rem; }
+  .detail-nav .back-button { min-width: var(--size-control); min-height: var(--size-control); justify-content: flex-start; padding: 4px; }
   .trip-gallery-block { gap: .5rem; }
   .empty-state { padding: 1.5rem 1rem; }
   .empty-title, .empty-desc { text-wrap: pretty; }
@@ -668,7 +623,7 @@
 
 .trip-description-row { display: flex; align-items: flex-end; gap: .5rem; }
 .trip-description-row .banner-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.summary-edit { min-width: 32px; width: 32px; height: 32px; padding: .4rem; margin-left: auto; flex: 0 0 auto; color: var(--color-subtle); }
+.summary-edit { min-width: var(--size-control); width: var(--size-control); height: var(--size-control); padding: .4rem; margin-left: auto; flex: 0 0 auto; color: var(--color-subtle); }
 .trip-metadata-row { display: flex; align-items: center; gap: .5rem; flex: 1 1 auto; min-width: 0; }
 .trip-metadata-row .banner-dates { flex-wrap: wrap; min-width: 0; }
 @media(max-width: 768px) { .trip-metadata-row { flex-basis: 100%; } }
@@ -682,7 +637,7 @@
 .event-filter-options .clear-filters-btn { justify-self: start; grid-column: 1 / -1; min-height: 28px; }
 
 .event-header-actions { display: flex; flex: 0 0 auto; gap: .35rem; }
-.event-header-actions .icon-button { min-width: 32px; width: 32px; height: 32px; padding: .4rem; color: var(--color-subtle); }
+.event-header-actions .icon-button { min-width: var(--size-control); width: var(--size-control); height: var(--size-control); padding: .4rem; color: var(--color-subtle); }
 .event-header-actions .icon-button:hover { color: var(--color-maple); }
 .event-header-actions .event-delete:hover { color: var(--color-error-text); }
 .event-place-name { overflow-wrap: anywhere; text-wrap: pretty; }

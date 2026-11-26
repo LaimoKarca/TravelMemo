@@ -1,5 +1,5 @@
 .brand-header {
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-section);
 }
 
 .brand-title-wrap {
@@ -34,8 +34,5 @@
   font-size: 0.9375rem;
   font-weight: 600;
   color: var(--color-maple);
-  letter-spacing: 0.05em;
-  padding: 0.15rem 0.5rem;
-  background-color: var(--color-maple-subtle);
-  border-radius: var(--radius-xs);
+  letter-spacing: 0;
 }

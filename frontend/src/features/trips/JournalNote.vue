@@ -35,7 +35,7 @@ function apply() {
 <template>
   <fieldset class="journal-note">
     <legend><label :for="id">{{ label }}</label></legend>
-    <button type="button" class="icon-button polish-button" :disabled="disabled || busy || !modelValue.trim() || modelValue.length > 10000" :aria-label="busy ? '潤飾中' : 'AI 潤飾文字'" :title="modelValue.length > 10000 ? '請縮短至 10,000 字以內再潤飾' : 'AI 潤飾文字'" @click="polish"><AppIcon name="wand" :class="{ spinning: busy }" /></button>
+    <button type="button" class="icon-button polish-button" :disabled="disabled || busy || !modelValue.trim() || modelValue.length > 10000" :aria-label="busy ? '潤飾中' : 'AI 潤飾文字'" :title="modelValue.length > 10000 ? '請縮短至 10,000 字以內再潤飾' : 'AI 潤飾文字'" @click="polish"><AppIcon name="wand" /></button>
     <textarea :id="id" :value="modelValue" :placeholder="placeholder" :maxlength="maxlength || 10000" :disabled="disabled" class="form-input" rows="4" @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)" />
     <p v-if="error" class="note-error" role="alert">{{ error }}</p>
     <div v-if="proposal" class="polish-preview" aria-live="polite"><div class="preview-toolbar"><span>潤飾建議</span><div class="note-actions"><button type="button" class="discard-polish" :disabled="disabled" @click="proposal = ''">保留原文</button><button type="button" class="btn btn-primary apply-polish" :disabled="disabled" @click="apply"><span aria-hidden="true">✓</span> 套用潤飾</button></div></div><p>{{ proposal }}</p></div>

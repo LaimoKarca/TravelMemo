@@ -48,7 +48,6 @@ const trips = defineModel<TripListItem[]>('trips', { required: true })
 const emit = defineEmits<{
   notice: [message: string, type: 'error' | 'success' | 'info']
   'clear-notice': []
-  'action-click': [event: MouseEvent]
 }>()
 
 function showAlert(message: string, type: 'error' | 'success' | 'info' = 'info') {
@@ -682,7 +681,8 @@ async function openTrip(tripId: string, eventId?: string) {
   highlightedEventId.value = eventId || null
   if (!eventId) return
   await nextTick()
-  document.getElementById(`event-${eventId}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  document.getElementById(`event-${eventId}`)?.scrollIntoView?.({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' })
 }
 
 defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
@@ -696,20 +696,20 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
     id="workspace-panel-trips"
     role="tabpanel"
     aria-labelledby="workspace-tab-trips"
-    class="trips-tab-container"
+    class="trips-tab-container workspace-panel-enter"
     tabindex="0"
   >
     <!-- VIEW 1: Trip List View -->
     <section v-if="!activeTripId" class="trip-list-section" aria-label="旅程列表">
       <!-- Confident short page heading without filler subtitles per brief -->
       <div class="section-header">
-        <h2 class="section-title">我的旅行手記</h2>
+        <h2 class="section-title workspace-page-title">我的旅行手記</h2>
         <button
           type="button"
           class="btn btn-primary create-trip-btn"
           aria-label="建立旅行手記"
           :disabled="loadingTrips || actionInProgress"
-          @click="(e) => { emit('action-click', e); openCreateTripModal(); }"
+          @click="openCreateTripModal"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <line x1="12" y1="5" x2="12" y2="19" />
@@ -765,32 +765,16 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
               @error="brokenCoverIds.set(trip.id, trip.cover_photo_id)"
             />
             <svg v-else viewBox="0 0 360 88" fill="none" preserveAspectRatio="xMidYMid slice">
-              <path d="M0 22H360M0 66H360M45 0V88M135 0V88M225 0V88M315 0V88" stroke="currentColor" stroke-opacity=".07" />
               <path d="M40 59C80 59 68 23 116 25S171 73 216 58 242 22 294 29" stroke="currentColor" stroke-width="2" stroke-dasharray="5 6" stroke-linecap="round" />
               <circle cx="40" cy="59" r="7" fill="var(--color-paper)" stroke="currentColor" stroke-width="2" />
               <circle cx="40" cy="59" r="2.5" fill="currentColor" />
               <circle cx="216" cy="58" r="4" fill="var(--color-paper)" stroke="currentColor" stroke-width="2" />
-              <path d="M294 14c-8 0-13 6-13 13 0 10 13 21 13 21s13-11 13-21c0-7-5-13-13-13Z" fill="var(--color-amber)" stroke="currentColor" stroke-width="1.5" />
+              <path d="M294 14c-8 0-13 6-13 13 0 10 13 21 13 21s13-11 13-21c0-7-5-13-13-13Z" fill="var(--color-paper)" stroke="currentColor" stroke-width="1.5" />
               <circle cx="294" cy="27" r="4" fill="var(--color-paper)" stroke="currentColor" stroke-width="1.5" />
             </svg>
           </div>
           <div class="trip-card-content">
-            <!-- Header row with date pill, timezone, and restrained route mini-art -->
-            <div class="trip-badge-row">
-              <span class="trip-date-pill">
-                {{ trip.start_date }} ~ {{ trip.end_date }}
-              </span>
-
-              <!-- Restrained route mini-art providing travel identity per brief -->
-              <div class="trip-route-art" aria-hidden="true">
-                <svg width="40" height="16" viewBox="0 0 40 16" fill="none">
-                  <path d="M 4 8 C 14 2, 26 14, 36 8" stroke="var(--color-border)" stroke-width="1.5" stroke-dasharray="2 2" stroke-linecap="round"/>
-                  <circle cx="4" cy="8" r="3" fill="var(--color-maple)"/>
-                  <circle cx="36" cy="8" r="3.5" fill="var(--color-amber)" stroke="var(--color-ink)" stroke-width="1"/>
-                </svg>
-              </div>
-            </div>
-
+            <span class="trip-date">{{ trip.start_date }} ~ {{ trip.end_date }}</span>
             <h3 class="trip-name">{{ trip.name }}</h3>
 
             <p v-if="trip.description" class="trip-desc">

@@ -13,7 +13,6 @@ import RecallSearch from '@/features/recall/RecallSearch.vue'
 import SourceDetailModal from '@/features/recall/SourceDetailModal.vue'
 import StandaloneFootprints from '@/features/footprints/StandaloneFootprints.vue'
 import ConversationView from '@/features/chat/ConversationView.vue'
-import { useTravelMotion } from './useTravelMotion'
 
 const props = defineProps<{
   user: User
@@ -24,7 +23,7 @@ const emit = defineEmits<{
   (e: 'logout'): void
 }>()
 
-const { isTabWashing, triggerTabWash, handleActionClick } = useTravelMotion()
+const navPress = ref<{ tab: WorkspaceTab; sequence: number } | null>(null)
 const recallState = reactive(createRecallState())
 const chatWorkspace = reactive<ChatWorkspaceState>({ drafts: new Map(), conversations: [] })
 
@@ -57,14 +56,17 @@ function switchTab(tab: WorkspaceTab) {
   if (tab === 'trips') {
     activeTab.value = tab
     backToTripList()
-    triggerTabWash(450)
     return
   }
   if (activeTab.value !== tab) {
     activeTab.value = tab
     clearAlert()
-    triggerTabWash(450)
   }
+}
+
+function activateTab(tab: WorkspaceTab) {
+  navPress.value = { tab, sequence: (navPress.value?.sequence ?? 0) + 1 }
+  switchTab(tab)
 }
 
 async function handleTabKeydown(e: KeyboardEvent, currentIndex: number) {
@@ -81,7 +83,7 @@ async function handleTabKeydown(e: KeyboardEvent, currentIndex: number) {
 
   if (targetIndex !== -1) {
     e.preventDefault()
-    switchTab(TABS[targetIndex].id)
+    activateTab(TABS[targetIndex].id)
     await nextTick()
     tabButtonRefs.value[targetIndex]?.focus()
   }
@@ -176,7 +178,7 @@ function clearAlert() {
           :aria-controls="t.panelId"
           role="tab"
           :tabindex="activeTab === t.id ? 0 : -1"
-          @click="(e) => { handleActionClick(e); switchTab(t.id); }"
+          @click="activateTab(t.id)"
           @keydown="handleTabKeydown($event, index)"
         >
           <svg v-if="t.id === 'trips'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -192,6 +194,7 @@ function clearAlert() {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           <span>{{ t.label }}</span>
+          <span v-if="navPress?.tab === t.id" :key="navPress.sequence" class="nav-wave" aria-hidden="true"></span>
         </button>
       </nav>
 
@@ -211,7 +214,7 @@ function clearAlert() {
           type="button"
           class="btn btn-secondary logout-button"
           :disabled="loggingOut || journal?.actionInProgress"
-          @click="(e) => { handleActionClick(e); emit('logout'); }"
+          @click="emit('logout')"
         >
           <span v-if="loggingOut" class="spinner-small ui-spinner ui-spinner--maple" aria-hidden="true"></span>
           <span>{{ loggingOut ? '登出中...' : '登出手記' }}</span>
@@ -243,7 +246,7 @@ function clearAlert() {
     <main class="workspace-main" :class="{ 'is-chat-tab': activeTab === 'chat' }">
       <div
         class="workspace-content-pane"
-        :class="{ 'tab-wash-active': isTabWashing, 'is-chat-pane': activeTab === 'chat' }"
+        :class="{ 'is-chat-pane': activeTab === 'chat' }"
       >
         <!-- Global Alert Notification Area -->
         <StatusAlert :message="alertMessage" :type="alertType" :notice-key="alertSequence" floating @dismiss="clearAlert" />
@@ -254,10 +257,9 @@ function clearAlert() {
           :active="activeTab === 'trips'"
           @notice="showAlert"
           @clear-notice="clearAlert"
-          @action-click="handleActionClick"
         />
 
-        <div v-if="activeTab === 'footprints'" id="workspace-panel-footprints" role="tabpanel" aria-labelledby="workspace-tab-footprints" class="tabpanel-container" tabindex="0">
+        <div v-if="activeTab === 'footprints'" id="workspace-panel-footprints" role="tabpanel" aria-labelledby="workspace-tab-footprints" class="tabpanel-container workspace-panel-enter" tabindex="0">
           <StandaloneFootprints :focus-id="focusedStandaloneId" @view="handleViewEvent" @jump="handleJumpToTrip" @notice="showAlert" @unfocus="focusedStandaloneId = null" @photo-deleted="journal?.handlePhotoDeleted($event)" />
         </div>
 
@@ -267,7 +269,7 @@ function clearAlert() {
           id="workspace-panel-search"
           role="tabpanel"
           aria-labelledby="workspace-tab-search"
-          class="tabpanel-container"
+          class="tabpanel-container workspace-panel-enter"
           tabindex="0"
         >
           <RecallSearch
@@ -284,7 +286,7 @@ function clearAlert() {
           id="workspace-panel-chat"
           role="tabpanel"
           aria-labelledby="workspace-tab-chat"
-          class="tabpanel-container chat-tabpanel"
+          class="tabpanel-container workspace-panel-enter chat-tabpanel"
           tabindex="0"
         >
           <ConversationView
@@ -309,7 +311,7 @@ function clearAlert() {
         :aria-label="t.label"
         :class="{ 'is-active': activeTab === t.id }"
         :aria-pressed="activeTab === t.id"
-        @click="(e) => { handleActionClick(e); switchTab(t.id); }"
+        @click="activateTab(t.id)"
       >
         <svg v-if="t.id === 'trips'" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -324,6 +326,7 @@ function clearAlert() {
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         <span>{{ t.shortLabel }}</span>
+        <span v-if="navPress?.tab === t.id" :key="navPress.sequence" class="nav-wave" aria-hidden="true"></span>
       </button>
     </nav>
 

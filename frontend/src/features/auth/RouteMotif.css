@@ -14,36 +14,11 @@
   flex-direction: column;
   height: 100%;
   max-width: 320px;
-  justify-content: space-between;
+  justify-content: center;
   margin: 0 auto;
 }
 
-.motif-badge {
-  display: inline-flex;
-  flex-direction: column;
-  align-self: flex-start;
-  padding: 0.35rem 0.75rem;
-  border-left: 3px solid var(--color-maple);
-  background-color: var(--color-paper);
-  border-radius: var(--radius-xs);
-  box-shadow: var(--shadow-sm);
-}
-
-.badge-brand {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: 0.05em;
-}
-
-.badge-desc {
-  font-size: 0.6875rem;
-  color: var(--color-subtle);
-}
-
 .route-map {
-  margin: 2rem 0;
   display: flex;
   justify-content: center;
 }

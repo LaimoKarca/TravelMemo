@@ -256,7 +256,7 @@ function closeAttach(stale: boolean) {
 <template>
   <section class="daily" aria-labelledby="daily-title">
     <header class="daily-header">
-      <h2 id="daily-title">日常足跡</h2>
+      <h2 id="daily-title" class="workspace-page-title">日常足跡</h2>
       <button type="button" class="btn btn-primary quick-record" aria-label="記錄日常足跡" title="記錄日常足跡" @click="openEditor(null)"><AppIcon name="plus" /></button>
     </header>
     <form role="search" aria-label="搜尋日常足跡" novalidate @submit.prevent="applyFilters">
@@ -305,7 +305,7 @@ function closeAttach(stale: boolean) {
                 :aria-label="`足跡選項：${event.place_name}`" :aria-expanded="openMenuId === event.id"
                 :aria-controls="openMenuId === event.id ? `daily-menu-${event.id}` : undefined"
                 @click="toggleMenu($event, event.id)"><AppIcon name="more" /></button>
-              <div v-if="openMenuId === event.id" :id="`daily-menu-${event.id}`" class="daily-menu" :class="{ 'opens-up': menuAbove }">
+              <div v-if="openMenuId === event.id" :id="`daily-menu-${event.id}`" class="daily-menu ui-menu-enter" :class="{ 'opens-up': menuAbove }">
                 <button type="button" @click="closeMenu(true); openEditor(event)"><AppIcon name="edit" />編輯</button>
                 <button type="button" @click="closeMenu(true); attaching = event"><AppIcon name="book-in" />收進手記</button>
                 <button type="button" class="daily-delete" @click="closeMenu(true); deleting = event"><AppIcon name="trash" />刪除</button>

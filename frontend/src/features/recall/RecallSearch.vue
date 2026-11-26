@@ -132,7 +132,7 @@ function handleResetFilters() {
 
 <template>
   <section class="recall-search-section" aria-label="回憶搜尋">
-    <h2 class="search-title">回憶搜尋</h2>
+    <h2 class="search-title workspace-page-title">回憶搜尋</h2>
     <form class="search-form-card" role="search" aria-label="搜尋旅行回憶" @submit.prevent="handleSearch">
       <AppSearchBar
         v-model="query"

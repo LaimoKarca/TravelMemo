@@ -5,11 +5,6 @@
 <template>
   <aside class="route-motif" aria-label="旅行手記路線圖">
     <div class="motif-content">
-      <div class="motif-badge">
-        <span class="badge-brand">TravelMemo</span>
-        <span class="badge-desc">旅程手記</span>
-      </div>
-
       <div class="route-map" aria-hidden="true">
         <svg class="route-svg" viewBox="0 0 280 380" fill="none" xmlns="http://www.w3.org/2000/svg">
           <!-- Subtle journey grid lines -->

@@ -1,3 +1,24 @@
+.workspace-page-title {
+  color: var(--color-ink);
+  font-size: var(--font-page-title);
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.workspace-panel-enter { animation: ui-fade-in var(--motion-entry) var(--motion-ease); }
+.ui-menu-enter { animation: ui-enter var(--motion-entry) var(--motion-ease); }
+
+@keyframes ui-fade-in { from { opacity: .65; } to { opacity: 1; } }
+@keyframes ui-enter {
+  from { opacity: .65; transform: translateY(var(--enter-offset, 4px)); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-panel-enter, .ui-menu-enter { animation: none; }
+  .ui-spinner { animation: none; }
+}
+
 .search-bar {
   display: flex;
   align-items: center;

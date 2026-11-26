@@ -577,7 +577,7 @@ function handleCitationClick(citation: Citation) {
     <!-- Top Header: Title & Collapsed History -->
     <header class="conversation-header">
       <div class="header-main-row">
-        <h2 class="view-title">AI 旅程助理</h2>
+        <h2 class="view-title workspace-page-title">AI 旅程助理</h2>
         <button
           type="button"
           class="btn btn-secondary btn-new-conv"
@@ -620,10 +620,6 @@ function handleCitationClick(citation: Citation) {
         </summary>
 
         <div class="conversation-toolbar" aria-label="歷史對話導覽">
-          <div class="toolbar-top">
-            <span class="toolbar-label">歷史對話紀錄</span>
-          </div>
-
           <div v-if="loadingConversations" class="toolbar-loading" role="status" aria-live="polite">
             <div class="page-spinner-sm ui-spinner" aria-hidden="true"></div>
             <span>載入中...</span>
@@ -866,8 +862,7 @@ function handleCitationClick(citation: Citation) {
               </div>
 
               <div v-else-if="hasFailedOrBlockedStagedPhotos" class="staged-alert-hint" role="alert">
-                <span class="alert-icon" aria-hidden="true">⚠️</span>
-                <span>照片未就緒，請重試或移除無法識別的照片</span>
+                  <span>照片未就緒，請重試或移除無法識別的照片</span>
               </div>
             </div>
 
@@ -888,6 +883,7 @@ function handleCitationClick(citation: Citation) {
             <button
               type="submit"
               class="btn btn-primary send-btn"
+              :aria-label="sendingMessage ? '回覆中' : '發送'"
               :disabled="sendingMessage || loadingMessages || activeDraft.submitting || activeDraft.uploading || hasUnreadyStagedPhotos || (!inputContent.trim() && stagedChatPhotos.length === 0)"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

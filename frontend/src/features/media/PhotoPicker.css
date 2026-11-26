@@ -1,4 +1,4 @@
-.native-picker-btn { min-width: 36px; width: 36px; height: 36px; padding: .4rem; }
+.native-picker-btn { min-width: var(--size-control); width: var(--size-control); height: var(--size-control); padding: .4rem; }
 .picker-btn.direct-icon-btn { position: relative; width: 36px; min-width: 36px; padding: .4rem; justify-content: center; }
 .picker-btn .add-photo-plus { width: 10px; height: 10px; position: absolute; top: 3px; right: 2px; background: var(--color-paper); border-radius: 50%; }
 .is-icon-only .picker-buttons-row { gap: 0; }

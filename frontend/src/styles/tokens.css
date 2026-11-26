@@ -66,6 +66,21 @@
   --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
+  /* Shared layout and motion */
+  --gutter-page: clamp(24px, 2.5vw, 32px);
+  --space-control: 8px;
+  --space-group: 12px;
+  --space-section: 20px;
+  --space-card: 16px;
+  --font-page-title: 1.375rem;
+  --font-card-title: 1.0625rem;
+  --font-meta: .8125rem;
+  --motion-ease: cubic-bezier(.2, .65, .3, 1);
+  --motion-control: 120ms;
+  --motion-entry: 160ms;
+  --motion-dialog: 200ms;
+  --motion-wave: 240ms;
+
   /* Elevation & Borders */
   --radius-xs: 3px;
   --radius-sm: 6px;
@@ -78,4 +93,8 @@
   --shadow-sm: 0 1px 3px rgba(69, 58, 50, 0.08);
   --shadow-md: 0 4px 12px rgba(69, 58, 50, 0.1);
   --shadow-notebook: var(--shadow-md);
+}
+
+@media (max-width: 768px) {
+  :root { --gutter-page: 16px; --space-section: 16px; --space-card: 12px; }
 }

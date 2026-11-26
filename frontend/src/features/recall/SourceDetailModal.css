@@ -34,11 +34,11 @@
 }
 
 .dialog-body {
-  padding: 1.5rem;
+  padding: var(--space-card);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--space-section);
 }
 
 .event-headline {
@@ -67,11 +67,9 @@
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem 1rem;
-  background-color: var(--color-canvas);
-  padding: 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+  gap: var(--space-group) var(--space-card);
+  padding-block: var(--space-group);
+  border-block: 1px solid var(--color-divider);
 }
 
 .meta-item {
@@ -187,7 +185,7 @@
   .meta-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
-    padding: 0.75rem;
+    padding-block: var(--space-group);
   }
 
   .dialog-footer {

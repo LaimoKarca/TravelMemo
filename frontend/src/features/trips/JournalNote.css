@@ -8,11 +8,8 @@ textarea { width: 100%; resize: vertical; min-height: 100px; }
 .note-actions { display: flex; align-items: center; gap: .75rem; }
 .discard-polish { border: 0; background: none; color: var(--color-subtle); cursor: pointer; padding: .4rem 0; font: inherit; }
 .apply-polish { min-height: 34px; padding: .35rem .7rem; font-size: .8rem; gap: .35rem; }
-.polish-mask { position: fixed; inset: 0; z-index: 3000; background: #453a324d; backdrop-filter: blur(3px); display: grid; place-items: center; outline: none; }
+.polish-mask { position: fixed; inset: 0; z-index: 3000; background: #453a324d; display: grid; place-items: center; outline: none; }
 .polish-progress { display: flex; align-items: center; gap: 1rem; padding: 1.4rem 1.8rem; background: var(--color-paper); border-radius: 18px; box-shadow: 0 12px 40px #453a3220; color: var(--color-ink); }
 .polish-spinner { --spinner-size: 28px; --spinner-stroke: 3px; --spinner-speed: .85s; }
 .note-error { color: var(--color-error-text); font-size: .875rem; }
 .undo-note { align-self: start; font-size: .8rem; margin-top: .4rem; }
-.spinning { animation: breathe 1s ease-in-out infinite alternate; }
-@keyframes breathe { to { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .spinning { animation: none; } }

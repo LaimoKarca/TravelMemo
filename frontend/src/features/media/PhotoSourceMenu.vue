@@ -41,7 +41,7 @@ defineExpose({ close })
     <summary class="icon-button" aria-label="加入圖片" title="加入圖片" :aria-disabled="disabled || undefined" @click="disabled && $event.preventDefault()">
       <AppIcon name="image" />
     </summary>
-    <div class="photo-source-options">
+    <div class="photo-source-options ui-menu-enter">
       <button type="button" :disabled="disabled" @click="emit('camera')">拍照</button>
       <button type="button" :disabled="disabled" @click="emit('gallery')">從圖庫選取</button>
     </div>
