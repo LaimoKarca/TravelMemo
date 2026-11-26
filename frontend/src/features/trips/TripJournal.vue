@@ -194,6 +194,13 @@ const filteredEvents = computed(() => {
   })
 })
 
+const collapsedDates = reactive(new Set<string>())
+watch([activeTripId, eventQuery, selectedCityFilter, selectedCategoryFilter], () => collapsedDates.clear())
+
+function toggleDay(date: string) {
+  if (!collapsedDates.delete(date)) collapsedDates.add(date)
+}
+
 // Timeline: grouped by date
 interface DayGroup {
   date: string
@@ -680,6 +687,8 @@ async function openTrip(tripId: string, eventId?: string) {
   if (!props.active || detailGeneration !== generation || activeTripId.value !== tripId) return
   highlightedEventId.value = eventId || null
   if (!eventId) return
+  const target = currentEvents.value.find(event => event.id === eventId)
+  if (target) collapsedDates.delete(target.date)
   await nextTick()
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   document.getElementById(`event-${eventId}`)?.scrollIntoView?.({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' })
@@ -1016,17 +1025,23 @@ defineExpose({ openTrip, backToTripList, handlePhotoDeleted, actionInProgress })
           :key="day.date"
           class="timeline-day-group"
         >
-          <!-- Day Header with mango accent -->
-          <div class="day-header">
-            <div class="day-marker" aria-hidden="true">
+          <h3>
+            <button
+              type="button"
+              class="day-header"
+              :aria-expanded="!collapsedDates.has(day.date)"
+              :aria-controls="'trip-day-' + day.date"
+              @click="toggleDay(day.date)"
+            >
               <span class="day-number">Day {{ day.dayNumber }}</span>
-            </div>
-            <h3 class="day-date-heading">{{ day.date }}</h3>
-            <span class="day-event-count">{{ day.events.length }} 處足跡</span>
-          </div>
+              <time class="day-date-heading" :datetime="day.date">{{ day.date }}</time>
+              <span class="day-event-count">{{ day.events.length }} 處足跡</span>
+              <AppIcon name="chevron" class="day-chevron" />
+            </button>
+          </h3>
 
           <!-- Day Events Stream -->
-          <div class="day-events-stream">
+          <div v-show="!collapsedDates.has(day.date)" :id="'trip-day-' + day.date" class="day-events-stream">
             <article
               v-for="evt in day.events"
               :id="'event-' + evt.id"

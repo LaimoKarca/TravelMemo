@@ -199,6 +199,28 @@ describe('TripWorkspace and Travel Components', () => {
     expect(wrapper.find('.next-destination-indicator').exists()).toBe(false)
   })
 
+  it('collapses only the chosen day and restores it with the same button', async () => {
+    const wrapper = mount(TripWorkspace, { props: { user: mockUser } })
+    await flushPromises()
+    await wrapper.get('.trip-card').trigger('click')
+    await flushPromises()
+
+    const dayOne = wrapper.get('button[aria-controls="trip-day-2026-11-20"]')
+    const firstStream = wrapper.get<HTMLElement>('#trip-day-2026-11-20').element
+    const secondStream = wrapper.get<HTMLElement>('#trip-day-2026-11-21').element
+    expect(dayOne.attributes('aria-expanded')).toBe('true')
+    expect(firstStream.style.display).not.toBe('none')
+
+    await dayOne.trigger('click')
+    expect(dayOne.attributes('aria-expanded')).toBe('false')
+    expect(firstStream.style.display).toBe('none')
+    expect(secondStream.style.display).not.toBe('none')
+
+    await dayOne.trigger('click')
+    expect(dayOne.attributes('aria-expanded')).toBe('true')
+    expect(firstStream.style.display).not.toBe('none')
+  })
+
   it('supports filtering events by city and category in current trip', async () => {
     const wrapper = mount(TripWorkspace, {
       props: { user: mockUser }
@@ -636,6 +658,10 @@ describe('TripWorkspace and Travel Components', () => {
       props: { user: mockUser }
     })
     await flushPromises()
+    await wrapper.get('.trip-card').trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-controls="trip-day-2026-11-20"]').trigger('click')
+    expect(wrapper.get<HTMLElement>('#trip-day-2026-11-20').element.style.display).toBe('none')
 
     // Switch to Recall Search tab
     const navTabs = wrapper.findAll('.nav-tab-btn')
@@ -659,6 +685,8 @@ describe('TripWorkspace and Travel Components', () => {
     // Highlighted class should be applied on event-2 card
     const eventCard2 = wrapper.find('#event-event-2')
     expect(eventCard2.exists()).toBe(true)
+    expect(wrapper.get<HTMLElement>('#trip-day-2026-11-20').element.style.display).not.toBe('none')
+    expect(wrapper.get('button[aria-controls="trip-day-2026-11-20"]').attributes('aria-expanded')).toBe('true')
     expect(eventCard2.classes()).toContain('is-highlighted')
 
     await navTabs[2].trigger('click')

@@ -366,16 +366,37 @@
 .day-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding-bottom: 0.5rem;
+  gap: var(--space-control);
+  width: 100%;
+  min-height: var(--size-control);
+  padding: 4px;
+  border: 0;
   border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
 
-.day-marker {
-  color: var(--color-maple-hover);
+.day-number {
+  position: relative;
+  isolation: isolate;
+  padding-inline: 4px;
+  color: var(--color-amber-text);
   font-size: var(--font-meta);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.day-number::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 25% -1px 7%;
+  background: var(--color-amber);
+  opacity: .52;
+  clip-path: polygon(1% 12%, 100% 0, 97% 89%, 0 100%);
 }
 
 .day-date-heading {
@@ -383,12 +404,30 @@
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   color: var(--color-ink);
+  white-space: nowrap;
 }
 
 .day-event-count {
   font-size: 0.75rem;
+  font-weight: 400;
   color: var(--color-subtle);
-  margin-left: auto;
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.day-header .day-chevron {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-subtle);
+  transition: transform var(--motion-entry) var(--motion-ease), color var(--motion-control) var(--motion-ease);
+}
+
+.day-header[aria-expanded='true'] .day-chevron {
+  transform: rotate(180deg);
+}
+
+.day-header:hover .day-chevron {
+  color: var(--color-maple-hover);
 }
 
 .day-events-stream {
