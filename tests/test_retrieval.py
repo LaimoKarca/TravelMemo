@@ -887,6 +887,13 @@ def test_directional_english_and_chinese_category_enforcement():
     assert top_zh["relation"]["anchor_id"] == ev_zh1["id"]
     assert res_zh["clarification"] is None
 
+    res_spoken = service.search("user-zh", "那次我記得吃了牛丼。下一站是哪裡？")
+    assert res_spoken["items"][0]["event"]["id"] == ev_zh2["id"]
+    assert res_spoken["items"][0]["relation"]["anchor_id"] == ev_zh1["id"]
+    reverse = service.search("user-zh", "我還記得天然豚骨湯頭，上一站是哪裡？")
+    assert reverse["items"][0]["event"]["id"] == ev_zh1["id"]
+    assert reverse["items"][0]["relation"]["direction"] == "prev"
+
 
 def test_anchor_filtering_isolation_and_multi_trip_duplicates():
     repo = MemoryTravelRepository()

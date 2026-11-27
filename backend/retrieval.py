@@ -24,6 +24,15 @@ _CHINESE_DIRECTIONAL_RE = re.compile(
     r"(?:\s*(?:去|吃|玩|看|住|買|的)?\s*(?P<target>[^\s,，。?]+))?"
 )
 
+_CHINESE_SEPARATED_DIRECTION_RE = re.compile(
+    r"(?P<anchor>[^。！？!?]{2,240}?)\s*[,，。…]+\s*(?:那|我|所以我)?\s*"
+    r"(?P<dir>下一站|上一站|下一個|上一個|前一站|前一個|緊接著|接著)"
+    r"\s*(?P<target>[^,，。!?！？]*)"
+)
+_CHINESE_OPEN_TARGET_RE = re.compile(
+    r"^(?:(?:我|的|是|去|在|到|哪|裡|裏|兒|邊|何處|什麼|地方|地點|啊|呀|呢|嗎)\s*)*$"
+)
+
 _ENGLISH_WHICH_RE = re.compile(
     r"^(?:Which|What)\s+(?P<target>.+?)\s+did\s+I\s+(?:visit|go\s+to)\s+"
     r"(?P<dir>immediately\s+after|immediately\s+before|after|before)\s+"
@@ -99,6 +108,12 @@ def parse_directional_query(query: str) -> dict[str, Any] | None:
             r"\s+did\s+I\s+(?:visit|go).*$", "", raw_target, flags=re.IGNORECASE
         ).strip()
         if target.lower() in ("place", "spot", "attraction", "site"):
+            target = ""
+    elif (m := _CHINESE_SEPARATED_DIRECTION_RE.search(q)) is not None:
+        anchor = m.group("anchor").strip()
+        dir_word = m.group("dir").strip()
+        target = m.group("target").strip()
+        if _CHINESE_OPEN_TARGET_RE.fullmatch(target):
             target = ""
     elif (m := _CHINESE_DIRECTIONAL_RE.search(q)) is not None:
         anchor = m.group("anchor").strip().rstrip("?")
